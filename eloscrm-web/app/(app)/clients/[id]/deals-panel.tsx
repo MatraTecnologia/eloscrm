@@ -1,6 +1,6 @@
 import { formatCurrency } from "@/lib/labels";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { EnrichedDeal } from "../use-org-deals";
+import type { EnrichedDeal } from "@/lib/queries/deals";
 
 export const DealsPanel = ({
   deals,

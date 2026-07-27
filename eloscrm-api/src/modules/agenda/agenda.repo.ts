@@ -10,5 +10,11 @@ export const listAgenda = (orgId: string, filters: ListAgendaQuery) => {
   return prisma.activity.findMany({
     where: { organizationId: orgId, dueAt },
     orderBy: { dueAt: "asc" },
+    // a agenda é a única view que lista atividades de clientes diferentes lado a lado, então
+    // precisa do vínculo junto; /activities já é sempre consultada filtrando por um clientId/dealId
+    include: {
+      client: { select: { id: true, name: true } },
+      deal: { select: { id: true, title: true } },
+    },
   });
 };

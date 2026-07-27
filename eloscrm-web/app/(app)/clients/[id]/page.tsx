@@ -3,21 +3,22 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Archive, User } from "lucide-react";
+import { ArrowLeft, Archive, Plus, User } from "lucide-react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useClient } from "@/lib/queries/clients";
 import { useProperties } from "@/lib/queries/properties";
 import { formatCurrency } from "@/lib/labels";
 import type { Activity } from "@/lib/types";
-import { useOrgDeals } from "../use-org-deals";
+import { useOrgDeals } from "@/lib/queries/deals";
 import { useClientActivities } from "./use-client-activities";
 import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "./activity-timeline";
-import { ActivityIcon } from "./activity-visuals";
+import { ActivityIcon } from "@/components/app/activity-visuals";
+import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -204,6 +205,21 @@ export default function ClientProfilePage() {
 
         <TabsContent value="atividades" className="mt-4">
           <Card>
+            <CardHeader>
+              <CardTitle>Atividades</CardTitle>
+              {/* CardAction e não flex solto: o CardHeader é grid e só abre a segunda coluna
+                  quando encontra um filho com data-slot=card-action */}
+              <CardAction>
+                <ActivityDialog
+                  defaultClientId={client.id}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="size-4" /> Registrar atividade
+                    </Button>
+                  }
+                />
+              </CardAction>
+            </CardHeader>
             <CardContent>
               <ActivityTimeline activities={allActivities} isLoading={loadingActivities} />
             </CardContent>

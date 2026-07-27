@@ -18,3 +18,5 @@ export const createActivity = (orgId: string, data: CreateActivityInput) =>
 
 export const updateActivityById = (id: string, data: UpdateActivityInput) =>
   prisma.activity.update({ where: { id }, data });
+
+export const deleteActivityById = (id: string) => prisma.activity.delete({ where: { id } });

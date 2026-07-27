@@ -3,7 +3,7 @@ import { ptBR } from "date-fns/locale";
 import type { Activity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ActivityIcon } from "./activity-visuals";
+import { ActivityIcon } from "@/components/app/activity-visuals";
 
 export const ActivityTimeline = ({
   activities,

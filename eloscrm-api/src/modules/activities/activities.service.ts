@@ -32,3 +32,9 @@ export const update = async (orgId: string, id: string, data: UpdateActivityInpu
   await assertTenantRefs(orgId, data);
   return repo.updateActivityById(id, data);
 };
+
+export const remove = async (orgId: string, id: string) => {
+  // getById antes do delete: o repo apaga só por id, e sem esta checagem o delete cruzaria tenants
+  await getById(orgId, id);
+  await repo.deleteActivityById(id);
+};

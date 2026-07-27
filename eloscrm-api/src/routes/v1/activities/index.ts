@@ -33,6 +33,12 @@ const activitiesRoutes = async (app: FastifyInstance) => {
     const data = updateActivitySchema.parse(request.body);
     return service.update(request.orgId!, id, data);
   });
+
+  app.delete("/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await service.remove(request.orgId!, id);
+    return reply.status(204).send();
+  });
 };
 
 export default activitiesRoutes;

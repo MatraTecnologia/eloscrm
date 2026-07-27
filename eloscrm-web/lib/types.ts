@@ -65,6 +65,9 @@ export type Activity = {
   doneAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // só /v1/agenda faz o include; em /v1/activities os campos não vêm
+  client?: { id: string; name: string } | null;
+  deal?: { id: string; title: string } | null;
 };
 
 export type Property = {

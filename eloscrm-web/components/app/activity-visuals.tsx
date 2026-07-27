@@ -2,8 +2,8 @@ import { FileText, MapPin, Phone, StickyNote, type LucideIcon } from "lucide-rea
 import { cn } from "@/lib/utils";
 import type { ActivityType } from "@/lib/types";
 
-// Mesmo mapeamento de ícone/cor usado em app/(app)/dashboard/recent-activities-card.tsx,
-// para que um tipo de atividade tenha sempre a mesma cara em qualquer tela.
+// Fonte única do ícone/cor de cada tipo de atividade — usada pela agenda, pela timeline do
+// cliente e pelo card do dashboard, para que um tipo tenha sempre a mesma cara.
 export const ACTIVITY_STYLE: Record<ActivityType, { icon: LucideIcon; color: string }> = {
   CALL: { icon: Phone, color: "var(--chart-1)" },
   VISIT: { icon: MapPin, color: "var(--chart-3)" },

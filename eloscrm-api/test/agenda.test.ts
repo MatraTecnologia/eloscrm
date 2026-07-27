@@ -69,6 +69,38 @@ describe("agenda", () => {
     expect(ids).not.toContain(semDueAt.id);
   });
 
+  it("traz o cliente vinculado junto de cada atividade", async () => {
+    const clientRes = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Cliente da Agenda" },
+    });
+    const client = clientRes.json();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: {
+        type: "VISIT",
+        description: "Visita ao imóvel",
+        clientId: client.id,
+        dueAt: new Date("2026-10-05T13:00:00.000Z").toISOString(),
+      },
+    });
+    const activity = res.json();
+
+    const agenda = await app.inject({
+      method: "GET",
+      url: "/v1/agenda?from=2026-10-01T00:00:00.000Z&to=2026-10-31T23:59:59.000Z",
+      headers: { cookie },
+    });
+    const found = agenda.json().find((a: { id: string }) => a.id === activity.id);
+    expect(found.client).toEqual({ id: client.id, name: "Cliente da Agenda" });
+    expect(found.deal).toBeNull();
+  });
+
   it("não vaza atividades entre organizações (cross-tenant)", async () => {
     const activityA = await createActivity({ cookie }, "Compromisso privado A", new Date().toISOString());
 

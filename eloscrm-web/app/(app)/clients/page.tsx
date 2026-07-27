@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useClients, useDeleteClient } from "@/lib/queries/clients";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { formatPhone } from "@/lib/labels";
-import { useOrgDeals } from "./use-org-deals";
+import { useOrgDeals } from "@/lib/queries/deals";
 import { ClientDialog } from "./client-dialog";
 import { ClientAvatar } from "./client-avatar";
 import { Button } from "@/components/ui/button";

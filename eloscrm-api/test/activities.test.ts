@@ -85,6 +85,99 @@ describe("activities", () => {
     expect(new Date(patched.json().doneAt).toISOString()).toBe(doneAt);
   });
 
+  it("aceita null nos vínculos no POST (sem cliente/negócio)", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: {
+        type: "CALL",
+        description: "Ligação sem vínculo",
+        clientId: null,
+        dealId: null,
+        dueAt: new Date("2026-08-15T10:00:00.000Z").toISOString(),
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().clientId).toBeNull();
+    expect(created.json().dealId).toBeNull();
+  });
+
+  it("aceita null no PATCH para limpar doneAt, dueAt e o vínculo com o cliente", async () => {
+    const clientRes = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Cliente a desvincular" },
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: {
+        type: "VISIT",
+        description: "Visita a reagendar",
+        clientId: clientRes.json().id,
+        dueAt: new Date("2026-08-20T14:00:00.000Z").toISOString(),
+        doneAt: new Date("2026-08-20T15:00:00.000Z").toISOString(),
+      },
+    });
+    const activity = created.json();
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/v1/activities/${activity.id}`,
+      headers: { cookie },
+      payload: { doneAt: null, dueAt: null, clientId: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    // sem `.nullable()` no schema, o z.coerce.date() converteria null em 1970-01-01 sem erro
+    expect(cleared.json().doneAt).toBeNull();
+    expect(cleared.json().dueAt).toBeNull();
+    expect(cleared.json().clientId).toBeNull();
+  });
+
+  it("exclui a própria atividade (204) e some da listagem", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: { type: "NOTE", description: "Anotação descartável" },
+    });
+    const activity = created.json();
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/v1/activities/${activity.id}`,
+      headers: { cookie },
+    });
+    expect(removed.statusCode).toBe(204);
+
+    const byId = await app.inject({ method: "GET", url: `/v1/activities/${activity.id}`, headers: { cookie } });
+    expect(byId.statusCode).toBe(404);
+  });
+
+  it("não exclui atividade de outra organização (cross-tenant → 404)", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: { type: "NOTE", description: "Anotação intocável de A" },
+    });
+    const activityA = created.json();
+
+    const removedByB = await app.inject({
+      method: "DELETE",
+      url: `/v1/activities/${activityA.id}`,
+      headers: { cookie: cookieB },
+    });
+    expect(removedByB.statusCode).toBe(404);
+
+    const stillThere = await app.inject({ method: "GET", url: `/v1/activities/${activityA.id}`, headers: { cookie } });
+    expect(stillThere.statusCode).toBe(200);
+  });
+
   it("não vaza atividade entre organizações (cross-tenant → 404)", async () => {
     const created = await app.inject({
       method: "POST",
