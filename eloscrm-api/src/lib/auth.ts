@@ -10,6 +10,16 @@ export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: [env.WEB_ORIGIN, "http://localhost"],
   emailAndPassword: { enabled: true },
+  user: {
+    changeEmail: {
+      enabled: true,
+      // Não há provedor de e-mail no projeto: sem isto o Better Auth só troca o endereço depois
+      // que o novo for verificado por link, e o link nunca sai. Com a flag, a troca é imediata —
+      // mas só para quem tem emailVerified false, que é todo mundo enquanto não houver verificação.
+      // Ao ligar verificação de e-mail um dia, isto precisa de um sendVerificationEmail junto.
+      updateEmailWithoutVerification: true,
+    },
+  },
   plugins: [organization()],
   databaseHooks: {
     session: {
