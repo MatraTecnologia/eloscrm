@@ -1,14 +1,8 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { UserPlus } from "lucide-react";
-import { toast } from "sonner";
-import { authClient, useActiveOrganization } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -16,14 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -31,46 +27,62 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table'
+import { authClient, useActiveOrganization } from '@/lib/auth-client'
+import { UserPlus } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 const roleLabels: Record<string, string> = {
-  owner: "Dono",
-  admin: "Gestor",
-  member: "Corretor",
-};
+  owner: 'Dono',
+  admin: 'Gestor',
+  member: 'Corretor',
+}
 
 const invitationStatusLabels: Record<string, string> = {
-  pending: "Pendente",
-  accepted: "Aceito",
-  rejected: "Recusado",
-  canceled: "Cancelado",
-};
+  pending: 'Pendente',
+  accepted: 'Aceito',
+  rejected: 'Recusado',
+  canceled: 'Cancelado',
+}
 
-type InviteRole = "member" | "admin";
+type InviteRole = 'member' | 'admin'
 
 const InviteMemberDialog = () => {
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<InviteRole>("member");
-  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<InviteRole>('member')
+  const [saving, setSaving] = useState(false)
+
+  // reabrir não pode trazer o rascunho anterior: o state nasce na montagem e o dialog não desmonta
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setEmail('')
+      setRole('member')
+    }
+    setOpen(next)
+  }
 
   const submit = async () => {
-    if (!email.trim()) return;
-    setSaving(true);
-    const res = await authClient.organization.inviteMember({ email: email.trim(), role });
-    setSaving(false);
+    if (!email.trim()) return
+    setSaving(true)
+    const res = await authClient.organization.inviteMember({
+      email: email.trim(),
+      role,
+    })
+    setSaving(false)
     if (res.error) {
-      toast.error("Não foi possível enviar o convite");
-      return;
+      toast.error('Não foi possível enviar o convite')
+      return
     }
-    setEmail("");
-    setRole("member");
-    setOpen(false);
-    toast.success("Convite enviado");
-  };
+    setEmail('')
+    setRole('member')
+    setOpen(false)
+    toast.success('Convite enviado')
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button>
@@ -89,17 +101,18 @@ const InviteMemberDialog = () => {
               id="invite-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               placeholder="pessoa@imobiliaria.com"
             />
           </div>
           <div className="space-y-1.5">
             <Label>Papel</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
-              <SelectTrigger>
-                <SelectValue />
+            <Select value={role} onValueChange={v => setRole(v as InviteRole)}>
+              <SelectTrigger className="w-full">
+                <SelectValue>{(v: InviteRole) => roleLabels[v]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
+                {/* owner fica de fora: dono não é papel que se convida */}
                 <SelectItem value="member">Corretor</SelectItem>
                 <SelectItem value="admin">Gestor</SelectItem>
               </SelectContent>
@@ -108,22 +121,24 @@ const InviteMemberDialog = () => {
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={saving || !email.trim()}>
-            {saving ? "Enviando…" : "Enviar convite"}
+            {saving ? 'Enviando…' : 'Enviar convite'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}
 
 export default function SettingsPage() {
-  const { data: org, isPending } = useActiveOrganization();
+  const { data: org, isPending } = useActiveOrganization()
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Configurações</h1>
-        <p className="text-muted-foreground">Dados da imobiliária e membros da equipe.</p>
+        <p className="text-muted-foreground">
+          Dados da imobiliária e membros da equipe.
+        </p>
       </div>
 
       {!isPending && !org && (
@@ -164,26 +179,35 @@ export default function SettingsPage() {
                 <TableBody>
                   {org.members.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={2} className="py-10 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={2}
+                        className="py-10 text-center text-muted-foreground"
+                      >
                         Nenhum membro ainda.
                       </TableCell>
                     </TableRow>
                   )}
-                  {org.members.map((member) => (
+                  {org.members.map(member => (
                     <TableRow key={member.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar size="sm">
-                            <AvatarFallback>{member.user.name?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+                            <AvatarFallback>
+                              {member.user.name?.[0]?.toUpperCase() ?? '?'}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-medium">{member.user.name}</p>
-                            <p className="text-xs text-muted-foreground">{member.user.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {member.user.email}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{roleLabels[member.role] ?? member.role}</Badge>
+                        <Badge variant="secondary">
+                          {roleLabels[member.role] ?? member.role}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -192,7 +216,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {org.invitations.filter((invitation) => invitation.status === "pending").length > 0 && (
+          {org.invitations.filter(invitation => invitation.status === 'pending')
+            .length > 0 && (
             <div className="space-y-2">
               <h2 className="text-lg font-medium">Convites pendentes</h2>
               <div className="rounded-lg border">
@@ -206,15 +231,18 @@ export default function SettingsPage() {
                   </TableHeader>
                   <TableBody>
                     {org.invitations
-                      .filter((invitation) => invitation.status === "pending")
-                      .map((invitation) => (
+                      .filter(invitation => invitation.status === 'pending')
+                      .map(invitation => (
                         <TableRow key={invitation.id}>
                           <TableCell>{invitation.email}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary">{roleLabels[invitation.role] ?? invitation.role}</Badge>
+                            <Badge variant="secondary">
+                              {roleLabels[invitation.role] ?? invitation.role}
+                            </Badge>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {invitationStatusLabels[invitation.status] ?? invitation.status}
+                            {invitationStatusLabels[invitation.status] ??
+                              invitation.status}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -226,5 +254,5 @@ export default function SettingsPage() {
         </>
       )}
     </div>
-  );
+  )
 }

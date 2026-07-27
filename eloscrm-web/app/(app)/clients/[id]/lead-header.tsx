@@ -1,5 +1,5 @@
 import { AtSign, Mail, MessageCircle, Pencil, Phone } from "lucide-react";
-import { clientSourceLabels } from "@/lib/labels";
+import { clientSourceLabels, formatPhone, phoneNationalDigits } from "@/lib/labels";
 import type { Client } from "@/lib/types";
 import { ClientAvatar } from "../client-avatar";
 import { ClientDialog } from "../client-dialog";
@@ -17,7 +17,8 @@ export const LeadHeader = ({
   interest: string | null;
   budget: string;
 }) => {
-  const digits = client.phone?.replace(/\D/g, "");
+  // sem o DDI: o link do WhatsApp já prefixa 55 e o telefone agora vem salvo em E.164
+  const digits = phoneNationalDigits(client.phone);
 
   return (
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -35,7 +36,7 @@ export const LeadHeader = ({
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {client.phone && (
               <span className="flex items-center gap-1.5">
-                <Phone className="size-3.5" /> {client.phone}
+                <Phone className="size-3.5" /> {formatPhone(client.phone)}
               </span>
             )}
             {client.email && (

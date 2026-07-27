@@ -4,6 +4,7 @@ import { useState } from "react";
 import { endOfDay, endOfMonth, format, parse, parseISO, startOfDay, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAgenda } from "@/lib/queries/agenda";
+import { useActiveOrganization } from "@/lib/auth-client";
 import { activityTypeLabels } from "@/lib/labels";
 import type { Activity } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ export default function AgendaPage() {
     from: startOfDay(parse(from, DATE_FORMAT, new Date())).toISOString(),
     to: endOfDay(parse(to, DATE_FORMAT, new Date())).toISOString(),
   });
+  const { data: org, isPending: loadingOrg } = useActiveOrganization();
 
   const groups = Object.entries(groupByDay(activities ?? []));
 
@@ -60,7 +62,13 @@ export default function AgendaPage() {
             </div>
           ))}
 
-        {!isLoading && groups.length === 0 && (
+        {!loadingOrg && !org && (
+          <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
+            Selecione ou crie uma imobiliária para ver a agenda.
+          </div>
+        )}
+
+        {!!org && !isLoading && groups.length === 0 && (
           <p className="py-10 text-center text-muted-foreground">Nenhuma atividade no período.</p>
         )}
 

@@ -24,10 +24,12 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 
 export default function ClientProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { data: client, isPending } = useClient(id);
+  // isLoading e não isPending: sem organização ativa as queries ficam desabilitadas e isPending
+  // continua true para sempre, prendendo a página em skeleton
+  const { data: client, isLoading } = useClient(id);
   const { deals, isLoading: loadingDeals } = useOrgDeals();
-  const { data: activities, isPending: loadingActivities } = useClientActivities(id);
-  const { data: properties, isPending: loadingProperties } = useProperties();
+  const { data: activities, isLoading: loadingActivities } = useClientActivities(id);
+  const { data: properties, isLoading: loadingProperties } = useProperties();
 
   const clientDeals = deals.filter((d) => d.clientId === id);
   const primaryDeal =
@@ -63,7 +65,7 @@ export default function ClientProfilePage() {
       .filter((a): a is Activity & { dueAt: string } => !!a.dueAt && !a.doneAt && new Date(a.dueAt).getTime() > now)
       .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0] ?? null;
 
-  if (isPending || loadingDeals || loadingProperties) {
+  if (isLoading || loadingDeals || loadingProperties) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-20 w-full" />
@@ -172,7 +174,10 @@ export default function ClientProfilePage() {
                   <CardTitle>Observações</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">{client.notes || "Sem observações registradas."}</p>
+                  {/* whitespace-pre-line: observações vêm de textarea e podem ter quebras de linha */}
+                  <p className="text-sm whitespace-pre-line text-muted-foreground">
+                    {client.notes || "Sem observações registradas."}
+                  </p>
                 </CardContent>
               </Card>
 

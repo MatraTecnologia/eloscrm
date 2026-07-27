@@ -86,10 +86,10 @@ export const PipelinePanel = ({
                 <MoreHorizontal className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setTimeout(() => setRenameTarget(p), 0)}>
+                <DropdownMenuItem onClick={() => setTimeout(() => setRenameTarget(p), 0)}>
                   <Pencil className="size-4" /> Renomear
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => remove(p)}>
+                <DropdownMenuItem onClick={() => remove(p)}>
                   <Trash2 className="size-4" /> Excluir
                 </DropdownMenuItem>
               </DropdownMenuContent>

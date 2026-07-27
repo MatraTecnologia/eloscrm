@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateProperty, useUpdateProperty } from "@/lib/queries/properties";
-import { propertyStatusLabels } from "@/lib/labels";
+import {
+  currencyToInput,
+  formatCurrencyInput,
+  parseCurrencyInput,
+  propertyStatusLabels,
+} from "@/lib/labels";
 import type { Property, PropertyStatus } from "@/lib/types";
 import {
   Dialog,
@@ -40,7 +45,8 @@ export const PropertyDialog = ({ property, trigger }: { property?: Property; tri
   const [title, setTitle] = useState(property?.title ?? "");
   const [type, setType] = useState(property?.type ?? "");
   const [address, setAddress] = useState(property?.address ?? "");
-  const [price, setPrice] = useState(property?.price ?? "");
+  // state guarda o preço já formatado (1.250.000,00); vira número só no submit
+  const [price, setPrice] = useState(currencyToInput(property?.price));
   const [bedrooms, setBedrooms] = useState(property?.bedrooms?.toString() ?? "");
   const [area, setArea] = useState(property?.area?.toString() ?? "");
   const [status, setStatus] = useState<PropertyStatus>(property?.status ?? "DISPONIVEL");
@@ -48,13 +54,29 @@ export const PropertyDialog = ({ property, trigger }: { property?: Property; tri
 
   const saving = create.isPending || update.isPending;
 
+  // o state só nasce na montagem e o dialog não desmonta ao fechar: sem isto, reabrir traz o
+  // rascunho anterior (ou dados desatualizados do imóvel, se ele mudou nesse meio-tempo)
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setTitle(property?.title ?? "");
+      setType(property?.type ?? "");
+      setAddress(property?.address ?? "");
+      setPrice(currencyToInput(property?.price));
+      setBedrooms(property?.bedrooms?.toString() ?? "");
+      setArea(property?.area?.toString() ?? "");
+      setStatus(property?.status ?? "DISPONIVEL");
+      setPhotos(property?.photos.join(", ") ?? "");
+    }
+    setOpen(next);
+  };
+
   const submit = async () => {
     if (!title.trim()) return;
     const input = {
       title: title.trim(),
       type: type.trim() || undefined,
       address: address.trim() || undefined,
-      price: price.trim() ? Number(price) : undefined,
+      price: parseCurrencyInput(price),
       bedrooms: bedrooms.trim() ? Number(bedrooms) : undefined,
       area: area.trim() ? Number(area) : undefined,
       status,
@@ -73,7 +95,7 @@ export const PropertyDialog = ({ property, trigger }: { property?: Property; tri
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -97,25 +119,38 @@ export const PropertyDialog = ({ property, trigger }: { property?: Property; tri
             <Label htmlFor="address">Endereço</Label>
             <Input id="address" placeholder="Rua, número, bairro" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
+          <div className="grid grid-cols-4 gap-3">
+            {/* preço ocupa duas colunas: com o prefixo R$, valores na casa do milhão não cabem em 1/3 */}
+            <div className="col-span-2 space-y-1.5">
               <Label htmlFor="price">Preço</Label>
-              <Input id="price" type="number" placeholder="0,00" value={price} onChange={(e) => setPrice(e.target.value)} />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  R$
+                </span>
+                <Input
+                  id="price"
+                  inputMode="numeric"
+                  placeholder="0,00"
+                  className="pl-9 text-right tabular-nums"
+                  value={price}
+                  onChange={(e) => setPrice(formatCurrencyInput(e.target.value))}
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bedrooms">Quartos</Label>
-              <Input id="bedrooms" type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
+              <Input id="bedrooms" type="number" min={0} value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="area">Área (m²)</Label>
-              <Input id="area" type="number" value={area} onChange={(e) => setArea(e.target.value)} />
+              <Input id="area" type="number" min={0} value={area} onChange={(e) => setArea(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as PropertyStatus)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>{(v: PropertyStatus) => propertyStatusLabels[v]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(propertyStatusLabels).map(([value, label]) => (

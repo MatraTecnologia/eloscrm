@@ -76,6 +76,39 @@ describe("orgGuard", () => {
     expect(res.json().orgId).toBe(orgId);
   });
 
+  it("responde 403 quando a organização ativa foi excluída depois do login", async () => {
+    const email = `org-sumiu-${stamp}@eloscrm.test`;
+    const cookie = await signUp(email);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/organization/create",
+      headers: { cookie },
+      payload: { name: "Imob Efêmera", slug: `guard-${stamp}-sumiu` },
+    });
+    const orgId: string = created.json().id ?? created.json().organization?.id;
+    const activated = await app.inject({
+      method: "POST",
+      url: "/api/auth/organization/set-active",
+      headers: { cookie },
+      payload: { organizationId: orgId },
+    });
+    const activeCookie = activated.headers["set-cookie"]
+      ? asCookie(activated.headers["set-cookie"])
+      : cookie;
+
+    // a sessão continua apontando para a org, mas ela deixa de existir
+    await prisma.organization.delete({ where: { id: orgId } });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/org-scope",
+      headers: { cookie: activeCookie },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("NO_ACTIVE_ORG");
+  });
+
   it("recusa set-active de organização da qual o usuário não é membro (cross-tenant)", async () => {
     const emailA = `tenant-a-${stamp}@eloscrm.test`;
     const emailB = `tenant-b-${stamp}@eloscrm.test`;

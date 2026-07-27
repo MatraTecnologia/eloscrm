@@ -53,7 +53,7 @@ export const UserMenu = () => {
           <DropdownMenuLabel>Minha conta</DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={logout}>
+        <DropdownMenuItem onClick={logout}>
           <LogOut className="size-4" /> Sair
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bed, Building2, MapPin, Pencil, Plus, Ruler, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDeleteProperty, useProperties } from "@/lib/queries/properties";
+import { useActiveOrganization } from "@/lib/auth-client";
 import { formatCurrency, propertyStatusLabels } from "@/lib/labels";
 import type { Property, PropertyStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -82,7 +83,6 @@ const PropertyCard = ({ property, onDelete }: { property: Property; onDelete: (i
 
         <div className="absolute top-3 right-3 flex gap-1 opacity-90 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
           <PropertyDialog
-            key={property.updatedAt}
             property={property}
             trigger={
               <Button variant="secondary" size="icon-sm" className="bg-white/90 shadow-sm backdrop-blur-sm hover:bg-white dark:bg-black/50 dark:hover:bg-black/70">
@@ -162,8 +162,10 @@ export default function PropertiesPage() {
     q: q || undefined,
     status: status === "TODOS" ? undefined : status,
   });
+  const { data: org, isPending: loadingOrg } = useActiveOrganization();
   const remove = useDeleteProperty();
 
+  const hasOrg = !!org;
   const hasFilters = q.trim().length > 0 || status !== "TODOS";
 
   const handleDelete = async (id: string) => {
@@ -184,92 +186,112 @@ export default function PropertiesPage() {
         </div>
         <PropertyDialog
           trigger={
-            <Button>
+            <Button disabled={!hasOrg}>
               <Plus className="size-4" /> Novo imóvel
             </Button>
           }
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar por título ou endereço" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
-        </div>
-        <Select value={status} onValueChange={(v) => setStatus(v as PropertyStatus | "TODOS")}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODOS">Todos os status</SelectItem>
-            {Object.entries(propertyStatusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {!isLoading && properties && properties.length > 0 && (
-          <span className="ml-auto text-sm text-muted-foreground">
-            {properties.length} {properties.length === 1 ? "imóvel" : "imóveis"}
-          </span>
-        )}
-      </div>
-
-      {isLoading && (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="overflow-hidden rounded-xl ring-1 ring-foreground/10">
-              <Skeleton className="aspect-4/3 w-full rounded-none" />
-              <div className="space-y-2 p-4">
-                <Skeleton className="h-6 w-2/3" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-1/2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!isLoading && properties?.length === 0 && !hasFilters && (
+      {!loadingOrg && !hasOrg && (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Building2 />
             </EmptyMedia>
-            <EmptyTitle>Nenhum imóvel ainda</EmptyTitle>
-            <EmptyDescription>Cadastre o primeiro imóvel para começar a organizar sua carteira.</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <PropertyDialog
-              trigger={
-                <Button>
-                  <Plus className="size-4" /> Novo imóvel
-                </Button>
-              }
-            />
-          </EmptyContent>
-        </Empty>
-      )}
-
-      {!isLoading && properties?.length === 0 && hasFilters && (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Search />
-            </EmptyMedia>
-            <EmptyTitle>Nenhum imóvel encontrado</EmptyTitle>
-            <EmptyDescription>Ajuste a busca ou o filtro de status para ver outros imóveis.</EmptyDescription>
+            <EmptyTitle>Nenhuma imobiliária ativa</EmptyTitle>
+            <EmptyDescription>Selecione ou crie uma imobiliária para ver a carteira de imóveis.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
 
-      {!isLoading && properties && properties.length > 0 && (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {properties.map((property) => (
-            <PropertyCard key={property.id} property={property} onDelete={handleDelete} />
-          ))}
-        </div>
+      {hasOrg && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Buscar por título ou endereço" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={status} onValueChange={(v) => setStatus(v as PropertyStatus | "TODOS")}>
+              <SelectTrigger className="w-48">
+                <SelectValue>
+                  {(v: PropertyStatus | "TODOS") =>
+                    v === "TODOS" ? "Todos os status" : propertyStatusLabels[v]
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos os status</SelectItem>
+                {Object.entries(propertyStatusLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!isLoading && properties && properties.length > 0 && (
+              <span className="ml-auto text-sm text-muted-foreground">
+                {properties.length} {properties.length === 1 ? "imóvel" : "imóveis"}
+              </span>
+            )}
+          </div>
+
+          {isLoading && (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="overflow-hidden rounded-xl ring-1 ring-foreground/10">
+                  <Skeleton className="aspect-4/3 w-full rounded-none" />
+                  <div className="space-y-2 p-4">
+                    <Skeleton className="h-6 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!isLoading && properties?.length === 0 && !hasFilters && (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Building2 />
+                </EmptyMedia>
+                <EmptyTitle>Nenhum imóvel ainda</EmptyTitle>
+                <EmptyDescription>Cadastre o primeiro imóvel para começar a organizar sua carteira.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <PropertyDialog
+                  trigger={
+                    <Button>
+                      <Plus className="size-4" /> Novo imóvel
+                    </Button>
+                  }
+                />
+              </EmptyContent>
+            </Empty>
+          )}
+
+          {!isLoading && properties?.length === 0 && hasFilters && (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Search />
+                </EmptyMedia>
+                <EmptyTitle>Nenhum imóvel encontrado</EmptyTitle>
+                <EmptyDescription>Ajuste a busca ou o filtro de status para ver outros imóveis.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+
+          {!isLoading && properties && properties.length > 0 && (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {properties.map((property) => (
+                <PropertyCard key={property.id} property={property} onDelete={handleDelete} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

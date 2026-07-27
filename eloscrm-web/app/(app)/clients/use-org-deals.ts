@@ -16,7 +16,7 @@ export type EnrichedDeal = Deal & {
 // uma única vez e enriquecemos com o estágio (nome/cor/aberto) vindo dos pipelines.
 export const useOrgDeals = () => {
   const { data: org } = useActiveOrganization();
-  const { data: pipelines, isPending: pendingPipelines } = usePipelines();
+  const { data: pipelines, isLoading: loadingPipelines } = usePipelines();
 
   const dealsQuery = useQuery({
     queryKey: ["deals", org?.id, "all"],
@@ -39,5 +39,7 @@ export const useOrgDeals = () => {
     };
   });
 
-  return { deals, isLoading: dealsQuery.isPending || pendingPipelines };
+  // isLoading e não isPending: sem organização ativa as queries ficam desabilitadas e isPending
+  // continua true para sempre, prendendo a UI em skeleton
+  return { deals, isLoading: dealsQuery.isLoading || loadingPipelines };
 };

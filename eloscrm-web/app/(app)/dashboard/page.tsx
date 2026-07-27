@@ -2,6 +2,7 @@
 
 import { CircleCheck, Handshake, Users, Wallet } from "lucide-react";
 import { useDashboardStats } from "@/lib/queries/dashboard";
+import { useActiveOrganization } from "@/lib/auth-client";
 import { clientSourceLabels, formatCurrency } from "@/lib/labels";
 import { StatCard } from "./stat-card";
 import { FunnelCard } from "./funnel-card";
@@ -10,7 +11,9 @@ import { RecentActivitiesCard } from "./recent-activities-card";
 
 export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const loading = statsLoading || !stats;
+  const { data: org, isPending: loadingOrg } = useActiveOrganization();
+  // sem organização ativa a query nem roda: `!stats` sozinho deixaria os cards em skeleton eterno
+  const loading = !!org && (statsLoading || !stats);
 
   const sourceData = (Object.keys(clientSourceLabels) as Array<keyof typeof clientSourceLabels>).map(
     (source) => ({
@@ -26,6 +29,12 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="text-muted-foreground">Visão geral de clientes e negociações.</p>
       </div>
+
+      {!loadingOrg && !org && (
+        <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
+          Selecione ou crie uma imobiliária para ver os indicadores.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

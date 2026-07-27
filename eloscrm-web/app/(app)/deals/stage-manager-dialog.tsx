@@ -80,7 +80,14 @@ export const StageManagerDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // o nome do novo estágio é rascunho: não deve sobreviver ao fechar
+        if (next) setNewName("");
+        setOpen(next);
+      }}
+    >
       <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
       <DialogContent className="max-w-lg">
         <DialogHeader>

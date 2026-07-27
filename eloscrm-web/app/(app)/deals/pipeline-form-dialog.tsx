@@ -44,6 +44,15 @@ export const PipelineFormDialog = ({
 
   const saving = create.isPending || update.isPending;
 
+  // reabrir não pode trazer o rascunho anterior: o state nasce na montagem e o dialog não desmonta
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      setName(pipeline?.name ?? "");
+      setTemplateId("vendas");
+    }
+    setOpen(next);
+  };
+
   const submit = async () => {
     if (!name.trim()) return;
     try {
@@ -63,7 +72,7 @@ export const PipelineFormDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {trigger && <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />}
       <DialogContent className="max-w-md">
         <DialogHeader>

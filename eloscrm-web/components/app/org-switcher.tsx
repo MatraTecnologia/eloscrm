@@ -44,6 +44,12 @@ export const OrgSwitcher = () => {
     await qc.invalidateQueries();
   };
 
+  // reabrir não pode trazer o rascunho anterior: o state nasce na montagem e o dialog não desmonta
+  const onOpenChange = (next: boolean) => {
+    if (next) setName("");
+    setOpen(next);
+  };
+
   const create = async () => {
     if (!name.trim()) return;
     setSaving(true);
@@ -75,18 +81,19 @@ export const OrgSwitcher = () => {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {orgs?.map((org) => (
-            <DropdownMenuItem key={org.id} onSelect={() => setActive(org.id)}>
+            <DropdownMenuItem key={org.id} onClick={() => setActive(org.id)}>
               <span className="truncate">{org.name}</span>
               {active?.id === org.id && <Check className="ml-auto size-4" />}
             </DropdownMenuItem>
           ))}
           {orgs && orgs.length > 0 && <DropdownMenuSeparator />}
-          <DropdownMenuItem onSelect={() => setTimeout(() => setOpen(true), 0)}>
+          {/* setTimeout: deixa o menu fechar e devolver o foco antes do dialog montar */}
+          <DropdownMenuItem onClick={() => setTimeout(() => setOpen(true), 0)}>
             <Plus className="size-4" /> Criar imobiliária
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
         <DialogHeader>
           <DialogTitle>Nova imobiliária</DialogTitle>

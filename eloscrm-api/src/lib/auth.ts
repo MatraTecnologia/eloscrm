@@ -11,4 +11,21 @@ export const auth = betterAuth({
   trustedOrigins: [env.WEB_ORIGIN, "http://localhost"],
   emailAndPassword: { enabled: true },
   plugins: [organization()],
+  databaseHooks: {
+    session: {
+      create: {
+        // Sem isto a sessão nasce sem activeOrganizationId e o app inteiro fica vazio até o
+        // usuário escolher a imobiliária no switcher — a cada login. Elege a organização mais
+        // antiga do usuário; quem tem várias troca pelo switcher normalmente.
+        before: async (session) => {
+          const membership = await prisma.member.findFirst({
+            where: { userId: session.userId },
+            orderBy: { createdAt: "asc" },
+            select: { organizationId: true },
+          });
+          return { data: { ...session, activeOrganizationId: membership?.organizationId ?? null } };
+        },
+      },
+    },
+  },
 });
