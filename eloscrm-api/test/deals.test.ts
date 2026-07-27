@@ -1,0 +1,170 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { FastifyInstance } from "fastify";
+import { makeApp } from "./helpers/app.js";
+import { signUpWithOrg } from "./helpers/session.js";
+import { prisma } from "../src/lib/prisma.js";
+
+let app: FastifyInstance;
+const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+let cookie = "";
+let orgId = "";
+let cookieB = "";
+let orgBId = "";
+let pipelineId = "";
+let stageId = "";
+let otherStageId = "";
+let stageBId = "";
+
+type Stage = { id: string };
+type Pipeline = { id: string; stages: Stage[] };
+
+const getDefaultPipeline = async (headers: { cookie: string }): Promise<Pipeline> => {
+  const res = await app.inject({ method: "GET", url: "/v1/pipelines", headers });
+  return (res.json() as Pipeline[])[0];
+};
+
+const createClient = async (headers: { cookie: string }, name: string) => {
+  const res = await app.inject({ method: "POST", url: "/v1/clients", headers, payload: { name } });
+  return res.json();
+};
+
+beforeAll(async () => {
+  app = await makeApp();
+  ({ cookie, orgId } = await signUpWithOrg(app, `deals-a-${stamp}@eloscrm.test`, `deals-a-${stamp}`));
+  ({ cookie: cookieB, orgId: orgBId } = await signUpWithOrg(app, `deals-b-${stamp}@eloscrm.test`, `deals-b-${stamp}`));
+
+  const pipeline = await getDefaultPipeline({ cookie });
+  pipelineId = pipeline.id;
+  stageId = pipeline.stages[0].id;
+  otherStageId = pipeline.stages[1].id;
+
+  const pipelineB = await getDefaultPipeline({ cookie: cookieB });
+  stageBId = pipelineB.stages[0].id;
+});
+
+afterAll(async () => {
+  await prisma.deal.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
+  await prisma.stage.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
+  await prisma.pipeline.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
+  await prisma.client.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
+  await prisma.organization.deleteMany({ where: { slug: { startsWith: `deals-` } } });
+  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
+  await app.close();
+  await prisma.$disconnect();
+});
+
+describe("deals", () => {
+  it("bloqueia sem sessão (401)", async () => {
+    const res = await app.inject({ method: "GET", url: "/v1/deals" });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error.code).toBe("UNAUTHORIZED");
+  });
+
+  it("valida corpo inválido no POST (422)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { title: "Sem cliente" },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("VALIDATION");
+  });
+
+  it("cria, lista, busca, filtra, move de estágio e remove um negócio", async () => {
+    const client = await createClient({ cookie }, "Carlos Silva");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Apartamento Centro", pipelineId, stageId, value: 350000 },
+    });
+    expect(created.statusCode).toBe(201);
+    const deal = created.json();
+    expect(deal.id).toBeTruthy();
+    expect(deal.organizationId).toBe(orgId);
+    expect(deal.stageId).toBe(stageId);
+
+    const list = await app.inject({ method: "GET", url: "/v1/deals", headers: { cookie } });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().some((d: { id: string }) => d.id === deal.id)).toBe(true);
+
+    const byId = await app.inject({ method: "GET", url: `/v1/deals/${deal.id}`, headers: { cookie } });
+    expect(byId.statusCode).toBe(200);
+    expect(byId.json().title).toBe("Apartamento Centro");
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: `/v1/deals?stageId=${stageId}`,
+      headers: { cookie },
+    });
+    expect(filtered.json().some((d: { id: string }) => d.id === deal.id)).toBe(true);
+
+    const moved = await app.inject({
+      method: "PATCH",
+      url: `/v1/deals/${deal.id}`,
+      headers: { cookie },
+      payload: { stageId: otherStageId },
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().stageId).toBe(otherStageId);
+
+    const removed = await app.inject({ method: "DELETE", url: `/v1/deals/${deal.id}`, headers: { cookie } });
+    expect(removed.statusCode).toBe(204);
+
+    const gone = await app.inject({ method: "GET", url: `/v1/deals/${deal.id}`, headers: { cookie } });
+    expect(gone.statusCode).toBe(404);
+    expect(gone.json().error.code).toBe("NOT_FOUND");
+  });
+
+  it("não vaza negócio entre organizações (cross-tenant → 404)", async () => {
+    const client = await createClient({ cookie }, "Lead Privado A");
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Negócio Privado A", pipelineId, stageId },
+    });
+    const dealA = created.json();
+
+    const byB = await app.inject({ method: "GET", url: `/v1/deals/${dealA.id}`, headers: { cookie: cookieB } });
+    expect(byB.statusCode).toBe(404);
+
+    const listB = await app.inject({ method: "GET", url: "/v1/deals", headers: { cookie: cookieB } });
+    expect(listB.json().some((d: { id: string }) => d.id === dealA.id)).toBe(false);
+  });
+
+  it("bloqueia criação de negócio com stageId de outra organização (cross-tenant → 404)", async () => {
+    const clientB = await createClient({ cookie: cookieB }, "Cliente Org B");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie: cookieB },
+      payload: { clientId: clientB.id, title: "Negócio inválido", pipelineId, stageId },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe("NOT_FOUND");
+  });
+
+  it("bloqueia mover negócio pra estágio de outro pipeline/organização (404)", async () => {
+    const client = await createClient({ cookie }, "Cliente Mover Estágio");
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Negócio Mover", pipelineId, stageId },
+    });
+    const deal = created.json();
+
+    const movedToOtherOrg = await app.inject({
+      method: "PATCH",
+      url: `/v1/deals/${deal.id}`,
+      headers: { cookie },
+      payload: { stageId: stageBId },
+    });
+    expect(movedToOtherOrg.statusCode).toBe(404);
+    expect(movedToOtherOrg.json().error.code).toBe("NOT_FOUND");
+  });
+});
