@@ -2,7 +2,9 @@
 
 API do **elosCRM** — CRM multi-tenant para imobiliárias. Núcleo do produto: funil de vendas (leads → negociação).
 
-Consome: `eloscrm-web` (Next.js App Router). Repositórios independentes, não é workspace único.
+Consome: `eloscrm-web` (Next.js App Router). Os dois vivem no mesmo repo git, mas são projetos
+independentes — sem `package.json` na raiz, sem workspace/turbo ligando um ao outro; cada um instala
+e roda por conta própria. Visão geral dos dois: `../CLAUDE.md`.
 
 ## Padrão
 
@@ -39,20 +41,35 @@ do Better Auth já modela `User ↔ Member ↔ Organization` e persiste a org at
 - **Isolamento row-level:** toda tabela de domínio carrega `organizationId`; nenhuma query de domínio
   roda sem filtro por org.
 - **Cadeia de guards:** `authGuard` (sessão válida → `request.user`/`request.session`) →
-  `orgGuard` (org ativa → `request.orgId`).
+  `orgGuard` (org ativa → `request.orgId`). Os guards são aplicados **por arquivo de rota**
+  (`app.addHook("preHandler", …)` ou `{ preHandler: [authGuard, orgGuard] }`), nunca globalmente:
+  rota nova que esquecer os hooks fica **aberta**. Só os plugins de decorator
+  (`authGuardPlugin`/`orgGuardPlugin`) são registrados em `src/app.ts`, e eles apenas declaram
+  `request.session`/`request.user`/`request.orgId`. Padrão a copiar: `src/routes/v1/deals/index.ts`.
 - **Erros:** envelope único `{ error: { code, message, details? } }`.
 
 ## Comandos
 
 ```bash
-pnpm dev            # tsx watch src/server.ts
-pnpm test           # vitest run
-pnpm typecheck      # tsc --noEmit
-pnpm build          # tsc
-pnpm db:push        # prisma db push (sem migrations)
-pnpm db:generate    # prisma generate
-pnpm db:seed        # tsx prisma/seed.ts
+pnpm dev                                  # tsx watch src/server.ts
+pnpm test                                 # vitest run
+pnpm test test/deals.test.ts              # arquivo único
+pnpm vitest run test/deals.test.ts -t "…" # teste único por nome
+pnpm typecheck                            # tsc --noEmit
+pnpm build                                # tsc
+pnpm db:push                              # prisma db push (sem migrations)
+pnpm db:generate                          # prisma generate (client em src/generated, gitignored)
+pnpm db:seed                              # tsx prisma/seed.ts
+pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
+
+**Pré-requisitos (clone novo).** Nem `typecheck` nem `test` rodam direto:
+
+- `pnpm install && pnpm db:generate` — `src/generated/` não é versionado e todo o código importa dele.
+- `cp .env.example .env` com `DATABASE_URL` apontando para um **Postgres real e acessível**: não há
+  mocks nem banco em memória. Os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem sign-up
+  de verdade em `/api/auth/*` via `app.inject`; `test/setup.ts` é só `dotenv/config`. Daí os
+  timeouts de 30s no `vitest.config.ts` (bcrypt em processo + Postgres remoto).
 
 **Verificação antes de declarar pronto:** rodar `pnpm typecheck` e `pnpm test` e conferir a saída real.
 
@@ -69,4 +86,4 @@ pnpm db:seed        # tsx prisma/seed.ts
 - Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-07-23 17:58 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-07-27 10:20 (-03)
