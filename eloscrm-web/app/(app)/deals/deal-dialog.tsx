@@ -4,8 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateDeal, useUpdateDeal } from "@/lib/queries/deals";
 import { useClients } from "@/lib/queries/clients";
-import { dealStageLabels } from "@/lib/labels";
-import type { Deal, DealStage } from "@/lib/types";
+import type { Deal, Stage } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -17,15 +16,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export const DealDialog = ({ deal, trigger }: { deal?: Deal; trigger: React.ReactNode }) => {
+export const DealDialog = ({
+  pipelineId,
+  stages,
+  deal,
+  defaultStageId,
+  trigger,
+  nativeButton,
+}: {
+  pipelineId: string;
+  stages: Stage[];
+  deal?: Deal;
+  defaultStageId?: string;
+  trigger: React.ReactNode;
+  nativeButton?: boolean;
+}) => {
   const editing = !!deal;
   const create = useCreateDeal();
   const update = useUpdateDeal();
@@ -33,18 +40,19 @@ export const DealDialog = ({ deal, trigger }: { deal?: Deal; trigger: React.Reac
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(deal?.title ?? "");
   const [clientId, setClientId] = useState(deal?.clientId ?? "");
+  const [stageId, setStageId] = useState(deal?.stageId ?? defaultStageId ?? stages[0]?.id ?? "");
   const [value, setValue] = useState(deal?.value ?? "");
-  const [stage, setStage] = useState<DealStage>(deal?.stage ?? "NOVO_LEAD");
 
   const saving = create.isPending || update.isPending;
 
   const submit = async () => {
-    if (!title.trim() || !clientId) return;
+    if (!title.trim() || !clientId || !stageId) return;
     const input = {
       title: title.trim(),
       clientId,
+      pipelineId,
+      stageId,
       value: value ? Number(value) : undefined,
-      stage,
     };
     try {
       if (editing) await update.mutateAsync({ id: deal.id, input });
@@ -58,26 +66,26 @@ export const DealDialog = ({ deal, trigger }: { deal?: Deal; trigger: React.Reac
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
+      <DialogTrigger nativeButton={nativeButton} render={trigger as React.ReactElement<Record<string, unknown>>} />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editing ? "Editar negócio" : "Novo negócio"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="title">Título</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Label htmlFor="deal-title">Título</Label>
+            <Input id="deal-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>Cliente</Label>
             <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger>
                 <SelectValue placeholder="Selecione um cliente" />
               </SelectTrigger>
               <SelectContent>
-                {clients?.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
+                {clients?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -85,28 +93,28 @@ export const DealDialog = ({ deal, trigger }: { deal?: Deal; trigger: React.Reac
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="value">Valor</Label>
-              <Input id="value" type="number" value={value} onChange={(e) => setValue(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Etapa</Label>
-              <Select value={stage} onValueChange={(v) => setStage(v as DealStage)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
+              <Label>Estágio</Label>
+              <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Estágio" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(dealStageLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
+                  {stages.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="deal-value">Valor (R$)</Label>
+              <Input id="deal-value" type="number" value={value} onChange={(e) => setValue(e.target.value)} />
+            </div>
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={submit} disabled={saving || !title.trim() || !clientId}>
+          <Button onClick={submit} disabled={saving || !title.trim() || !clientId || !stageId}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>
         </DialogFooter>

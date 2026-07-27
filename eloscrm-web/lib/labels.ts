@@ -1,24 +1,4 @@
-import type { ActivityType, ClientSource, DealStage, PropertyStatus } from "./types";
-
-export const dealStageLabels: Record<DealStage, string> = {
-  NOVO_LEAD: "Novo lead",
-  CONTATO: "Contato",
-  QUALIFICADO: "Qualificado",
-  VISITA: "Visita",
-  PROPOSTA: "Proposta",
-  FECHADO: "Fechado",
-  PERDIDO: "Perdido",
-};
-
-export const dealStageOrder: DealStage[] = [
-  "NOVO_LEAD",
-  "CONTATO",
-  "QUALIFICADO",
-  "VISITA",
-  "PROPOSTA",
-  "FECHADO",
-  "PERDIDO",
-];
+import type { ActivityType, ClientSource, PropertyStatus } from "./types";
 
 export const clientSourceLabels: Record<ClientSource, string> = {
   SITE: "Site",

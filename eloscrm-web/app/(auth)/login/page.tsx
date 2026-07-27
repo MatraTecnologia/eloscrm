@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center gap-3 text-center">
-          <Image src="/logo-oficial.svg" alt="elosCRM" width={150} height={36} priority className="h-9 w-auto" />
+          <Image src="/logo-oficial.svg" alt="elosCRM" width={160} height={38} priority style={{ height: "auto" }} />
           <CardTitle className="text-base font-medium text-muted-foreground">Conectando oportunidades</CardTitle>
         </CardHeader>
         <CardContent>

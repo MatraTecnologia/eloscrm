@@ -1,0 +1,154 @@
+"use client";
+
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Plus, Trophy, Trash2, XCircle } from "lucide-react";
+import { toast } from "sonner";
+import { useAddStage, useDeleteStage, useReorderStages, useUpdateStage } from "@/lib/queries/pipelines";
+import type { Pipeline } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+export const StageManagerDialog = ({
+  pipeline,
+  trigger,
+}: {
+  pipeline: Pipeline;
+  trigger: React.ReactNode;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const addStage = useAddStage();
+  const updateStage = useUpdateStage();
+  const deleteStage = useDeleteStage();
+  const reorder = useReorderStages();
+
+  const stages = [...pipeline.stages].sort((a, b) => a.position - b.position);
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    try {
+      await addStage.mutateAsync({ pipelineId: pipeline.id, input: { name: newName.trim() } });
+      setNewName("");
+    } catch {
+      toast.error("Não foi possível adicionar o estágio");
+    }
+  };
+
+  const rename = async (id: string, name: string, current: string) => {
+    if (!name.trim() || name.trim() === current) return;
+    try {
+      await updateStage.mutateAsync({ id, input: { name: name.trim() } });
+    } catch {
+      toast.error("Não foi possível renomear");
+    }
+  };
+
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= stages.length) return;
+    const ids = stages.map((s) => s.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await reorder.mutateAsync({ pipelineId: pipeline.id, stageIds: ids });
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await deleteStage.mutateAsync(id);
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      toast.error(
+        code === "STAGE_HAS_DEALS"
+          ? "Mova os negócios deste estágio antes de excluir"
+          : code === "LAST_STAGE"
+            ? "O pipeline precisa de ao menos um estágio"
+            : "Não foi possível excluir",
+      );
+    }
+  };
+
+  const toggleFlag = async (id: string, field: "isWon" | "isLost", value: boolean) => {
+    const patch = field === "isWon" ? { isWon: value, isLost: false } : { isLost: value, isWon: false };
+    await updateStage.mutateAsync({ id, input: patch });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Estágios de {pipeline.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          {stages.map((stage, i) => (
+            <div key={stage.id} className="flex items-center gap-2 rounded-lg border p-2">
+              <div className="flex flex-col">
+                <Button variant="ghost" size="icon" className="size-6" onClick={() => move(i, -1)} disabled={i === 0}>
+                  <ArrowUp className="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => move(i, 1)}
+                  disabled={i === stages.length - 1}
+                >
+                  <ArrowDown className="size-3.5" />
+                </Button>
+              </div>
+              <Input
+                defaultValue={stage.name}
+                className="h-8 flex-1"
+                onBlur={(e) => rename(stage.id, e.target.value, stage.name)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("size-8", stage.isWon && "text-success")}
+                title="Marcar como ganho"
+                onClick={() => toggleFlag(stage.id, "isWon", !stage.isWon)}
+              >
+                <Trophy className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("size-8", stage.isLost && "text-destructive")}
+                title="Marcar como perdido"
+                onClick={() => toggleFlag(stage.id, "isLost", !stage.isLost)}
+              >
+                <XCircle className="size-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-8" onClick={() => remove(stage.id)}>
+                <Trash2 className="size-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 pt-2">
+          <Input
+            placeholder="Novo estágio"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+            }}
+          />
+          <Button onClick={add} disabled={!newName.trim() || addStage.isPending}>
+            <Plus className="size-4" /> Adicionar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};

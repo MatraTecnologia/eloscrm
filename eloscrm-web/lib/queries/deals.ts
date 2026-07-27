@@ -1,25 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Deal, DealStage } from "@/lib/types";
+import type { Deal } from "@/lib/types";
 
 export type DealInput = {
   title: string;
   clientId: string;
-  propertyId?: string;
+  pipelineId: string;
+  stageId: string;
   value?: number;
-  stage?: DealStage;
+  propertyId?: string;
 };
 
-export const useDeals = () => {
+export const useDeals = (pipelineId: string | undefined) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
-    queryKey: ["deals", org?.id],
+    queryKey: ["deals", org?.id, pipelineId],
     queryFn: async () => {
-      const { data } = await api.get<Deal[]>("/deals");
+      const { data } = await api.get<Deal[]>("/deals", { params: { pipelineId } });
       return data;
     },
-    enabled: !!org?.id,
+    enabled: !!org?.id && !!pipelineId,
   });
 };
 
@@ -41,24 +42,22 @@ export const useUpdateDeal = () => {
       const { data } = await api.patch<Deal>(`/deals/${id}`, input);
       return data;
     },
+    // Optimistic move entre estágios (mesmo pipeline): atualiza o cache antes da resposta.
     onMutate: async ({ id, input }) => {
+      if (!input.stageId) return { snapshots: [] as [readonly unknown[], Deal[] | undefined][] };
       await qc.cancelQueries({ queryKey: ["deals"] });
-      const previous = qc.getQueriesData<Deal[]>({ queryKey: ["deals"] });
-      previous.forEach(([queryKey, deals]) => {
-        if (!deals) return;
+      const snapshots = qc.getQueriesData<Deal[]>({ queryKey: ["deals"] });
+      for (const [key, deals] of snapshots) {
+        if (!deals) continue;
         qc.setQueryData<Deal[]>(
-          queryKey,
-          deals.map((deal) =>
-            deal.id === id
-              ? { ...deal, ...input, value: input.value != null ? String(input.value) : deal.value }
-              : deal,
-          ),
+          key,
+          deals.map((d) => (d.id === id ? { ...d, stageId: input.stageId as string } : d)),
         );
-      });
-      return { previous };
+      }
+      return { snapshots };
     },
-    onError: (_err, _variables, context) => {
-      context?.previous.forEach(([queryKey, deals]) => qc.setQueryData(queryKey, deals));
+    onError: (_err, _vars, ctx) => {
+      ctx?.snapshots?.forEach(([key, deals]) => qc.setQueryData(key, deals));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["deals"] }),
   });

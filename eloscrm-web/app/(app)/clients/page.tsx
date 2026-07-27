@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useClients, useDeleteClient } from "@/lib/queries/clients";
-import { clientSourceLabels } from "@/lib/labels";
+import { useOrgDeals } from "./use-org-deals";
 import { ClientDialog } from "./client-dialog";
+import { ClientAvatar } from "./client-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +23,20 @@ import {
 
 export default function ClientsPage() {
   const [q, setQ] = useState("");
-  const { data: clients, isLoading } = useClients(q ? { q } : undefined);
+  const { data: clients, isPending: isLoading } = useClients(q ? { q } : undefined);
+  const { deals, isLoading: loadingDeals } = useOrgDeals();
   const remove = useDeleteClient();
+
+  const statsByClient = useMemo(() => {
+    const map = new Map<string, { count: number; hasOpen: boolean }>();
+    for (const deal of deals) {
+      const current = map.get(deal.clientId) ?? { count: 0, hasOpen: false };
+      current.count += 1;
+      if (deal.isOpen) current.hasOpen = true;
+      map.set(deal.clientId, current);
+    }
+    return map;
+  }, [deals]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -59,53 +73,82 @@ export default function ClientsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Origem</TableHead>
-              <TableHead className="w-24 text-right">Ações</TableHead>
+              <TableHead>Telefone</TableHead>
+              <TableHead>E-mail</TableHead>
+              <TableHead>Negócios</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-16 text-right">
+                <span className="sr-only">Ações</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading &&
               Array.from({ length: 4 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={6}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!isLoading && clients?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                   Nenhum cliente ainda. Crie o primeiro.
                 </TableCell>
               </TableRow>
             )}
-            {clients?.map((client) => (
-              <TableRow key={client.id}>
-                <TableCell className="font-medium">{client.name}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {client.email ?? client.phone ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{clientSourceLabels[client.source]}</Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-1">
-                    <ClientDialog
-                      client={client}
-                      trigger={
-                        <Button variant="ghost" size="icon">
-                          <Pencil className="size-4" />
-                        </Button>
-                      }
-                    />
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)}>
-                      <Trash2 className="size-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {clients?.map((client) => {
+              const stats = statsByClient.get(client.id);
+              return (
+                <TableRow key={client.id} className="group">
+                  <TableCell>
+                    <Link href={`/clients/${client.id}`} className="flex items-center gap-2.5 font-medium hover:underline">
+                      <ClientAvatar id={client.id} name={client.name} />
+                      {client.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{client.phone ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{client.email ?? "—"}</TableCell>
+                  <TableCell>
+                    {loadingDeals ? <Skeleton className="h-4 w-6" /> : (stats?.count ?? 0)}
+                  </TableCell>
+                  <TableCell>
+                    {loadingDeals ? (
+                      <Skeleton className="h-5 w-20" />
+                    ) : stats?.hasOpen ? (
+                      <Badge variant="outline" className="border-success/20 bg-success/10 text-success">
+                        Ativo
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Sem negócio
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                      <ClientDialog
+                        client={client}
+                        trigger={
+                          <Button variant="ghost" size="icon-sm" aria-label="Editar cliente">
+                            <Pencil className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Excluir cliente"
+                        onClick={() => handleDelete(client.id)}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

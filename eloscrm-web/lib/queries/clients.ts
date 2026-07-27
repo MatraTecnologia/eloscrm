@@ -24,6 +24,18 @@ export const useClients = (filters?: ClientFilters) => {
   });
 };
 
+export const useClient = (id: string) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: ["clients", org?.id, "detail", id],
+    queryFn: async () => {
+      const { data } = await api.get<Client>(`/clients/${id}`);
+      return data;
+    },
+    enabled: !!org?.id && !!id,
+  });
+};
+
 export const useCreateClient = () => {
   const qc = useQueryClient();
   return useMutation({

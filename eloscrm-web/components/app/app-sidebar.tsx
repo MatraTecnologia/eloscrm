@@ -34,7 +34,7 @@ export const AppSidebar = () => {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <Link href="/dashboard" className="flex items-center gap-2 px-2 py-1.5">
-          <Image src="/logo-white.svg" alt="elosCRM" width={120} height={28} priority className="h-7 w-auto" />
+          <Image src="/logo-white.svg" alt="elosCRM" width={116} height={27} priority style={{ height: "auto" }} />
         </Link>
         <OrgSwitcher />
       </SidebarHeader>

@@ -1,12 +1,4 @@
 export type ClientSource = "SITE" | "INSTAGRAM" | "INDICACAO" | "WHATSAPP" | "OUTROS";
-export type DealStage =
-  | "NOVO_LEAD"
-  | "CONTATO"
-  | "QUALIFICADO"
-  | "VISITA"
-  | "PROPOSTA"
-  | "FECHADO"
-  | "PERDIDO";
 export type ActivityType = "CALL" | "VISIT" | "PROPOSAL" | "NOTE";
 export type PropertyStatus = "DISPONIVEL" | "RESERVADO" | "VENDIDO" | "INATIVO";
 
@@ -23,15 +15,40 @@ export type Client = {
   updatedAt: string;
 };
 
+export type Stage = {
+  id: string;
+  organizationId: string;
+  pipelineId: string;
+  name: string;
+  position: number;
+  color: string | null;
+  isWon: boolean;
+  isLost: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Pipeline = {
+  id: string;
+  organizationId: string;
+  name: string;
+  isDefault: boolean;
+  position: number;
+  stages: Stage[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Deal = {
   id: string;
   organizationId: string;
   clientId: string;
   propertyId: string | null;
+  pipelineId: string;
+  stageId: string;
   ownerId: string | null;
   title: string;
   value: string | null;
-  stage: DealStage;
   lostReason: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +84,6 @@ export type Property = {
 
 export type DashboardStats = {
   kpis: { totalClients: number; totalDeals: number; openDeals: number; wonDeals: number; openValue: number };
-  funnel: Record<DealStage, number>;
+  funnel: { name: string; total: number }[];
   bySource: Record<ClientSource, number>;
 };
