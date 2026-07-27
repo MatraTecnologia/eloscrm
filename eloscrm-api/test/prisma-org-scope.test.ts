@@ -17,8 +17,6 @@ describe("sanidade do filtro organizationId no Prisma", () => {
   });
 
   afterAll(async () => {
-    await prisma.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
-    await prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
     await prisma.$disconnect();
   });
 

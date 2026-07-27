@@ -9,18 +9,14 @@ const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
 let orgId = "";
 let cookieB = "";
-let orgBId = "";
 
 beforeAll(async () => {
   app = await makeApp();
   ({ cookie, orgId } = await signUpWithOrg(app, `clients-a-${stamp}@eloscrm.test`, `clients-a-${stamp}`));
-  ({ cookie: cookieB, orgId: orgBId } = await signUpWithOrg(app, `clients-b-${stamp}@eloscrm.test`, `clients-b-${stamp}`));
+  ({ cookie: cookieB } = await signUpWithOrg(app, `clients-b-${stamp}@eloscrm.test`, `clients-b-${stamp}`));
 });
 
 afterAll(async () => {
-  await prisma.client.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.organization.deleteMany({ where: { slug: { startsWith: `clients-` } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
   await app.close();
   await prisma.$disconnect();
 });

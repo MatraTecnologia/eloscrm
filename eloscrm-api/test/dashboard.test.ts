@@ -7,9 +7,7 @@ import { prisma } from "../src/lib/prisma.js";
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
-let orgId = "";
 let cookieB = "";
-let orgBId = "";
 let pipelineId = "";
 let stages: { id: string; name: string }[] = [];
 
@@ -38,8 +36,8 @@ const createDeal = async (
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ cookie, orgId } = await signUpWithOrg(app, `dashboard-a-${stamp}@eloscrm.test`, `dashboard-a-${stamp}`));
-  ({ cookie: cookieB, orgId: orgBId } = await signUpWithOrg(
+  ({ cookie } = await signUpWithOrg(app, `dashboard-a-${stamp}@eloscrm.test`, `dashboard-a-${stamp}`));
+  ({ cookie: cookieB } = await signUpWithOrg(
     app,
     `dashboard-b-${stamp}@eloscrm.test`,
     `dashboard-b-${stamp}`,
@@ -52,12 +50,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.deal.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.stage.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.pipeline.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.client.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.organization.deleteMany({ where: { slug: { startsWith: `dashboard-` } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
   await app.close();
   await prisma.$disconnect();
 });

@@ -12,15 +12,20 @@ sem workspace ligando os dois. Visão geral: `../CLAUDE.md`. Padrões e arquitet
 ## Comandos
 
 ```bash
-pnpm dev     # next dev (porta 3000)
-pnpm build   # next build — também é a checagem de tipos
-pnpm lint    # eslint (flat config, core-web-vitals + typescript)
+pnpm dev        # next dev (porta 3000)
+pnpm build      # next build
+pnpm lint       # eslint (flat config, core-web-vitals + typescript)
+pnpm typecheck  # tsc --noEmit
 ```
 
-Não há script de `typecheck`: usar `pnpm build` ou `npx tsc --noEmit`. Não há testes.
+Não há testes. Da raiz do repo, `./scripts/dev.sh` sobe web e API juntos.
 
-Não há `.env.example`. A única env é `NEXT_PUBLIC_API_URL`; sem ela, `lib/api.ts` e
+A única env é `NEXT_PUBLIC_API_URL` (`cp .env.example .env`); sem ela, `lib/api.ts` e
 `lib/auth-client.ts` caem no default `http://localhost:3333` (a API precisa estar de pé).
+
+O `eslint.config.mjs` desliga `react-hooks/set-state-in-effect` em `components/ui/**` e
+`hooks/use-mobile.ts`: é código gerado pelo CLI do shadcn e qualquer correção some no próximo
+`shadcn add`. Em código autoral a regra vale — derivar no render em vez de sincronizar por efeito.
 
 ## Comunicação com a API
 
@@ -79,4 +84,4 @@ mostra dados da org anterior.
   escolhida para não deixar adjacentes o par com pior separação para daltonismo.
 - Kanban usa HTML5 drag-and-drop nativo (`draggable`), sem lib de DnD.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-07-27 10:22 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-07-27 11:15 (-03)

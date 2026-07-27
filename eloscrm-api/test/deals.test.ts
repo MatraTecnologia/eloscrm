@@ -9,7 +9,6 @@ const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
 let orgId = "";
 let cookieB = "";
-let orgBId = "";
 let pipelineId = "";
 let stageId = "";
 let otherStageId = "";
@@ -31,7 +30,7 @@ const createClient = async (headers: { cookie: string }, name: string) => {
 beforeAll(async () => {
   app = await makeApp();
   ({ cookie, orgId } = await signUpWithOrg(app, `deals-a-${stamp}@eloscrm.test`, `deals-a-${stamp}`));
-  ({ cookie: cookieB, orgId: orgBId } = await signUpWithOrg(app, `deals-b-${stamp}@eloscrm.test`, `deals-b-${stamp}`));
+  ({ cookie: cookieB } = await signUpWithOrg(app, `deals-b-${stamp}@eloscrm.test`, `deals-b-${stamp}`));
 
   const pipeline = await getDefaultPipeline({ cookie });
   pipelineId = pipeline.id;
@@ -43,12 +42,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.deal.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.stage.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.pipeline.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.client.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.organization.deleteMany({ where: { slug: { startsWith: `deals-` } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
   await app.close();
   await prisma.$disconnect();
 });

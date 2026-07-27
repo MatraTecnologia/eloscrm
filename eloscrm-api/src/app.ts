@@ -7,11 +7,13 @@ import { corsPlugin } from "./plugins/cors.js";
 import { authHandler } from "./plugins/auth-handler.js";
 import { authGuardPlugin } from "./plugins/auth-guard.js";
 import { orgGuardPlugin } from "./plugins/org-guard.js";
+import { env } from "./env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const buildApp = async (): Promise<FastifyInstance> => {
-  const app = Fastify({ logger: true });
+  // log de request por teste deixa a saída do vitest ilegível; erro real ainda sobe pelo assert
+  const app = Fastify({ logger: env.NODE_ENV !== "test" });
   await app.register(errorHandler);
   await app.register(corsPlugin);
   await app.register(authHandler);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePipelines } from "@/lib/queries/pipelines";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PipelinePanel } from "./pipeline-panel";
@@ -8,18 +8,13 @@ import { KanbanBoard } from "./kanban-board";
 
 export default function DealsPage() {
   const { data: pipelines, isLoading } = usePipelines();
-  const [activeId, setActiveId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string>();
 
-  useEffect(() => {
-    if (!pipelines?.length) return;
-    setActiveId((cur) =>
-      cur && pipelines.some((p) => p.id === cur)
-        ? cur
-        : (pipelines.find((p) => p.isDefault) ?? pipelines[0]).id,
-    );
-  }, [pipelines]);
-
-  const active = pipelines?.find((p) => p.id === activeId);
+  // derivado no render: a seleção só vale se o pipeline ainda existir; senão cai no default
+  const active =
+    pipelines?.find((p) => p.id === selectedId) ??
+    pipelines?.find((p) => p.isDefault) ??
+    pipelines?.[0];
 
   if (isLoading) {
     return (
@@ -36,7 +31,7 @@ export default function DealsPage() {
 
   return (
     <div className="flex h-[calc(100dvh-6.5rem)] gap-6">
-      <PipelinePanel pipelines={pipelines} activeId={activeId} onSelect={setActiveId} />
+      <PipelinePanel pipelines={pipelines} activeId={active?.id} onSelect={setSelectedId} />
       <div className="min-w-0 flex-1">{active && <KanbanBoard pipeline={active} />}</div>
     </div>
   );

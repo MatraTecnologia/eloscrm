@@ -23,8 +23,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.organization.deleteMany({ where: { slug: { startsWith: `guard-${stamp}` } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
   await app.close();
   await prisma.$disconnect();
 });

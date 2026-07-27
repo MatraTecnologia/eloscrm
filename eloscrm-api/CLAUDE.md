@@ -55,21 +55,34 @@ pnpm dev                                  # tsx watch src/server.ts
 pnpm test                                 # vitest run
 pnpm test test/deals.test.ts              # arquivo único
 pnpm vitest run test/deals.test.ts -t "…" # teste único por nome
+pnpm lint                                 # oxlint
 pnpm typecheck                            # tsc --noEmit
 pnpm build                                # tsc
-pnpm db:push                              # prisma db push (sem migrations)
+pnpm db:push                              # aplica o schema no banco de dev (sem migrations)
+pnpm db:push:test                         # o mesmo no banco de teste (.env.test)
 pnpm db:generate                          # prisma generate (client em src/generated, gitignored)
 pnpm db:seed                              # tsx prisma/seed.ts
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
-**Pré-requisitos (clone novo).** Nem `typecheck` nem `test` rodam direto:
+**Pré-requisitos (clone novo).** `./scripts/setup.sh` na raiz do repo faz tudo; manualmente:
 
 - `pnpm install && pnpm db:generate` — `src/generated/` não é versionado e todo o código importa dele.
-- `cp .env.example .env` com `DATABASE_URL` apontando para um **Postgres real e acessível**: não há
-  mocks nem banco em memória. Os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem sign-up
-  de verdade em `/api/auth/*` via `app.inject`; `test/setup.ts` é só `dotenv/config`. Daí os
-  timeouts de 30s no `vitest.config.ts` (bcrypt em processo + Postgres remoto).
+- `cp .env.example .env` + `pnpm db:push` — dev aponta para o Postgres local (`docker compose up -d`
+  na raiz, ou qualquer Postgres na 5432).
+- `cp .env.test.example .env.test` + `pnpm db:push:test` — **banco separado**, exclusivo dos testes.
+  Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem
+  sign-up de verdade em `/api/auth/*` via `app.inject`.
+
+**Isolamento dos testes.** `test/global-setup.ts` trunca todas as tabelas uma vez antes da run;
+`test/setup.ts` carrega `.env.test` com `override: true` em cada worker. Os arquivos rodam em
+paralelo e cada um cria a própria organização — por isso não há cleanup em `afterAll`, e não faz
+sentido reintroduzir correntes de `deleteMany`. Timeouts em 15s por causa do bcrypt do sign-up.
+
+**Lint.** É **oxlint**, não ESLint (`typescript-eslint` ainda não suporta o TypeScript 7 do projeto).
+`.oxlintrc.json` liga a categoria `correctness` e transforma em regra duas convenções que antes só
+existiam neste documento: `no-console` (liberado em `prisma/` e `scripts/`, que são CLI) e
+`no-restricted-imports` de `@prisma/client`.
 
 **Verificação antes de declarar pronto:** rodar `pnpm typecheck` e `pnpm test` e conferir a saída real.
 
@@ -86,4 +99,4 @@ pnpm auth:generate                        # regera os models do Better Auth no s
 - Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-07-27 10:20 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-07-27 11:15 (-03)

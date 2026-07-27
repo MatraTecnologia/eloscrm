@@ -7,9 +7,7 @@ import { prisma } from "../src/lib/prisma.js";
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
-let orgId = "";
 let cookieB = "";
-let orgBId = "";
 
 const createActivity = async (headers: { cookie: string }, description: string, dueAt?: string) => {
   const res = await app.inject({
@@ -23,14 +21,11 @@ const createActivity = async (headers: { cookie: string }, description: string, 
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ cookie, orgId } = await signUpWithOrg(app, `agenda-a-${stamp}@eloscrm.test`, `agenda-a-${stamp}`));
-  ({ cookie: cookieB, orgId: orgBId } = await signUpWithOrg(app, `agenda-b-${stamp}@eloscrm.test`, `agenda-b-${stamp}`));
+  ({ cookie } = await signUpWithOrg(app, `agenda-a-${stamp}@eloscrm.test`, `agenda-a-${stamp}`));
+  ({ cookie: cookieB } = await signUpWithOrg(app, `agenda-b-${stamp}@eloscrm.test`, `agenda-b-${stamp}`));
 });
 
 afterAll(async () => {
-  await prisma.activity.deleteMany({ where: { organizationId: { in: [orgId, orgBId] } } });
-  await prisma.organization.deleteMany({ where: { slug: { startsWith: `agenda-` } } });
-  await prisma.user.deleteMany({ where: { email: { endsWith: `-${stamp}@eloscrm.test` } } });
   await app.close();
   await prisma.$disconnect();
 });

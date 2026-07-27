@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist", "src/generated"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-console": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@prisma/client",
+            "message": "Importe o client gerado: src/generated/prisma/client.js (caminho relativo)."
+          }
+        ]
+      }
+    ],
+    "typescript/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-underscore-dangle": "off",
+    "no-async-endpoint-handlers": "off"
+  },
+  "overrides": [
+    {
+      "files": ["prisma/**/*.ts", "scripts/**/*.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}

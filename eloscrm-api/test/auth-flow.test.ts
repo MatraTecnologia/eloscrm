@@ -9,7 +9,6 @@ const email = `corretor-${stamp}@eloscrm.test`;
 
 beforeAll(async () => { app = await makeApp(); });
 afterAll(async () => {
-  await prisma.user.deleteMany({ where: { email } });
   await app.close();
   await prisma.$disconnect();
 });

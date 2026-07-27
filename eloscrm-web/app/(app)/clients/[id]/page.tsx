@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Archive, User } from "lucide-react";
@@ -55,7 +56,8 @@ export default function ClientProfilePage() {
       .filter((a): a is Activity & { doneAt: string } => !!a.doneAt)
       .sort((a, b) => new Date(b.doneAt).getTime() - new Date(a.doneAt).getTime())[0] ?? null;
 
-  const now = Date.now();
+  // "agora" congelado na montagem: chamar Date.now() no render torna o resultado instável entre renders
+  const [now] = useState(() => Date.now());
   const nextAction =
     allActivities
       .filter((a): a is Activity & { dueAt: string } => !!a.dueAt && !a.doneAt && new Date(a.dueAt).getTime() > now)

@@ -1,0 +1,25 @@
+# Postgres do projeto (dev + teste). Se já houver um Postgres local ocupando a 5432,
+# não suba este compose: basta criar os bancos eloscrm_dev e eloscrm_test nele.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: eloscrm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eloscrm_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - eloscrm-postgres-data:/var/lib/postgresql/data
+      # cria o banco de teste junto com o de dev na primeira subida
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  eloscrm-postgres-data:
