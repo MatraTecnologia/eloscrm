@@ -4,11 +4,21 @@ import { organization } from "better-auth/plugins";
 import { prisma } from "./prisma.js";
 import { env } from "../env.js";
 
+const isProduction = env.NODE_ENV === "production";
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.WEB_ORIGIN, "http://localhost"],
+  // "http://localhost" existe só para o web de dev falar com a API; em produção seria uma
+  // origem confiável a mais sem nenhum uso.
+  trustedOrigins: isProduction ? [env.WEB_ORIGIN] : [env.WEB_ORIGIN, "http://localhost"],
+  advanced: {
+    // Em produção web e API ficam em hosts distintos: com o SameSite=Lax padrão o navegador
+    // não devolve o cookie de sessão nas requisições do front e todo request autenticado dá 401.
+    // Exige https nos dois lados. Em dev fica no Lax, que funciona em http://localhost.
+    ...(isProduction && { defaultCookieAttributes: { sameSite: "none", secure: true } }),
+  },
   emailAndPassword: { enabled: true },
   user: {
     changeEmail: {

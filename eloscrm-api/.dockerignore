@@ -1,0 +1,14 @@
+node_modules
+dist
+src/generated
+.git
+.github
+.env*
+docs
+test
+scripts
+CLAUDE.md
+Dockerfile
+.dockerignore
+*.tsbuildinfo
+.DS_Store
