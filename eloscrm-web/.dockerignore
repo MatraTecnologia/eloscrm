@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.github
+# o .env local aponta a API para localhost; deixá-lo fora do contexto garante que
+# NEXT_PUBLIC_API_URL venha só do build arg
+.env*
+README.md
+AGENTS.md
+CLAUDE.md
+Dockerfile
+.dockerignore
+*.tsbuildinfo
+.DS_Store
