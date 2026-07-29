@@ -10,12 +10,12 @@ export type ClientInput = {
   phone?: string;
   source?: ClientSource;
   notes?: string;
-  description?: string;
+  description?: string | null;
   tags?: string[];
   temperature?: LeadTemperature;
-  interestType?: string;
-  budgetMin?: number;
-  budgetMax?: number;
+  interestType?: string | null;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
 };
 
 export const useClients = (filters?: ClientFilters) => {
