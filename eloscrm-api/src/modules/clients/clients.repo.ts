@@ -6,6 +6,9 @@ export const listClients = (orgId: string, filters: ListClientsQuery) => {
   const where: Prisma.ClientWhereInput = { organizationId: orgId };
   if (filters.source) where.source = filters.source;
   if (filters.ownerId) where.ownerId = filters.ownerId;
+  if (filters.temperature) where.temperature = filters.temperature;
+  // `has` casa a tag exata dentro do array — `contains` faria match parcial e traria "vip-ouro" em "vip"
+  if (filters.tag) where.tags = { has: filters.tag };
   if (filters.q) {
     where.OR = [
       { name: { contains: filters.q, mode: "insensitive" } },
