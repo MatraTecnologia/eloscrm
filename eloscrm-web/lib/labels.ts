@@ -1,4 +1,4 @@
-import type { ActivityType, ClientSource, PropertyStatus } from "./types";
+import type { ActivityType, AuditAction, ClientSource, PropertyStatus } from "./types";
 
 export const clientSourceLabels: Record<ClientSource, string> = {
   SITE: "Site",
@@ -74,3 +74,29 @@ export const formatCurrency = (value: string | number | null | undefined) =>
   value == null
     ? "—"
     : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  CREATED: "criou",
+  UPDATED: "alterou",
+  DELETED: "removeu",
+  STAGE_CHANGED: "moveu de estágio",
+  OWNER_CHANGED: "trocou o responsável",
+};
+
+// nome do campo do banco não pode vazar para a tela
+export const FIELD_LABELS: Record<string, string> = {
+  name: "Nome",
+  email: "E-mail",
+  phone: "Telefone",
+  source: "Origem",
+  notes: "Observações",
+  ownerId: "Responsável",
+  stage: "Estágio",
+  status: "Status",
+  title: "Título",
+  value: "Valor",
+  dueAt: "Vencimento",
+  doneAt: "Conclusão",
+  lostReason: "Motivo da perda",
+  description: "Descrição",
+};

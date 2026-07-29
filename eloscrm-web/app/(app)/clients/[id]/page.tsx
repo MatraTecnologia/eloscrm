@@ -8,6 +8,7 @@ import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useClient } from "@/lib/queries/clients";
 import { useProperties } from "@/lib/queries/properties";
+import { useMembers } from "@/lib/queries/members";
 import { formatCurrency } from "@/lib/labels";
 import type { Activity } from "@/lib/types";
 import { useOrgDeals } from "@/lib/queries/deals";
@@ -15,6 +16,7 @@ import { useClientActivities } from "./use-client-activities";
 import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "./activity-timeline";
+import { AuditFeed } from "./audit-feed";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,8 @@ export default function ClientProfilePage() {
   const { deals, isLoading: loadingDeals } = useOrgDeals();
   const { data: activities, isLoading: loadingActivities } = useClientActivities(id);
   const { data: properties, isLoading: loadingProperties } = useProperties();
+  const { data: members } = useMembers();
+  const owner = members?.find((member) => member.userId === client?.ownerId) ?? null;
 
   const clientDeals = deals.filter((d) => d.clientId === id);
   const primaryDeal =
@@ -109,6 +113,9 @@ export default function ClientProfilePage() {
           <TabsTrigger value="arquivos" className="data-active:text-primary after:bg-primary">
             Arquivos
           </TabsTrigger>
+          <TabsTrigger value="historico" className="data-active:text-primary after:bg-primary">
+            Histórico
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo" className="mt-4 space-y-4">
@@ -162,7 +169,7 @@ export default function ClientProfilePage() {
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                     <User className="size-4" />
                   </span>
-                  <p className="text-sm text-muted-foreground">—</p>
+                  <p className="text-sm">{owner?.name ?? "Sem responsável"}</p>
                 </div>
               </CardContent>
             </Card>
@@ -260,6 +267,17 @@ export default function ClientProfilePage() {
               <EmptyDescription>Os arquivos enviados para este cliente vão aparecer aqui.</EmptyDescription>
             </EmptyHeader>
           </Empty>
+        </TabsContent>
+
+        <TabsContent value="historico" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Histórico de alterações</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AuditFeed entityType="CLIENT" entityId={client.id} />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
