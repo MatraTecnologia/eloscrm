@@ -1,72 +1,148 @@
 import "dotenv/config";
-import { ClientSource, ActivityType } from "../src/generated/prisma/client.js";
 import { prisma } from "../src/lib/prisma.js";
-import { DEFAULT_STAGES } from "../src/modules/pipelines/default-stages.js";
+import { DEFAULT_STAGES, type DefaultStage } from "../src/modules/pipelines/default-stages.js";
+import { RENTAL_STAGES, activities, clients, properties, rentalDeals, salesDeals } from "./seed-data.js";
 
-const clientsData = [
-  { name: "Carlos Silva", source: ClientSource.SITE, stagePosition: 0 },
-  { name: "Mariana Costa", source: ClientSource.INSTAGRAM, stagePosition: 1 },
-  { name: "Lucas Almeida", source: ClientSource.INDICACAO, stagePosition: 2 },
-  { name: "Ana Pereira", source: ClientSource.WHATSAPP, stagePosition: 3 },
-];
+const SALES_PIPELINE = "Funil de Vendas";
+const RENTAL_PIPELINE = "Locação";
+
+const at = (daysFromNow: number, hour: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+  date.setHours(hour, 0, 0, 0);
+  return date;
+};
+
+const daysAgo = (days: number) => at(-days, 9);
+
+/**
+ * O seed popula a organização de quem já usa o app — uma org sem membro nenhum não aparece para
+ * ninguém. Só quando não existe nenhuma (clone novo, banco zerado) é que cria a de demonstração.
+ */
+const resolveOrg = async () => {
+  const withMember = await prisma.organization.findFirst({
+    where: { members: { some: {} } },
+    orderBy: { createdAt: "asc" },
+    include: { members: { orderBy: { createdAt: "asc" }, take: 1 } },
+  });
+  if (withMember) return { org: withMember, ownerId: withMember.members[0]?.userId ?? null };
+
+  const org = await prisma.organization.create({
+    data: { name: "Imobiliária Demo", slug: "imob-demo" },
+  });
+  return { org, ownerId: null };
+};
+
+/**
+ * Deal.stageId é onDelete: Restrict, e apagar um pipeline cascateia para os estágios — então as
+ * negociações precisam sair antes dos estágios, senão a segunda execução do seed quebra em FK.
+ */
+const wipeOrgData = async (organizationId: string) => {
+  await prisma.activity.deleteMany({ where: { organizationId } });
+  await prisma.deal.deleteMany({ where: { organizationId } });
+  await prisma.client.deleteMany({ where: { organizationId } });
+  await prisma.property.deleteMany({ where: { organizationId } });
+  await prisma.stage.deleteMany({ where: { organizationId } });
+  await prisma.pipeline.deleteMany({ where: { organizationId } });
+};
+
+const createPipeline = async (
+  organizationId: string,
+  name: string,
+  isDefault: boolean,
+  position: number,
+  stages: DefaultStage[],
+) => {
+  const pipeline = await prisma.pipeline.create({
+    data: { organizationId, name, isDefault, position },
+  });
+  const created = await Promise.all(
+    stages.map((stage) =>
+      prisma.stage.create({
+        data: {
+          organizationId,
+          pipelineId: pipeline.id,
+          name: stage.name,
+          position: stage.position,
+          isWon: stage.isWon ?? false,
+          isLost: stage.isLost ?? false,
+        },
+      }),
+    ),
+  );
+  return { pipeline, stageIds: new Map(created.map((stage) => [stage.name, stage.id])) };
+};
 
 const run = async () => {
-  const org = await prisma.organization.upsert({
-    where: { slug: "imob-demo" },
-    update: {},
-    create: { name: "Imobiliária Demo", slug: "imob-demo" },
-  });
+  const { org, ownerId } = await resolveOrg();
+  console.log(`Populando "${org.name}" (${org.slug})${ownerId ? "" : " — organização sem membros"}`);
 
-  const pipeline = await prisma.pipeline.upsert({
-    where: { organizationId_name: { organizationId: org.id, name: "Funil de Vendas" } },
-    update: {},
-    create: { organizationId: org.id, name: "Funil de Vendas", isDefault: true, position: 0 },
-  });
+  await wipeOrgData(org.id);
 
-  const stages = [];
-  for (const stageData of DEFAULT_STAGES) {
-    // Stage não tem unique constraint (só Pipeline tem); idempotência via find + create
-    const existing = await prisma.stage.findFirst({ where: { pipelineId: pipeline.id, name: stageData.name } });
-    const stage =
-      existing ??
-      (await prisma.stage.create({
-        data: {
-          organizationId: org.id,
-          pipelineId: pipeline.id,
-          name: stageData.name,
-          position: stageData.position,
-          isWon: stageData.isWon ?? false,
-          isLost: stageData.isLost ?? false,
-        },
-      }));
-    stages.push(stage);
+  // o funil do dashboard vem só do pipeline default: dois com isDefault true misturariam os
+  // estágios dos dois num gráfico só
+  const sales = await createPipeline(org.id, SALES_PIPELINE, true, 0, DEFAULT_STAGES);
+  const rental = await createPipeline(org.id, RENTAL_PIPELINE, false, 1, RENTAL_STAGES);
+
+  const propertyIds = new Map<string, string>();
+  for (const property of properties) {
+    const created = await prisma.property.create({
+      data: { organizationId: org.id, photos: [], ...property },
+    });
+    propertyIds.set(created.title, created.id);
   }
 
-  for (const c of clientsData) {
-    const client = await prisma.client.create({
-      data: { organizationId: org.id, name: c.name, source: c.source },
+  const clientIds = new Map<string, string>();
+  for (const client of clients) {
+    const created = await prisma.client.create({
+      data: { organizationId: org.id, ownerId, ...client },
     });
-    const stage = stages[c.stagePosition];
-    await prisma.deal.create({
-      data: {
-        organizationId: org.id,
-        clientId: client.id,
-        pipelineId: pipeline.id,
-        stageId: stage.id,
-        title: `Negociação — ${c.name}`,
-        value: 250000,
-      },
-    });
+    clientIds.set(created.name, created.id);
+  }
+
+  const dealIds = new Map<string, string>();
+  for (const [deals, { pipeline, stageIds }] of [
+    [salesDeals, sales],
+    [rentalDeals, rental],
+  ] as const) {
+    for (const deal of deals) {
+      const created = await prisma.deal.create({
+        data: {
+          organizationId: org.id,
+          clientId: clientIds.get(deal.client)!,
+          propertyId: deal.property ? propertyIds.get(deal.property)! : null,
+          pipelineId: pipeline.id,
+          stageId: stageIds.get(deal.stage)!,
+          ownerId,
+          title: deal.title,
+          value: deal.value,
+          lostReason: deal.lostReason ?? null,
+          createdAt: daysAgo(deal.createdDaysAgo),
+        },
+      });
+      dealIds.set(created.title, created.id);
+    }
+  }
+
+  for (const activity of activities) {
+    const dueAt = at(activity.dueInDays, activity.atHour);
     await prisma.activity.create({
       data: {
         organizationId: org.id,
-        clientId: client.id,
-        type: ActivityType.CALL,
-        description: `Primeiro contato com ${c.name}`,
-        dueAt: new Date(),
+        clientId: clientIds.get(activity.client)!,
+        dealId: activity.deal ? dealIds.get(activity.deal)! : null,
+        type: activity.type,
+        description: activity.description,
+        dueAt,
+        doneAt: activity.done ? dueAt : null,
       },
     });
   }
+
+  console.log(
+    `Pronto: ${properties.length} imóveis, ${clients.length} clientes, ` +
+      `${salesDeals.length + rentalDeals.length} negociações em 2 funis, ${activities.length} atividades`,
+  );
 };
 
 run().finally(() => prisma.$disconnect());
