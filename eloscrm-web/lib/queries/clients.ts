@@ -54,7 +54,10 @@ export const useUpdateClient = () => {
       const { data } = await api.patch<Client>(`/clients/${id}`, input);
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["audit-events"] });
+    },
   });
 };
 
@@ -64,6 +67,9 @@ export const useDeleteClient = () => {
     mutationFn: async (id: string) => {
       await api.delete(`/clients/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["audit-events"] });
+    },
   });
 };

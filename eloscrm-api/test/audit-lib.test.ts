@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
+import { AuditAction, AuditEntity, Prisma } from "../src/generated/prisma/client.js";
 import { diffFields, recordAudit } from "../src/lib/audit.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
@@ -36,7 +36,7 @@ describe("diffFields", () => {
 
   it("compara Decimal do banco com number do payload sem falso positivo", () => {
     // Prisma.Decimal e o number do Zod precisam normalizar para a mesma forma
-    const decimal = { toString: () => "500000" };
+    const decimal = new Prisma.Decimal("500000");
     expect(diffFields({ value: decimal }, { value: 500000 })).toEqual({});
     expect(diffFields({ value: decimal }, { value: 600000 })).toEqual({
       value: { from: "500000", to: "600000" },

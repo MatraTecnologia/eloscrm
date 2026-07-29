@@ -4,14 +4,15 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { History } from "lucide-react";
 import { useAuditEvents } from "@/lib/queries/audit";
-import { AUDIT_ACTION_LABELS, FIELD_LABELS } from "@/lib/labels";
-import type { AuditEntity } from "@/lib/types";
+import { AUDIT_ACTION_LABELS, FIELD_LABELS, clientSourceLabels } from "@/lib/labels";
+import type { AuditEntity, ClientSource } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa
-const showValue = (value: unknown) => {
+const showValue = (field: string, value: unknown) => {
   if (value === null || value === undefined || value === "") return "—";
+  if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   return String(value);
 };
 
@@ -58,7 +59,7 @@ export const AuditFeed = ({ entityType, entityId }: { entityType: AuditEntity; e
               <ul className="space-y-0.5">
                 {Object.entries(event.changes).map(([field, change]) => (
                   <li key={field} className="text-xs text-muted-foreground">
-                    {FIELD_LABELS[field] ?? field}: {showValue(change.from)} → {showValue(change.to)}
+                    {FIELD_LABELS[field] ?? field}: {showValue(field, change.from)} → {showValue(field, change.to)}
                   </li>
                 ))}
               </ul>

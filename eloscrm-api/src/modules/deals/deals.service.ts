@@ -27,9 +27,9 @@ const ensureRelationsInOrg = async (orgId: string, data: CreateDealInput | Updat
 };
 
 // stageId no histórico não diz nada a quem lê; o nome do estágio é o que interessa
-const stageNames = async (fromId: string, toId: string) => {
+const stageNames = async (orgId: string, fromId: string, toId: string) => {
   const stages = await prisma.stage.findMany({
-    where: { id: { in: [fromId, toId] } },
+    where: { id: { in: [fromId, toId] }, organizationId: orgId },
     select: { id: true, name: true },
   });
   const byId = new Map(stages.map((stage) => [stage.id, stage.name]));
@@ -62,7 +62,7 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
 
   if (changes.stageId) {
     // um PATCH pode mudar estágio e dono juntos; o movimento no funil é o que a timeline destaca
-    const names = await stageNames(deal.stageId, rest.stageId!);
+    const names = await stageNames(orgId, deal.stageId, rest.stageId!);
     delete changes.stageId;
     await recordAudit({
       orgId,
