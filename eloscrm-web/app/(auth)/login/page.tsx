@@ -43,8 +43,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="items-center gap-3 text-center">
-          <Image src="/logo-oficial.svg" alt="elosCRM" width={160} height={38} priority style={{ height: "auto" }} />
+        {/* CardHeader é grid: items-center alinha no eixo vertical, quem centraliza é justify-items */}
+        <CardHeader className="justify-items-center gap-3 text-center">
+          {/* logo-oficial e logo-white têm o "elos" em branco, invisível no card claro */}
+          <Image src="/logo-dark.svg" alt="elosCRM" width={160} height={48} priority style={{ height: "auto" }} />
           <CardTitle className="text-base font-medium text-muted-foreground">Conectando oportunidades</CardTitle>
         </CardHeader>
         <CardContent>
