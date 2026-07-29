@@ -89,6 +89,7 @@ model Organization {
   stages      Stage[]
   deals       Deal[]
   activities  Activity[]
+  auditEvents AuditEvent[]
 
   @@unique([slug])
   @@map("organization")
@@ -146,6 +147,21 @@ enum PropertyStatus {
   RESERVADO
   VENDIDO
   INATIVO
+}
+
+enum AuditEntity {
+  CLIENT
+  DEAL
+  PROPERTY
+  ACTIVITY
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  STAGE_CHANGED
+  OWNER_CHANGED
 }
 
 model Client {
@@ -261,4 +277,21 @@ model Activity {
 
   @@index([organizationId])
   @@index([organizationId, dueAt])
+}
+
+model AuditEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityType     AuditEntity
+  entityId       String
+  action         AuditAction
+  // snapshot: o histórico mostra o nome que a pessoa tinha na hora do fato e sobrevive a ela sair da org
+  actorId        String?
+  actorName      String?
+  // { campo: { from, to } }, só o que mudou
+  changes        Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, entityType, entityId, createdAt])
 }
