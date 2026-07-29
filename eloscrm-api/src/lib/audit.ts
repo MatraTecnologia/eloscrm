@@ -16,10 +16,7 @@ const normalize = (value: unknown): unknown => {
   return value;
 };
 
-export const diffFields = <T extends Record<string, unknown>>(
-  before: T,
-  after: { [K in keyof T]?: T[K] | null },
-): Changes => {
+export const diffFields = (before: Record<string, unknown>, after: Record<string, unknown>): Changes => {
   const changes: Changes = {};
   for (const [field, rawNext] of Object.entries(after)) {
     // undefined é "campo não enviado no PATCH"; null é "limpar o campo" e conta como mudança
@@ -51,7 +48,7 @@ export const recordAudit = async (input: {
       actorId: input.actor.id,
       actorName: input.actor.name,
       // Changes usa `unknown` em from/to pra aceitar qualquer valor normalizado; a coluna é Json
-      changes: (input.changes as Prisma.InputJsonValue | undefined) ?? undefined,
+      changes: input.changes as Prisma.InputJsonValue | undefined,
     },
   });
 };
