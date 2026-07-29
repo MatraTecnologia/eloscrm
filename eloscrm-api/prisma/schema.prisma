@@ -90,6 +90,7 @@ model Organization {
   deals       Deal[]
   activities  Activity[]
   auditEvents AuditEvent[]
+  comments    Comment[]
 
   @@unique([slug])
   @@map("organization")
@@ -164,6 +165,12 @@ enum AuditAction {
   OWNER_CHANGED
 }
 
+enum LeadTemperature {
+  FRIO
+  MORNO
+  QUENTE
+}
+
 model Client {
   id             String       @id @default(cuid())
   organizationId String
@@ -174,6 +181,13 @@ model Client {
   phone          String?
   source         ClientSource @default(OUTROS)
   notes          String?
+  // notes segue sendo o recado curto; description é o texto do perfil do lead
+  description  String?
+  tags         String[]
+  temperature  LeadTemperature @default(MORNO)
+  interestType String?
+  budgetMin    Decimal?
+  budgetMax    Decimal?
   deals          Deal[]
   activities     Activity[]
   createdAt      DateTime     @default(now())
@@ -292,6 +306,24 @@ model AuditEvent {
   // { campo: { from, to } }, só o que mudou
   changes        Json?
   createdAt      DateTime     @default(now())
+
+  @@index([organizationId, entityType, entityId, createdAt])
+}
+
+model Comment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // mesmo par do AuditEvent, e pelo mesmo motivo: sem FK, o comentário não força uma coluna por tipo
+  entityType     AuditEntity
+  entityId       String
+  // snapshot: o mural mostra quem era a pessoa na hora, e sobrevive a ela sair da imobiliária
+  authorId       String
+  authorName     String
+  body           String
+  editedAt       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, entityType, entityId, createdAt])
 }
