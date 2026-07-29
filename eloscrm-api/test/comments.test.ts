@@ -138,4 +138,27 @@ describe("comentários", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
   });
+
+  it("PATCH e DELETE de outra organização dão 404, não 403", async () => {
+    const created = await post(cookie, "Comentário só da organização A");
+    const id = created.json().id;
+
+    // 404 aqui é deliberado: responder 403 confirmaria pra quem não é da org A que o
+    // comentário existe. getOwn filtra por organizationId antes de checar autoria — este
+    // teste trava essa ordem contra regressão futura.
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/v1/comments/${id}`,
+      headers: { cookie: cookieOrgB },
+      payload: { body: "Tentativa de editar de fora" },
+    });
+    expect(patch.statusCode).toBe(404);
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/v1/comments/${id}`,
+      headers: { cookie: cookieOrgB },
+    });
+    expect(del.statusCode).toBe(404);
+  });
 });
