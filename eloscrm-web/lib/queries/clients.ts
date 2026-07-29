@@ -1,15 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Client, ClientSource } from "@/lib/types";
+import type { Client, ClientSource, LeadTemperature } from "@/lib/types";
 
-export type ClientFilters = { source?: ClientSource; q?: string };
+export type ClientFilters = { source?: ClientSource; q?: string; temperature?: LeadTemperature; tag?: string };
 export type ClientInput = {
   name: string;
   email?: string;
   phone?: string;
   source?: ClientSource;
   notes?: string;
+  description?: string;
+  tags?: string[];
+  temperature?: LeadTemperature;
+  interestType?: string;
+  budgetMin?: number;
+  budgetMax?: number;
 };
 
 export const useClients = (filters?: ClientFilters) => {

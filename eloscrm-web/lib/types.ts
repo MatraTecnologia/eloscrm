@@ -1,6 +1,7 @@
 export type ClientSource = "SITE" | "INSTAGRAM" | "INDICACAO" | "WHATSAPP" | "OUTROS";
 export type ActivityType = "CALL" | "VISIT" | "PROPOSAL" | "NOTE";
 export type PropertyStatus = "DISPONIVEL" | "RESERVADO" | "VENDIDO" | "INATIVO";
+export type LeadTemperature = "FRIO" | "MORNO" | "QUENTE";
 
 export type Client = {
   id: string;
@@ -11,6 +12,12 @@ export type Client = {
   phone: string | null;
   source: ClientSource;
   notes: string | null;
+  description: string | null;
+  tags: string[];
+  temperature: LeadTemperature;
+  interestType: string | null;
+  budgetMin: string | null;
+  budgetMax: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -111,4 +118,17 @@ export type Member = {
   name: string;
   email: string;
   role: string;
+};
+
+export type Comment = {
+  id: string;
+  organizationId: string;
+  entityType: AuditEntity;
+  entityId: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  editedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
