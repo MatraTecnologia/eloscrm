@@ -89,12 +89,14 @@ export const ClientDialog = ({
       phone: toE164(phone),
       source,
       notes: notes.trim() || undefined,
-      description: description.trim() || undefined,
+      // no update, "" precisa virar null (limpa a coluna); no create, o schema não aceita null
+      // nesses campos — só optional() — então "" precisa continuar sumindo do payload
+      description: description.trim() || (editing ? null : undefined),
       tags,
       temperature,
-      interestType: interestType.trim() || undefined,
-      budgetMin: parseCurrencyInput(budgetMin),
-      budgetMax: parseCurrencyInput(budgetMax),
+      interestType: interestType.trim() || (editing ? null : undefined),
+      budgetMin: parseCurrencyInput(budgetMin) ?? (editing ? null : undefined),
+      budgetMax: parseCurrencyInput(budgetMax) ?? (editing ? null : undefined),
     }
     try {
       if (editing) await update.mutateAsync({ id: client.id, input })
