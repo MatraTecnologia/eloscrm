@@ -1,5 +1,5 @@
 import { AtSign, Mail, MessageCircle, Pencil, Phone } from "lucide-react";
-import { clientSourceLabels, formatPhone, phoneNationalDigits } from "@/lib/labels";
+import { clientSourceLabels, formatCurrency, formatPhone, leadTemperatureLabels, phoneNationalDigits } from "@/lib/labels";
 import type { Client } from "@/lib/types";
 import { ClientAvatar } from "../client-avatar";
 import { ClientDialog } from "../client-dialog";
@@ -19,6 +19,11 @@ export const LeadHeader = ({
 }) => {
   // sem o DDI: o link do WhatsApp já prefixa 55 e o telefone agora vem salvo em E.164
   const digits = phoneNationalDigits(client.phone);
+  // o campo do lead é a intenção declarada; o do negócio é uma oportunidade concreta
+  const interestLabel = client.interestType ?? interest;
+  const budgetLabel = client.budgetMin
+    ? `${formatCurrency(client.budgetMin)}${client.budgetMax ? ` a ${formatCurrency(client.budgetMax)}` : ""}`
+    : budget;
 
   return (
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -32,6 +37,7 @@ export const LeadHeader = ({
                 {stageName}
               </Badge>
             )}
+            <Badge variant="secondary">{leadTemperatureLabels[client.temperature]}</Badge>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {client.phone && (
@@ -49,14 +55,23 @@ export const LeadHeader = ({
             </span>
           </div>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {interest && (
+            {interestLabel && (
               <>
-                Interesse: <span className="font-medium text-foreground">{interest}</span>
+                Interesse: <span className="font-medium text-foreground">{interestLabel}</span>
                 {" · "}
               </>
             )}
-            Orçamento: <span className="font-medium text-foreground">{budget}</span>
+            Orçamento: <span className="font-medium text-foreground">{budgetLabel}</span>
           </p>
+          {client.tags.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {client.tags.map((tag) => (
+                <Badge key={tag} variant="outline">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "./activity-timeline";
 import { AuditFeed } from "./audit-feed";
+import { CommentFeed } from "./comment-feed";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,9 @@ export default function ClientProfilePage() {
           <TabsTrigger value="arquivos" className="data-active:text-primary after:bg-primary">
             Arquivos
           </TabsTrigger>
+          <TabsTrigger value="comentarios" className="data-active:text-primary after:bg-primary">
+            Comentários
+          </TabsTrigger>
           <TabsTrigger value="historico" className="data-active:text-primary after:bg-primary">
             Histórico
           </TabsTrigger>
@@ -181,7 +185,10 @@ export default function ClientProfilePage() {
                 <CardHeader>
                   <CardTitle>Observações</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
+                  {client.description && (
+                    <p className="text-sm whitespace-pre-line">{client.description}</p>
+                  )}
                   {/* whitespace-pre-line: observações vêm de textarea e podem ter quebras de linha */}
                   <p className="text-sm whitespace-pre-line text-muted-foreground">
                     {client.notes || "Sem observações registradas."}
@@ -267,6 +274,17 @@ export default function ClientProfilePage() {
               <EmptyDescription>Os arquivos enviados para este cliente vão aparecer aqui.</EmptyDescription>
             </EmptyHeader>
           </Empty>
+        </TabsContent>
+
+        <TabsContent value="comentarios" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Comentários</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CommentFeed entityType="CLIENT" entityId={client.id} />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="historico" className="mt-4">
