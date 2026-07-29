@@ -17,7 +17,13 @@ export const createClientSchema = z.object({
   budgetMax: z.number().nonnegative().optional(),
 });
 
-export const updateClientSchema = createClientSchema.partial();
+export const updateClientSchema = createClientSchema.partial().extend({
+  // undefined é "campo não enviado no PATCH"; null é "limpar o campo" e o diffFields já conta como mudança
+  description: z.string().nullable().optional(),
+  interestType: z.string().nullable().optional(),
+  budgetMin: z.number().nonnegative().nullable().optional(),
+  budgetMax: z.number().nonnegative().nullable().optional(),
+});
 
 export const listClientsQuerySchema = z.object({
   source: z.enum(ClientSource).optional(),

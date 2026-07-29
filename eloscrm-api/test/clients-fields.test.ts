@@ -103,4 +103,35 @@ describe("campos do perfil do lead", () => {
     expect(byTag.statusCode).toBe(200);
     expect(byTag.json().some((c: { name: string }) => c.name === "Filtro Quente")).toBe(true);
   });
+
+  it("limpa description e budgetMin enviando null", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Lead a Limpar", description: "Texto a apagar", budgetMin: 100000 },
+    });
+    const client = created.json();
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${client.id}`,
+      headers: { cookie },
+      payload: { description: null, budgetMin: null },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    const updated = patched.json();
+    expect(updated.description).toBeNull();
+    expect(updated.budgetMin).toBeNull();
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: AuditEntity.CLIENT, entityId: client.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(events[1].changes).toEqual({
+      description: { from: "Texto a apagar", to: null },
+      budgetMin: { from: "100000", to: null },
+    });
+  });
 });
