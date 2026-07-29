@@ -90,3 +90,25 @@ export type DashboardStats = {
   funnel: { name: string; total: number }[];
   bySource: Record<ClientSource, number>;
 };
+
+export type AuditEntity = "CLIENT" | "DEAL" | "PROPERTY" | "ACTIVITY";
+export type AuditAction = "CREATED" | "UPDATED" | "DELETED" | "STAGE_CHANGED" | "OWNER_CHANGED";
+
+export type AuditEvent = {
+  id: string;
+  entityType: AuditEntity;
+  entityId: string;
+  action: AuditAction;
+  actorId: string | null;
+  actorName: string | null;
+  // { campo: { from, to } } — só os campos que mudaram
+  changes: Record<string, { from: unknown; to: unknown }> | null;
+  createdAt: string;
+};
+
+export type Member = {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+};
