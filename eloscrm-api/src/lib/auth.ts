@@ -17,7 +17,28 @@ export const auth = betterAuth({
     // Em produção web e API ficam em hosts distintos: com o SameSite=Lax padrão o navegador
     // não devolve o cookie de sessão nas requisições do front e todo request autenticado dá 401.
     // Exige https nos dois lados. Em dev fica no Lax, que funciona em http://localhost.
+    // Pendente de revisão: os hosts de produção são subdomínios do mesmo domínio registrável, o
+    // que os torna same-site — ali o Lax bastaria, e o None só expõe o cookie às restrições de
+    // cookie de terceiros. Conferir contra os hosts no ar antes de trocar.
     ...(isProduction && { defaultCookieAttributes: { sameSite: "none", secure: true } }),
+    // O rate limit é por IP do cliente, e atrás de um proxy reverso o x-forwarded-for chega como
+    // cadeia ("cliente, proxy"). O Better Auth não confia em cadeia sem trustedProxies configurado:
+    // não resolve IP nenhum e passa a contar tudo num balde único por rota — com os limites padrão
+    // isso é 3 logins a cada 10s no sistema inteiro. x-real-ip é o header de IP único que o Traefik
+    // (Easypanel) põe; o x-forwarded-for fica de fallback para quando não houver proxy na frente.
+    ipAddress: { ipAddressHeaders: ["x-real-ip", "x-forwarded-for"] },
+  },
+  session: {
+    // O web valida a sessão a cada carga de página; sem o cache é uma ida ao Postgres por carga.
+    // 60s em vez dos 5min do exemplo da doc: quase todo o ganho, com 1/5 da janela em que uma
+    // sessão revogada continua sendo aceita.
+    cookieCache: { enabled: true, maxAge: 60 },
+  },
+  rateLimit: {
+    // Só vale em produção — o Better Auth desliga o rate limit fora dela.
+    // get-session é chamado em toda carga de página: dentro do balde geral (100 req/10s) o app
+    // limitaria os próprios usuários muito antes de limitar qualquer abuso.
+    customRules: { "/get-session": false },
   },
   emailAndPassword: { enabled: true },
   user: {
