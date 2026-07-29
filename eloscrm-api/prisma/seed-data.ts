@@ -1,4 +1,4 @@
-import { ActivityType, ClientSource, PropertyStatus } from "../src/generated/prisma/client.js";
+import { ActivityType, ClientSource, LeadTemperature, PropertyStatus } from "../src/generated/prisma/client.js";
 import type { DefaultStage } from "../src/modules/pipelines/default-stages.js";
 
 export const RENTAL_STAGES: DefaultStage[] = [
@@ -109,6 +109,13 @@ export const clients = [
     phone: "(43) 99812-4470",
     source: ClientSource.SITE,
     notes: "Procura 3 quartos na Gleba Palhano, financiamento pela Caixa aprovado.",
+    description:
+      "Casal com dois filhos em idade escolar.\nQuer ficar perto do colégio na Gleba Palhano e não abre mão de duas vagas.",
+    tags: ["financiamento", "gleba-palhano"],
+    temperature: LeadTemperature.QUENTE,
+    interestType: "Apartamento",
+    budgetMin: 800000,
+    budgetMax: 900000,
   },
   {
     name: "Mariana Costa",
@@ -116,6 +123,12 @@ export const clients = [
     phone: "(43) 99745-1183",
     source: ClientSource.INSTAGRAM,
     notes: "Primeiro imóvel, entrada de R$ 80 mil.",
+    description: "Primeiro imóvel, entrada de R$ 80 mil já aprovada no banco.",
+    tags: ["primeiro-imovel"],
+    temperature: LeadTemperature.MORNO,
+    interestType: "Apartamento",
+    budgetMin: 380000,
+    budgetMax: 450000,
   },
   {
     name: "Lucas Almeida",
@@ -123,6 +136,12 @@ export const clients = [
     phone: "(43) 99630-2277",
     source: ClientSource.INDICACAO,
     notes: "Indicado pelo Roberto Menezes. Quer casa em condomínio fechado.",
+    description: "Indicado pelo Roberto Menezes. Quer casa em condomínio fechado, com segurança 24h.",
+    tags: ["condominio-fechado", "indicacao"],
+    temperature: LeadTemperature.QUENTE,
+    interestType: "Casa",
+    budgetMin: 1100000,
+    budgetMax: 1300000,
   },
   {
     name: "Ana Pereira",
@@ -158,6 +177,12 @@ export const clients = [
     phone: "(43) 99176-9903",
     source: ClientSource.INSTAGRAM,
     notes: "Quer studio no Centro para alugar, orçamento apertado.",
+    description: "Desistiu da compra e migrou para locação. Quer studio no Centro, orçamento apertado.",
+    tags: ["locacao"],
+    temperature: LeadTemperature.FRIO,
+    interestType: "Studio",
+    budgetMin: 1800,
+    budgetMax: 2400,
   },
   {
     name: "Marcos Vinícius Duarte",
@@ -629,5 +654,29 @@ export const activities: ActivitySeed[] = [
     dueInDays: -12,
     atHour: 16,
     done: true,
+  },
+];
+
+/** `client` casa pelo nome, igual aos deals; o autor é resolvido no seed. */
+export const comments = [
+  {
+    client: "Carlos Silva",
+    body: "Proposta enviada ontem. Ele pediu 48h para conversar com a esposa.",
+    daysAgo: 2,
+  },
+  {
+    client: "Carlos Silva",
+    body: "Confirmou que segue interessado; quer negociar a segunda vaga.",
+    daysAgo: 1,
+  },
+  {
+    client: "Lucas Almeida",
+    body: "Visitou o Aurora e gostou. Preocupado com o valor do condomínio.",
+    daysAgo: 3,
+  },
+  {
+    client: "Juliana Tavares",
+    body: "Desistiu da compra por ora. Passei as opções de locação no Centro.",
+    daysAgo: 10,
   },
 ];

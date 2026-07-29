@@ -19,11 +19,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { clientSourceLabels, formatPhone, toE164 } from '@/lib/labels'
+import {
+  clientSourceLabels,
+  currencyToInput,
+  formatCurrencyInput,
+  formatPhone,
+  leadTemperatureLabels,
+  parseCurrencyInput,
+  toE164,
+} from '@/lib/labels'
 import { useCreateClient, useUpdateClient } from '@/lib/queries/clients'
-import type { Client, ClientSource } from '@/lib/types'
+import type { Client, ClientSource, LeadTemperature } from '@/lib/types'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { TagsInput } from './tags-input'
 
 export const ClientDialog = ({
   client,
@@ -42,6 +51,14 @@ export const ClientDialog = ({
   const [phone, setPhone] = useState(formatPhone(client?.phone))
   const [source, setSource] = useState<ClientSource>(client?.source ?? 'OUTROS')
   const [notes, setNotes] = useState(client?.notes ?? '')
+  const [description, setDescription] = useState(client?.description ?? '')
+  const [tags, setTags] = useState<string[]>(client?.tags ?? [])
+  const [temperature, setTemperature] = useState<LeadTemperature>(
+    client?.temperature ?? 'MORNO',
+  )
+  const [interestType, setInterestType] = useState(client?.interestType ?? '')
+  const [budgetMin, setBudgetMin] = useState(currencyToInput(client?.budgetMin))
+  const [budgetMax, setBudgetMax] = useState(currencyToInput(client?.budgetMax))
 
   const saving = create.isPending || update.isPending
 
@@ -54,6 +71,12 @@ export const ClientDialog = ({
       setPhone(formatPhone(client?.phone))
       setSource(client?.source ?? 'OUTROS')
       setNotes(client?.notes ?? '')
+      setDescription(client?.description ?? '')
+      setTags(client?.tags ?? [])
+      setTemperature(client?.temperature ?? 'MORNO')
+      setInterestType(client?.interestType ?? '')
+      setBudgetMin(currencyToInput(client?.budgetMin))
+      setBudgetMax(currencyToInput(client?.budgetMax))
     }
     setOpen(next)
   }
@@ -66,6 +89,14 @@ export const ClientDialog = ({
       phone: toE164(phone),
       source,
       notes: notes.trim() || undefined,
+      // no update, "" precisa virar null (limpa a coluna); no create, o schema não aceita null
+      // nesses campos — só optional() — então "" precisa continuar sumindo do payload
+      description: description.trim() || (editing ? null : undefined),
+      tags,
+      temperature,
+      interestType: interestType.trim() || (editing ? null : undefined),
+      budgetMin: parseCurrencyInput(budgetMin) ?? (editing ? null : undefined),
+      budgetMax: parseCurrencyInput(budgetMax) ?? (editing ? null : undefined),
     }
     try {
       if (editing) await update.mutateAsync({ id: client.id, input })
@@ -141,6 +172,73 @@ export const ClientDialog = ({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Temperatura</Label>
+              <Select
+                value={temperature}
+                onValueChange={v => setTemperature(v as LeadTemperature)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(v: LeadTemperature) => leadTemperatureLabels[v]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(leadTemperatureLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="interestType">Tipo de interesse</Label>
+              <Input
+                id="interestType"
+                placeholder="Apartamento, Casa, Terreno…"
+                value={interestType}
+                onChange={e => setInterestType(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="budgetMin">Orçamento mínimo</Label>
+              <Input
+                id="budgetMin"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={budgetMin}
+                onChange={e => setBudgetMin(formatCurrencyInput(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="budgetMax">Orçamento máximo</Label>
+              <Input
+                id="budgetMax"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={budgetMax}
+                onChange={e => setBudgetMax(formatCurrencyInput(e.target.value))}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tags">Tags</Label>
+            <TagsInput value={tags} onChange={setTags} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="description">Descrição</Label>
+            <Textarea
+              id="description"
+              rows={4}
+              placeholder="Perfil do lead: composição familiar, momento de compra, restrições…"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="notes">Observações</Label>

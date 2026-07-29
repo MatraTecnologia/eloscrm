@@ -1,4 +1,4 @@
-import type { ActivityType, AuditAction, ClientSource, PropertyStatus } from "./types";
+import type { ActivityType, AuditAction, ClientSource, PropertyStatus, LeadTemperature } from "./types";
 
 export const clientSourceLabels: Record<ClientSource, string> = {
   SITE: "Site",
@@ -20,6 +20,12 @@ export const propertyStatusLabels: Record<PropertyStatus, string> = {
   RESERVADO: "Reservado",
   VENDIDO: "Vendido",
   INATIVO: "Inativo",
+};
+
+export const leadTemperatureLabels: Record<LeadTemperature, string> = {
+  FRIO: "Frio",
+  MORNO: "Morno",
+  QUENTE: "Quente",
 };
 
 // Telefone é persistido em E.164 (+5543998414904) e só formatado na exibição/digitação.
@@ -99,4 +105,9 @@ export const FIELD_LABELS: Record<string, string> = {
   doneAt: "Conclusão",
   lostReason: "Motivo da perda",
   description: "Descrição",
+  tags: "Tags",
+  temperature: "Temperatura",
+  interestType: "Tipo de interesse",
+  budgetMin: "Orçamento mínimo",
+  budgetMax: "Orçamento máximo",
 };

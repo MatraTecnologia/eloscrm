@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { ClientSource } from "../../generated/prisma/client.js";
+import { ClientSource, LeadTemperature } from "../../generated/prisma/client.js";
 
 export const createClientSchema = z.object({
   name: z.string().min(1),
@@ -8,14 +8,29 @@ export const createClientSchema = z.object({
   source: z.enum(ClientSource).optional(),
   notes: z.string().optional(),
   ownerId: z.string().optional(),
+  description: z.string().optional(),
+  // trim + descarte de vazias evita tag fantasma vinda de vírgula solta no formulário
+  tags: z.array(z.string().trim().min(1)).max(20).optional(),
+  temperature: z.enum(LeadTemperature).optional(),
+  interestType: z.string().optional(),
+  budgetMin: z.number().nonnegative().optional(),
+  budgetMax: z.number().nonnegative().optional(),
 });
 
-export const updateClientSchema = createClientSchema.partial();
+export const updateClientSchema = createClientSchema.partial().extend({
+  // undefined é "campo não enviado no PATCH"; null é "limpar o campo" e o diffFields já conta como mudança
+  description: z.string().nullable().optional(),
+  interestType: z.string().nullable().optional(),
+  budgetMin: z.number().nonnegative().nullable().optional(),
+  budgetMax: z.number().nonnegative().nullable().optional(),
+});
 
 export const listClientsQuerySchema = z.object({
   source: z.enum(ClientSource).optional(),
   ownerId: z.string().optional(),
   q: z.string().optional(),
+  temperature: z.enum(LeadTemperature).optional(),
+  tag: z.string().optional(),
 });
 
 export type CreateClientInput = z.infer<typeof createClientSchema>;

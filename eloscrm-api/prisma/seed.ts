@@ -1,7 +1,16 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma.js";
+import { AuditEntity } from "../src/generated/prisma/client.js";
 import { DEFAULT_STAGES, type DefaultStage } from "../src/modules/pipelines/default-stages.js";
-import { RENTAL_STAGES, activities, clients, properties, rentalDeals, salesDeals } from "./seed-data.js";
+import {
+  RENTAL_STAGES,
+  activities,
+  clients,
+  comments,
+  properties,
+  rentalDeals,
+  salesDeals,
+} from "./seed-data.js";
 
 const SALES_PIPELINE = "Funil de Vendas";
 const RENTAL_PIPELINE = "Locação";
@@ -38,6 +47,7 @@ const resolveOrg = async () => {
  * negociações precisam sair antes dos estágios, senão a segunda execução do seed quebra em FK.
  */
 const wipeOrgData = async (organizationId: string) => {
+  await prisma.comment.deleteMany({ where: { organizationId } });
   await prisma.activity.deleteMany({ where: { organizationId } });
   await prisma.deal.deleteMany({ where: { organizationId } });
   await prisma.client.deleteMany({ where: { organizationId } });
@@ -139,9 +149,31 @@ const run = async () => {
     });
   }
 
+  // sem membro na org (banco zerado), não há autor para assinar o comentário
+  if (ownerId) {
+    const author = await prisma.member.findFirst({
+      where: { organizationId: org.id, userId: ownerId },
+      select: { user: { select: { name: true } } },
+    });
+    for (const comment of comments) {
+      await prisma.comment.create({
+        data: {
+          organizationId: org.id,
+          entityType: AuditEntity.CLIENT,
+          entityId: clientIds.get(comment.client)!,
+          authorId: ownerId,
+          authorName: author?.user.name ?? "Equipe",
+          body: comment.body,
+          createdAt: daysAgo(comment.daysAgo),
+        },
+      });
+    }
+  }
+
   console.log(
     `Pronto: ${properties.length} imóveis, ${clients.length} clientes, ` +
-      `${salesDeals.length + rentalDeals.length} negociações em 2 funis, ${activities.length} atividades`,
+      `${salesDeals.length + rentalDeals.length} negociações em 2 funis, ` +
+      `${activities.length} atividades, ${comments.length} comentários`,
   );
 };
 
