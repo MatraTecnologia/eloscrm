@@ -42,6 +42,8 @@ describe("campos do perfil do lead", () => {
     expect(client.tags).toEqual(["indicacao", "casa-terrea"]);
     expect(client.temperature).toBe("QUENTE");
     expect(client.interestType).toBe("Casa");
+    expect(client.budgetMin).toBe("500000");
+    expect(client.budgetMax).toBe("800000");
   });
 
   it("rejeita temperatura fora do enum (422)", async () => {
