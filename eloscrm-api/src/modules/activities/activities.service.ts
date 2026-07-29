@@ -1,3 +1,6 @@
+import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
+import type { Actor } from "../../lib/actor.js";
+import { diffFields, recordAudit } from "../../lib/audit.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as repo from "./activities.repo.js";
@@ -22,19 +25,44 @@ export const getById = async (orgId: string, id: string) => {
   return activity;
 };
 
-export const create = async (orgId: string, data: CreateActivityInput) => {
+export const create = async (orgId: string, data: CreateActivityInput, actor: Actor) => {
   await assertTenantRefs(orgId, data);
-  return repo.createActivity(orgId, data);
+  const activity = await repo.createActivity(orgId, data);
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ACTIVITY,
+    entityId: activity.id,
+    action: AuditAction.CREATED,
+    actor,
+  });
+  return activity;
 };
 
-export const update = async (orgId: string, id: string, data: UpdateActivityInput) => {
-  await getById(orgId, id);
+export const update = async (orgId: string, id: string, data: UpdateActivityInput, actor: Actor) => {
+  const before = await getById(orgId, id);
   await assertTenantRefs(orgId, data);
-  return repo.updateActivityById(id, data);
+  const updated = await repo.updateActivityById(id, data);
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ACTIVITY,
+    entityId: id,
+    action: AuditAction.UPDATED,
+    actor,
+    changes: diffFields(before, data),
+  });
+  return updated;
 };
 
-export const remove = async (orgId: string, id: string) => {
+export const remove = async (orgId: string, id: string, actor: Actor) => {
   // getById antes do delete: o repo apaga só por id, e sem esta checagem o delete cruzaria tenants
   await getById(orgId, id);
+  // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ACTIVITY,
+    entityId: id,
+    action: AuditAction.DELETED,
+    actor,
+  });
   await repo.deleteActivityById(id);
 };

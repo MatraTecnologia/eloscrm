@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
+import { actorOf } from "../../../lib/actor.js";
 import {
   createActivitySchema,
   listActivitiesQuerySchema,
@@ -19,7 +20,7 @@ const activitiesRoutes = async (app: FastifyInstance) => {
 
   app.post("/", async (request, reply) => {
     const data = createActivitySchema.parse(request.body);
-    const activity = await service.create(request.orgId!, data);
+    const activity = await service.create(request.orgId!, data, actorOf(request));
     return reply.status(201).send(activity);
   });
 
@@ -31,12 +32,12 @@ const activitiesRoutes = async (app: FastifyInstance) => {
   app.patch("/:id", async (request) => {
     const { id } = request.params as { id: string };
     const data = updateActivitySchema.parse(request.body);
-    return service.update(request.orgId!, id, data);
+    return service.update(request.orgId!, id, data, actorOf(request));
   });
 
   app.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    await service.remove(request.orgId!, id);
+    await service.remove(request.orgId!, id, actorOf(request));
     return reply.status(204).send();
   });
 };
