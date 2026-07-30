@@ -34,10 +34,22 @@ export const r2 = () => {
 
 export const R2_PRIVATE_BUCKET = env.R2_PRIVATE_BUCKET_NAME;
 
-export const getDownloadUrl = (bucket: string, key: string, expiresIn = 3600) =>
-  getSignedUrl(r2(), new GetObjectCommand({ Bucket: bucket, Key: key }), {
-    expiresIn,
-  });
+export const getDownloadUrl = (
+  bucket: string,
+  key: string,
+  expiresIn = 3600,
+  filename?: string,
+) =>
+  getSignedUrl(
+    r2(),
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      // sem isto o navegador abre o arquivo inline: `download` no anchor é ignorado em URL cross-origin
+      ...(filename && { ResponseContentDisposition: `attachment; filename="${filename}"` }),
+    }),
+    { expiresIn },
+  );
 
 export const getUploadUrl = (
   bucket: string,

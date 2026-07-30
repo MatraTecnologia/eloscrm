@@ -72,9 +72,17 @@ export const confirm = async (orgId: string, id: string) => {
   return repo.markReady(id, head.contentLength);
 };
 
+// aspas no filename quebrariam o header Content-Disposition; sem nada sobrando, um nome genérico
+const sanitizeFilename = (filename: string) => filename.replace(/"/g, "") || "arquivo";
+
 export const downloadUrl = async (orgId: string, id: string) => {
   const attachment = await getOwn(orgId, id);
-  const url = await getDownloadUrl(R2_PRIVATE_BUCKET, attachment.key, DOWNLOAD_EXPIRES_IN);
+  const url = await getDownloadUrl(
+    R2_PRIVATE_BUCKET,
+    attachment.key,
+    DOWNLOAD_EXPIRES_IN,
+    sanitizeFilename(attachment.filename),
+  );
   return { url, expiresIn: DOWNLOAD_EXPIRES_IN };
 };
 

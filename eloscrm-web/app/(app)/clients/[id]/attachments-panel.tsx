@@ -28,7 +28,7 @@ export const AttachmentsPanel = ({
   entityId: string;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { data: attachments, isLoading } = useAttachments(entityType, entityId);
+  const { data: attachments, isLoading, isError } = useAttachments(entityType, entityId);
   const upload = useUploadAttachment();
   const remove = useDeleteAttachment();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -88,6 +88,8 @@ export const AttachmentsPanel = ({
             <Skeleton key={i} className="h-14 w-full" />
           ))}
         </div>
+      ) : isError ? (
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os arquivos.</p>
       ) : !attachments?.length ? (
         <Empty className="border">
           <EmptyHeader>
@@ -126,7 +128,12 @@ export const AttachmentsPanel = ({
                   variant="ghost"
                   size="icon"
                   aria-label={`Remover ${file.filename}`}
-                  onClick={() => remove.mutate(file.id)}
+                  disabled={remove.isPending}
+                  onClick={() =>
+                    remove.mutate(file.id, {
+                      onError: () => toast.error("Não foi possível remover o arquivo"),
+                    })
+                  }
                 >
                   <Trash2 className="size-3.5" />
                 </Button>

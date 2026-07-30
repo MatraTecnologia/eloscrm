@@ -53,4 +53,26 @@ describe("storage", () => {
 
     await deleteFile(R2_PRIVATE_BUCKET, liveKey);
   });
+
+  it("assina download com filename e devolve content-disposition", async () => {
+    const filename = "contrato-carlos.pdf";
+    const namedKey = `${key}.named`;
+    const body = "conteudo de teste";
+    const uploadUrl = await getUploadUrl(R2_PRIVATE_BUCKET, namedKey, {
+      contentLength: Buffer.byteLength(body),
+      contentType: "text/plain",
+    });
+    const put = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": "text/plain", "content-length": String(Buffer.byteLength(body)) },
+      body,
+    });
+    expect(put.ok).toBe(true);
+
+    const downloadUrl = await getDownloadUrl(R2_PRIVATE_BUCKET, namedKey, 60, filename);
+    const get = await fetch(downloadUrl);
+    expect(get.headers.get("content-disposition")).toBe(`attachment; filename="${filename}"`);
+
+    await deleteFile(R2_PRIVATE_BUCKET, namedKey);
+  });
 });
