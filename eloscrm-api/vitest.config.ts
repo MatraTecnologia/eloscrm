@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // dist/ pode conter os testes compilados de um build anterior; sem excluir, o Vitest coleta os
+    // mesmos testes duas vezes e a segunda rodada corre contra JavaScript velho.
+    exclude: ["**/node_modules/**", "dist/**"],
     // globalSetup trunca o banco de teste antes da run; setupFiles carrega o .env.test em cada worker.
     globalSetup: ["test/global-setup.ts"],
     setupFiles: ["test/setup.ts"],

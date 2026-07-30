@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  // O build de produção compila só o que o servidor usa. Com test/ e prisma/ aqui, o tsc gerava
+  // dist/test/*.test.js e o Vitest coletava os arquivos duas vezes — a suíte rodava em dobro, metade
+  // contra JavaScript compilado que podia estar velho. `pnpm typecheck` continua usando o
+  // tsconfig.json completo, então test/ e prisma/ seguem sendo verificados.
+  // rootDir fica em "." (herdado): é o que mantém a saída em dist/src, de onde o start e o Dockerfile leem.
+  "include": ["src"]
+}
