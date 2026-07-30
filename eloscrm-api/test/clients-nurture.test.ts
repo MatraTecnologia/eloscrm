@@ -1,0 +1,105 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { FastifyInstance } from "fastify";
+import { ClientStatus, NurtureReason } from "../src/generated/prisma/client.js";
+import { makeApp } from "./helpers/app.js";
+import { signUpWithOrg } from "./helpers/session.js";
+import { prisma } from "../src/lib/prisma.js";
+
+let app: FastifyInstance;
+const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+let cookie = "";
+let orgId = "";
+
+const createClient = async (name: string) => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/v1/clients",
+    headers: { cookie },
+    payload: { name },
+  });
+  return res.json() as { id: string; name: string };
+};
+
+beforeAll(async () => {
+  app = await makeApp();
+  ({ cookie, orgId } = await signUpWithOrg(app, `nurture-${stamp}@eloscrm.test`, `nurture-${stamp}`));
+});
+
+afterAll(async () => {
+  await app.close();
+  await prisma.$disconnect();
+});
+
+describe("PATCH de cliente e o estado de nutrição", () => {
+  it("reagenda a retomada e registra no histórico", async () => {
+    const client = await createClient("Lead a reagendar");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { status: ClientStatus.NURTURING, nurtureUntil: new Date("2026-09-01T23:59:59.999Z") },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${client.id}`,
+      headers: { cookie },
+      payload: {
+        nurtureUntil: "2026-11-30T23:59:59.999Z",
+        nurtureReason: "ADIADO",
+        nurtureNote: "Vai vender o apartamento antes",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updated = res.json();
+    expect(updated.nurtureUntil).toBe("2026-11-30T23:59:59.999Z");
+    expect(updated.nurtureReason).toBe(NurtureReason.ADIADO);
+    expect(updated.status).toBe(ClientStatus.NURTURING);
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
+    });
+    expect(events).toHaveLength(1);
+    expect(Object.keys(events[0].changes as object)).toContain("nurtureUntil");
+  });
+
+  // a invariante do módulo: se o PATCH pudesse mexer no status, existiria um caminho que muda o
+  // estado do lead sem passar pela regra dos negócios abertos
+  it("ignora status no PATCH", async () => {
+    const client = await createClient("Lead que tentaria burlar");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { status: ClientStatus.NURTURING, nurturedAt: new Date() },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${client.id}`,
+      headers: { cookie },
+      payload: { status: "ACTIVE", nurturedAt: null, name: "Nome novo" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().name).toBe("Nome novo");
+    expect(res.json().status).toBe(ClientStatus.NURTURING);
+    expect(res.json().nurturedAt).not.toBeNull();
+  });
+
+  it("limpa o motivo com null", async () => {
+    const client = await createClient("Lead com motivo a limpar");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { status: ClientStatus.NURTURING, nurtureReason: NurtureReason.OUTRO, nurtureNote: "x" },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${client.id}`,
+      headers: { cookie },
+      payload: { nurtureReason: null, nurtureNote: null },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().nurtureReason).toBeNull();
+    expect(res.json().nurtureNote).toBeNull();
+  });
+});
