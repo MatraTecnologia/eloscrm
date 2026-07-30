@@ -1,6 +1,7 @@
 "use client";
 
-import { CircleCheck, Handshake, Users, Wallet } from "lucide-react";
+import Link from "next/link";
+import { CircleCheck, Handshake, Snowflake, Users, Wallet } from "lucide-react";
 import { useDashboardStats } from "@/lib/queries/dashboard";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { clientSourceLabels, formatCurrency } from "@/lib/labels";
@@ -36,7 +37,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Clientes"
           value={stats?.kpis.totalClients}
@@ -65,6 +66,16 @@ export default function DashboardPage() {
           color="var(--chart-2)"
           isLoading={loading}
         />
+        <Link href="/nurturing" className="contents">
+          <StatCard
+            label="Em nutrição"
+            value={stats?.kpis.nurturing}
+            icon={Snowflake}
+            color="var(--chart-5)"
+            isLoading={loading}
+            hint={stats?.kpis.nurtureDue ? `${stats.kpis.nurtureDue} a retomar` : undefined}
+          />
+        </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { Activity, AgendaItem } from "@/lib/types";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
+import { ReactivateDialog } from "@/components/app/reactivate-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ export default function AgendaPage() {
                         const payload = item.payload;
                         const overdue = new Date(item.at).getTime() < now;
                         return (
-                          <div key={`${item.kind}-${item.id}`} className="flex items-center gap-3 p-3">
+                          <div key={`${item.kind}-${item.id}`} className="group flex items-center gap-3 p-3">
                             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                               <Snowflake className="size-3.5" />
                             </span>
@@ -166,6 +167,16 @@ export default function AgendaPage() {
                                 Atrasada
                               </Badge>
                             )}
+                            <div className="ml-auto flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                              <ReactivateDialog
+                                client={{ id: payload.clientId, name: payload.clientName }}
+                                trigger={
+                                  <Button variant="ghost" size="sm">
+                                    Retomar contato
+                                  </Button>
+                                }
+                              />
+                            </div>
                           </div>
                         );
                       }

@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Snowflake, Sun, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useClients, useDeleteClient } from "@/lib/queries/clients";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { formatPhone } from "@/lib/labels";
 import { useOrgDeals } from "@/lib/queries/deals";
+import type { ClientStatus } from "@/lib/types";
+import { NurtureDialog } from "@/components/app/nurture-dialog";
+import { ReactivateDialog } from "@/components/app/reactivate-dialog";
 import { ClientDialog } from "./client-dialog";
 import { ClientAvatar } from "./client-avatar";
 import { Button } from "@/components/ui/button";
@@ -34,11 +37,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const STATUS_CHIPS: { key: ClientStatus | "ALL"; label: string }[] = [
+  { key: "ACTIVE", label: "Ativos" },
+  { key: "NURTURING", label: "Em nutrição" },
+  { key: "ALL", label: "Todos" },
+];
+
 export default function ClientsPage() {
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<ClientStatus | "ALL">("ACTIVE");
   // isLoading (e não isPending): sem organização ativa a query fica desabilitada e isPending
   // nunca sai de true, o que deixaria a tabela em skeleton para sempre
-  const { data: clients, isLoading } = useClients(q ? { q } : undefined);
+  const { data: clients, isLoading } = useClients({ status, ...(q ? { q } : {}) });
   const { deals, isLoading: loadingDeals } = useOrgDeals();
   const { data: org, isPending: loadingOrg } = useActiveOrganization();
   const remove = useDeleteClient();
@@ -88,9 +98,24 @@ export default function ClientsPage() {
 
       {hasOrg && (
         <>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar por nome, e-mail ou telefone" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative max-w-sm flex-1 min-w-56">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Buscar por nome, e-mail ou telefone" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_CHIPS.map(({ key, label }) => (
+                <Button
+                  key={key}
+                  type="button"
+                  variant={status === key ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setStatus(key)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="rounded-lg border">
@@ -139,7 +164,11 @@ export default function ClientsPage() {
                         {loadingDeals ? <Skeleton className="h-4 w-6" /> : (stats?.count ?? 0)}
                       </TableCell>
                       <TableCell>
-                        {loadingDeals ? (
+                        {client.status === "NURTURING" ? (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <Snowflake className="size-3.5" /> Em nutrição
+                          </Badge>
+                        ) : loadingDeals ? (
                           <Skeleton className="h-5 w-20" />
                         ) : stats?.hasOpen ? (
                           <Badge variant="outline" className="border-success/20 bg-success/10 text-success">
@@ -153,6 +182,25 @@ export default function ClientsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                          {client.status === "ACTIVE" ? (
+                            <NurtureDialog
+                              client={client}
+                              trigger={
+                                <Button variant="ghost" size="icon-sm" aria-label={`Enviar ${client.name} para nutrição`}>
+                                  <Snowflake className="size-4" />
+                                </Button>
+                              }
+                            />
+                          ) : (
+                            <ReactivateDialog
+                              client={client}
+                              trigger={
+                                <Button variant="ghost" size="icon-sm" aria-label={`Reativar ${client.name}`}>
+                                  <Sun className="size-4" />
+                                </Button>
+                              }
+                            />
+                          )}
                           <ClientDialog
                             client={client}
                             trigger={
