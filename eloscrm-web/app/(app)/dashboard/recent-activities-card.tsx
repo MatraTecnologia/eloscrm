@@ -12,13 +12,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const RecentActivitiesCard = () => {
+  // congelado na montagem, como a agenda faz: senão o filtro de futuro abaixo fica instável entre renders
+  const [now] = useState(() => new Date());
   const [range] = useState(() => ({
-    from: startOfDay(subDays(new Date(), 3)).toISOString(),
-    to: endOfDay(addDays(new Date(), 14)).toISOString(),
+    from: startOfDay(subDays(now, 3)).toISOString(),
+    to: endOfDay(addDays(now, 14)).toISOString(),
   }));
   const { data: items, isLoading } = useAgenda(range);
 
-  const upcoming = (items ?? []).slice().sort((a, b) => a.at.localeCompare(b.at)).slice(0, 5);
+  const upcoming = (items ?? [])
+    .filter((item) => {
+      if (item.at < now.toISOString()) return false;
+      if (item.kind === "ACTIVITY" && item.payload.doneAt) return false;
+      return true;
+    })
+    .slice()
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .slice(0, 5);
 
   return (
     <Card>
