@@ -253,6 +253,12 @@ consciente, não default.
   `SEM_ORCAMENTO` cru na tela, como já aconteceria com qualquer enum novo.
 - **`lib/types.ts`** — os enums e os quatro campos espelhados à mão, como manda o contrato entre os
   dois projetos.
+- **Os cinco consumidores de `useClients()` sem filtro** — `app/(app)/deals/kanban-board.tsx`,
+  `components/app/use-entity-names.ts`, `app/(app)/deals/deal-form.tsx`,
+  `app/(app)/deals/deal-detail-dialog.tsx` e `components/app/activity-dialog.tsx` passam a pedir
+  `status=ALL`: o default `ACTIVE` da Task 3 os esconderia, e o lead nutrido com negócio mantido no
+  funil (o caminho `KEEP` da §3.5) precisa continuar resolvendo nome e continuar selecionável nesses
+  lugares.
 
 ---
 
@@ -303,5 +309,8 @@ Dois planos sequenciais, pela mesma linha que separa os dois projetos do repo:
   atual pede
 - **Cadência de nutrição** (sequência de toques ao longo do tempo, ao estilo de automação de
   marketing) — outro produto
+- **Débito entre planos**: a agenda mudou de contrato (dois `kind`, nem toda atividade tem `dueAt`) e
+  `app/(app)/agenda/page.tsx` e `app/(app)/dashboard/recent-activities-card.tsx` ainda filtram só por
+  `activity.dueAt` — ficam em branco, sem erro, até o Plano B acompanhar.
 
-> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 15:51 (-03)
+> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 17:13 (-03)
