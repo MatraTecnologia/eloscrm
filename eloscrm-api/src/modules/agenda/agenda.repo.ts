@@ -1,4 +1,4 @@
-import type { Prisma } from "../../generated/prisma/client.js";
+import { ClientStatus, type Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma.js";
 import type { ListAgendaQuery } from "./agenda.schema.js";
 
@@ -15,6 +15,25 @@ export const listAgenda = (orgId: string, filters: ListAgendaQuery) => {
     include: {
       client: { select: { id: true, name: true } },
       deal: { select: { id: true, title: true } },
+    },
+  });
+};
+
+export const listNurtureDue = (orgId: string, filters: ListAgendaQuery) => {
+  const nurtureUntil: Prisma.DateTimeNullableFilter = { not: null };
+  if (filters.from) nurtureUntil.gte = filters.from;
+  if (filters.to) nurtureUntil.lte = filters.to;
+
+  return prisma.client.findMany({
+    where: { organizationId: orgId, status: ClientStatus.NURTURING, nurtureUntil },
+    orderBy: { nurtureUntil: "asc" },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      nurtureUntil: true,
+      nurtureReason: true,
+      nurtureNote: true,
     },
   });
 };
