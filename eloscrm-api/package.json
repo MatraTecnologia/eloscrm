@@ -21,6 +21,8 @@
     "auth:generate": "pnpm dlx @better-auth/cli@1.4.21 generate --output prisma/schema.prisma -y"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
+    "@aws-sdk/s3-request-presigner": "^3.1096.0",
     "@fastify/autoload": "^6.4.0",
     "@fastify/cors": "^11.3.0",
     "@prisma/adapter-pg": "^7.9.0",

@@ -35,11 +35,22 @@ jobs:
       PORT: 3333
       R2_ENDPOINT: http://localhost:8333
       R2_ACCESS_KEY_ID: test
-      R2_SECRET_ACCESS_KEY: test
+      R2_SECRET_ACCESS_KEY: test12345
       R2_PRIVATE_BUCKET_NAME: eloscrm-test
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sobe S3 local (MinIO)
+        run: |
+          docker run -d --name minio -p 8333:9000 \
+            -e MINIO_ROOT_USER=test -e MINIO_ROOT_PASSWORD=test12345 \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8333/minio/health/live && break
+            sleep 1
+          done
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
