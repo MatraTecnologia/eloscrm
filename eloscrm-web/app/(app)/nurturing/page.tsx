@@ -33,6 +33,7 @@ import { useClients } from "@/lib/queries/clients";
 import { useMembers } from "@/lib/queries/members";
 import type { Client } from "@/lib/types";
 import { BUCKETS, bucketOf, type BucketKey } from "./buckets";
+import { EditReasonDialog } from "./edit-reason-dialog";
 import { LinkClientDialog } from "./link-client-dialog";
 import { ReschedulePopover } from "./reschedule-popover";
 
@@ -135,7 +136,7 @@ export default function NurturingPage() {
                     <TableHead>Parado há</TableHead>
                     <TableHead>Retomar em</TableHead>
                     <TableHead>Responsável</TableHead>
-                    <TableHead className="w-32 text-right">
+                    <TableHead className="w-56 text-right">
                       <span className="sr-only">Ações</span>
                     </TableHead>
                   </TableRow>
@@ -220,6 +221,14 @@ export default function NurturingPage() {
                               trigger={
                                 <Button variant="ghost" size="sm">
                                   Reagendar
+                                </Button>
+                              }
+                            />
+                            <EditReasonDialog
+                              client={client}
+                              trigger={
+                                <Button variant="ghost" size="sm" aria-label={`Editar motivo de ${client.name}`}>
+                                  Editar motivo
                                 </Button>
                               }
                             />
