@@ -132,3 +132,49 @@ export type Comment = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type AttachmentStatus = "PENDING" | "READY";
+
+export type Attachment = {
+  id: string;
+  organizationId: string;
+  entityType: AuditEntity;
+  entityId: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  status: AttachmentStatus;
+  uploadedById: string;
+  uploadedByName: string;
+  createdAt: string;
+};
+
+export type TimelineItem =
+  | {
+      kind: "ACTIVITY";
+      id: string;
+      at: string;
+      payload: { type: ActivityType; description: string; dueAt: string | null; doneAt: string | null };
+    }
+  | {
+      kind: "AUDIT";
+      id: string;
+      at: string;
+      payload: {
+        action: AuditAction;
+        actorName: string | null;
+        changes: Record<string, { from: unknown; to: unknown }> | null;
+      };
+    }
+  | {
+      kind: "COMMENT";
+      id: string;
+      at: string;
+      payload: { body: string; authorId: string; authorName: string; editedAt: string | null };
+    }
+  | {
+      kind: "ATTACHMENT";
+      id: string;
+      at: string;
+      payload: { filename: string; contentType: string; size: number; uploadedByName: string };
+    };

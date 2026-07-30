@@ -111,3 +111,11 @@ export const FIELD_LABELS: Record<string, string> = {
   budgetMin: "Orçamento mínimo",
   budgetMax: "Orçamento máximo",
 };
+
+// tamanho de arquivo em pt-BR: 1,4 MB e não 1.4 MB
+export const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} KB`;
+  return `${(kb / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+};

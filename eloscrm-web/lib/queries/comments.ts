@@ -22,7 +22,10 @@ export const useCreateComment = () => {
       const { data } = await api.post<Comment>("/comments", input);
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comments"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
   });
 };
 
@@ -33,7 +36,10 @@ export const useUpdateComment = () => {
       const { data } = await api.patch<Comment>(`/comments/${id}`, { body });
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comments"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
   });
 };
 
@@ -43,6 +49,9 @@ export const useDeleteComment = () => {
     mutationFn: async (id: string) => {
       await api.delete(`/comments/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comments"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
   });
 };
