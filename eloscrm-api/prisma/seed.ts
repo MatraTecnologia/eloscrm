@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma.js";
 import { AuditEntity } from "../src/generated/prisma/client.js";
 import { DEFAULT_STAGES, type DefaultStage } from "../src/modules/pipelines/default-stages.js";
+import { ensureDemoOrg } from "./seed-org.js";
 import {
   RENTAL_STAGES,
   activities,
@@ -36,9 +37,7 @@ const resolveOrg = async () => {
   });
   if (withMember) return { org: withMember, ownerId: withMember.members[0]?.userId ?? null };
 
-  const org = await prisma.organization.create({
-    data: { name: "Imobiliária Demo", slug: "imob-demo" },
-  });
+  const org = await ensureDemoOrg();
   return { org, ownerId: null };
 };
 
