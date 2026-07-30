@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageCircle, Phone, Plus, Snowflake, UserPlus } from "lucide-react";
+import { CalendarClock, MessageCircle, Pencil, Phone, Plus, RotateCcw, Snowflake, UserPlus } from "lucide-react";
 import { ClientAvatar } from "@/app/(app)/clients/client-avatar";
 import { ClientDialog } from "@/app/(app)/clients/client-dialog";
 import { NurtureDialog } from "@/components/app/nurture-dialog";
@@ -136,7 +136,7 @@ export default function NurturingPage() {
                     <TableHead>Parado há</TableHead>
                     <TableHead>Retomar em</TableHead>
                     <TableHead>Responsável</TableHead>
-                    <TableHead className="w-56 text-right">
+                    <TableHead className="w-40 text-right">
                       <span className="sr-only">Ações</span>
                     </TableHead>
                   </TableRow>
@@ -219,24 +219,24 @@ export default function NurturingPage() {
                             <ReschedulePopover
                               client={client}
                               trigger={
-                                <Button variant="ghost" size="sm">
-                                  Reagendar
+                                <Button variant="ghost" size="icon-sm" aria-label={`Reagendar retomada de ${client.name}`}>
+                                  <CalendarClock className="size-4" />
                                 </Button>
                               }
                             />
                             <EditReasonDialog
                               client={client}
                               trigger={
-                                <Button variant="ghost" size="sm" aria-label={`Editar motivo de ${client.name}`}>
-                                  Editar motivo
+                                <Button variant="ghost" size="icon-sm" aria-label={`Editar motivo de ${client.name}`}>
+                                  <Pencil className="size-4" />
                                 </Button>
                               }
                             />
                             <ReactivateDialog
                               client={client}
                               trigger={
-                                <Button variant="ghost" size="sm">
-                                  Retomar contato
+                                <Button variant="ghost" size="icon-sm" aria-label={`Retomar contato com ${client.name}`}>
+                                  <RotateCcw className="size-4" />
                                 </Button>
                               }
                             />
