@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { ClientSource, LeadTemperature } from "../../generated/prisma/client.js";
+import { ClientSource, LeadTemperature, NurtureReason } from "../../generated/prisma/client.js";
 
 export const createClientSchema = z.object({
   name: z.string().min(1),
@@ -23,6 +23,12 @@ export const updateClientSchema = createClientSchema.partial().extend({
   interestType: z.string().nullable().optional(),
   budgetMin: z.number().nonnegative().nullable().optional(),
   budgetMax: z.number().nonnegative().nullable().optional(),
+  // reagendar a retomada é PATCH; entrar e sair da nutrição é POST /nurture e /reactivate. `status`
+  // e `nurturedAt` ficam fora de propósito — o Zod descarta em silêncio e não existe caminho que
+  // mude o estado do lead sem passar pela regra dos negócios abertos.
+  nurtureReason: z.enum(NurtureReason).nullable().optional(),
+  nurtureNote: z.string().nullable().optional(),
+  nurtureUntil: z.coerce.date().nullable().optional(),
 });
 
 export const listClientsQuerySchema = z.object({
@@ -31,6 +37,13 @@ export const listClientsQuerySchema = z.object({
   q: z.string().optional(),
   temperature: z.enum(LeadTemperature).optional(),
   tag: z.string().optional(),
+  // default ACTIVE: a listagem é a lista de trabalho e o lead em nutrição não pertence a ela
+  status: z.enum(["ACTIVE", "NURTURING", "ALL"]).default("ACTIVE"),
+  // z.coerce.boolean() leria a string "false" como true — todo mundo viraria vencido
+  overdue: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 export type CreateClientInput = z.infer<typeof createClientSchema>;

@@ -177,6 +177,20 @@ enum LeadTemperature {
   QUENTE
 }
 
+enum ClientStatus {
+  ACTIVE
+  NURTURING
+}
+
+enum NurtureReason {
+  SEM_ORCAMENTO
+  ADIADO
+  SEM_RESPOSTA
+  COMPROU_COM_OUTRO
+  SO_PESQUISANDO
+  OUTRO
+}
+
 model Client {
   id             String       @id @default(cuid())
   organizationId String
@@ -194,12 +208,20 @@ model Client {
   interestType String?
   budgetMin    Decimal?
   budgetMax    Decimal?
+  // estado de workflow, ortogonal a `temperature`: sai da lista de trabalho e volta na data marcada
+  status        ClientStatus   @default(ACTIVE)
+  nurtureReason NurtureReason?
+  nurtureNote   String?
+  // null = sem data definida, que é um estado real: o corretor nem sempre sabe quando voltar
+  nurtureUntil  DateTime?
+  nurturedAt    DateTime?
   deals          Deal[]
   activities     Activity[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
+  @@index([organizationId, status, nurtureUntil])
 }
 
 model Property {

@@ -109,4 +109,44 @@ describe("dashboard", () => {
     expect(statsB.kpis.totalDeals).toBe(0);
     expect(statsB.kpis.openValue).toBe(0);
   });
+
+  it("tira o lead nutrido do total e o conta nos KPIs de nutrição", async () => {
+    const { cookie: cookieN } = await signUpWithOrg(
+      app,
+      `dash-n-${stamp}@eloscrm.test`,
+      `dash-n-${stamp}`,
+    );
+    await createClient({ cookie: cookieN }, "Ativo do painel", "SITE");
+    const vencido = await createClient({ cookie: cookieN }, "Vencido do painel", "SITE");
+    const futuro = await createClient({ cookie: cookieN }, "Futuro do painel", "INSTAGRAM");
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${vencido.id}/nurture`,
+      headers: { cookie: cookieN },
+      payload: { reason: "ADIADO", until: "2020-01-01T00:00:00.000Z" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${futuro.id}/nurture`,
+      headers: { cookie: cookieN },
+      payload: { reason: "ADIADO", until: "2099-01-01T00:00:00.000Z" },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/dashboard/stats",
+      headers: { cookie: cookieN },
+    });
+    const stats = res.json();
+
+    expect(stats.kpis.totalClients).toBe(1);
+    expect(stats.kpis.nurturing).toBe(2);
+    expect(stats.kpis.nurtureDue).toBe(1);
+    // bySource acompanha totalClients: contar bases diferentes quebraria o painel em silêncio
+    expect(stats.bySource.SITE).toBe(1);
+    expect(stats.bySource.INSTAGRAM).toBe(0);
+    const sourceSum = (Object.values(stats.bySource) as number[]).reduce((a, b) => a + b, 0);
+    expect(sourceSum).toBe(stats.kpis.totalClients);
+  });
 });
