@@ -104,6 +104,7 @@ export default function NurturingPage() {
                 type="button"
                 variant={bucket === key ? "secondary" : "ghost"}
                 size="sm"
+                aria-pressed={bucket === key}
                 onClick={() => setBucket(key)}
               >
                 {label} <span className="text-muted-foreground">{counts[key]}</span>

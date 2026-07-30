@@ -110,6 +110,7 @@ export default function ClientsPage() {
                   type="button"
                   variant={status === key ? "secondary" : "ghost"}
                   size="sm"
+                  aria-pressed={status === key}
                   onClick={() => setStatus(key)}
                 >
                   {label}
