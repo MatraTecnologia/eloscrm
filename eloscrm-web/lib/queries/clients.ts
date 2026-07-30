@@ -63,6 +63,7 @@ export const useUpdateClient = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["audit-events"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
     },
   });
 };
@@ -76,6 +77,7 @@ export const useDeleteClient = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["audit-events"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
     },
   });
 };

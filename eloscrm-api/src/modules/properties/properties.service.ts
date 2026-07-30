@@ -2,6 +2,7 @@ import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
 import { notFound } from "../../lib/http-error.js";
+import * as attachments from "../attachments/attachments.service.js";
 import * as repo from "./properties.repo.js";
 import type { CreatePropertyInput, ListPropertiesQuery, UpdatePropertyInput } from "./properties.schema.js";
 
@@ -41,6 +42,8 @@ export const update = async (orgId: string, id: string, data: UpdatePropertyInpu
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {
   await getById(orgId, id);
+  // deal.propertyId é SetNull no schema (não cascateia): só o imóvel precisa ter os anexos purgados
+  await attachments.purgeForEntities(orgId, AuditEntity.PROPERTY, [id]);
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({
     orgId,

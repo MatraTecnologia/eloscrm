@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Archive, Plus, User } from "lucide-react";
+import { ArrowLeft, Plus, User } from "lucide-react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useClient } from "@/lib/queries/clients";
@@ -16,15 +16,16 @@ import { useClientActivities } from "./use-client-activities";
 import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "./activity-timeline";
+import { UnifiedTimeline } from "./unified-timeline";
 import { AuditFeed } from "./audit-feed";
 import { CommentFeed } from "./comment-feed";
+import { AttachmentsPanel } from "./attachments-panel";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 export default function ClientProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -201,7 +202,7 @@ export default function ClientProfilePage() {
                   <CardTitle>Linha do tempo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityTimeline activities={allActivities} isLoading={loadingActivities} limit={5} />
+                  <UnifiedTimeline clientId={client.id} limit={8} />
                 </CardContent>
               </Card>
             </div>
@@ -265,15 +266,14 @@ export default function ClientProfilePage() {
         </TabsContent>
 
         <TabsContent value="arquivos" className="mt-4">
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Archive />
-              </EmptyMedia>
-              <EmptyTitle>Nenhum arquivo</EmptyTitle>
-              <EmptyDescription>Os arquivos enviados para este cliente vão aparecer aqui.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <Card>
+            <CardHeader>
+              <CardTitle>Arquivos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AttachmentsPanel entityType="CLIENT" entityId={client.id} />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="comentarios" className="mt-4">

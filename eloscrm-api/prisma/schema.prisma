@@ -91,6 +91,7 @@ model Organization {
   activities  Activity[]
   auditEvents AuditEvent[]
   comments    Comment[]
+  attachments Attachment[]
 
   @@unique([slug])
   @@map("organization")
@@ -163,6 +164,11 @@ enum AuditAction {
   DELETED
   STAGE_CHANGED
   OWNER_CHANGED
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
 }
 
 enum LeadTemperature {
@@ -324,6 +330,27 @@ model Comment {
   editedAt       DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, entityType, entityId, createdAt])
+}
+
+model Attachment {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // mesmo par do AuditEvent e do Comment, e pelo mesmo motivo: sem FK por tipo de entidade
+  entityType     AuditEntity
+  entityId       String
+  // chave no bucket privado: org/<orgId>/<entityType>/<entityId>/<cuid>-<slug>
+  key            String           @unique
+  filename       String
+  contentType    String
+  size           Int
+  // PENDING até o confirm achar o objeto no bucket; a listagem só mostra READY
+  status         AttachmentStatus @default(PENDING)
+  uploadedById   String
+  uploadedByName String
+  createdAt      DateTime         @default(now())
 
   @@index([organizationId, entityType, entityId, createdAt])
 }

@@ -111,3 +111,23 @@ export const FIELD_LABELS: Record<string, string> = {
   budgetMin: "Orçamento mínimo",
   budgetMax: "Orçamento máximo",
 };
+
+// null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
+// Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
+// telas traduzirem o mesmo jeito.
+export const formatAuditValue = (field: string, value: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+  if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
+  if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
+  if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);
+  return String(value);
+};
+
+// tamanho de arquivo em pt-BR: 1,4 MB e não 1.4 MB
+export const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} KB`;
+  return `${(kb / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+};

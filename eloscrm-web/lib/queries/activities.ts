@@ -19,6 +19,7 @@ const useInvalidateActivities = () => {
     Promise.all([
       qc.invalidateQueries({ queryKey: ["agenda"] }),
       qc.invalidateQueries({ queryKey: ["activities"] }),
+      qc.invalidateQueries({ queryKey: ["timeline"] }),
     ]);
 };
 

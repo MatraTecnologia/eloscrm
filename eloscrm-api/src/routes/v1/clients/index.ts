@@ -8,6 +8,8 @@ import {
   updateClientSchema,
 } from "../../../modules/clients/clients.schema.js";
 import * as service from "../../../modules/clients/clients.service.js";
+import { timelineQuerySchema } from "../../../modules/timeline/timeline.schema.js";
+import * as timeline from "../../../modules/timeline/timeline.service.js";
 
 const clientsRoutes = async (app: FastifyInstance) => {
   app.addHook("preHandler", authGuard);
@@ -27,6 +29,14 @@ const clientsRoutes = async (app: FastifyInstance) => {
   app.get("/:id", async (request) => {
     const { id } = request.params as { id: string };
     return service.getById(request.orgId!, id);
+  });
+
+  app.get("/:id/timeline", async (request) => {
+    const { id } = request.params as { id: string };
+    const query = timelineQuerySchema.parse(request.query);
+    // getById primeiro: sem ele, cliente de outra org devolveria lista vazia em vez de 404
+    await service.getById(request.orgId!, id);
+    return timeline.forClient(request.orgId!, id, query);
   });
 
   app.patch("/:id", async (request) => {

@@ -1,3 +1,4 @@
+import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { config } from "dotenv";
 
 config({ path: ".env.test", override: true });
@@ -16,5 +17,20 @@ export default async () => {
     const list = tables.map((t) => `"public"."${t.tablename}"`).join(", ");
     await prisma.$executeRawUnsafe(`truncate table ${list} restart identity cascade`);
   }
+
+  // o bucket de teste é criado aqui e não à mão: clone novo e CI sobem o S3 vazio
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint: process.env.R2_ENDPOINT,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+  });
+  await s3
+    .send(new CreateBucketCommand({ Bucket: process.env.R2_PRIVATE_BUCKET_NAME! }))
+    .catch(() => null); // já existe é o caso normal a partir da segunda run
+
   await prisma.$disconnect();
 };
