@@ -336,4 +336,28 @@ Achados da revisão final que não bloqueiam o merge, registrados para não vira
 - **`deals` tem `.max(50)`**: um lead com mais de 50 negócios abertos torna `DEALS_NOT_COVERED`
   insatisfazível e não pode ser nutrido pela API.
 
-> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 17:20 (-03)
+---
+
+## 9. Débitos conhecidos do Plano B
+
+Achados da revisão final do web que não bloquearam o merge:
+
+- **`formatAuditValue("status", …)` só traduz `ClientStatus`.** Evento de auditoria de imóvel cai no
+  `String(value)` e mostra `VENDIDO` cru — comportamento idêntico ao de antes (não é regressão), mas
+  o ramo novo bloqueia o conserto natural. `clientStatusLabels[v] ?? propertyStatusLabels[v] ?? String(v)`
+  resolveria os dois de uma vez.
+- **`ClientFilters.overdue` é código morto no web.** A tela de nutrição deriva o vencido no cliente,
+  pelo `bucketOf`. Ou passa a usar o filtro da API, ou some do tipo.
+- **`NurturePayload.phone` e `.note` nunca são lidos.** A linha de nutrição da agenda poderia
+  oferecer WhatsApp e telefone como a tabela de `/nurturing` faz.
+- **O card "Próximos compromissos" busca `hoje-3 .. hoje+14`.** O filtro para o futuro conserta o
+  sintoma, mas o range continua trazendo três dias de passado que são descartados no cliente.
+- **Estado dos diálogos e foco.** Nutrir a partir de `/clients` remove a linha do DOM enquanto o
+  diálogo fecha, e o retorno de foco do Base UI cai no `body`.
+- **`useOrgDeals()` por linha da tabela.** As queries são deduplicadas, mas o `map` de enriquecimento
+  roda por diálogo montado a cada render. Irrelevante com dezenas de leads; degrada com centenas.
+- **Cosméticos:** `[&>svg]:size-3!` do `Badge` neutraliza o `size-3.5` do `Snowflake` em
+  `/clients`; `<Label>` sem `htmlFor` no input de data do diálogo de nutrição e usado como título de
+  seção sem controle associado; badge "Atrasada" duplicada entre os dois `kind` da agenda.
+
+> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 19:58 (-03)

@@ -930,7 +930,8 @@ git commit -m "feat: expõe o estado de nutrição nas telas existentes"
 
 | Requisito da spec | Tarefa |
 |---|---|
-| §4.1 tela `/nurturing`, chips mutuamente exclusivos, colunas, ações por linha | 5 |
+| §4.1 tela `/nurturing`, chips mutuamente exclusivos, colunas | 5 |
+| §4.1 ações por linha — Retomar contato e Reagendar na Task 5; **Editar motivo escapou do plano** e entrou na onda de correções da revisão final | 5 + correção |
 | §4.2 as três entradas (mover / adicionar / linkar) | 5 (adicionar, linkar) e 6 (mover) |
 | §4.3 diálogo de nutrição, presets de data, destino dos negócios | 3 |
 | §4.4 diálogo de reativação, nada marcado por padrão | 4 |
