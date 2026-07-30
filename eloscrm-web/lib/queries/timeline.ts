@@ -3,12 +3,14 @@ import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type { TimelineItem } from "@/lib/types";
 
-export const useClientTimeline = (clientId: string) => {
+export const useClientTimeline = (clientId: string, limit?: number) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
-    queryKey: ["timeline", org?.id, "client", clientId],
+    queryKey: ["timeline", org?.id, "client", clientId, limit],
     queryFn: async () => {
-      const { data } = await api.get<TimelineItem[]>(`/clients/${clientId}/timeline`);
+      const { data } = await api.get<TimelineItem[]>(`/clients/${clientId}/timeline`, {
+        params: limit ? { limit } : undefined,
+      });
       return data;
     },
     enabled: !!org?.id && !!clientId,

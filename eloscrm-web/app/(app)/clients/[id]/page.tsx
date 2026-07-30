@@ -202,7 +202,7 @@ export default function ClientProfilePage() {
                   <CardTitle>Linha do tempo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <UnifiedTimeline clientId={client.id} />
+                  <UnifiedTimeline clientId={client.id} limit={8} />
                 </CardContent>
               </Card>
             </div>

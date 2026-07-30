@@ -82,8 +82,8 @@ const Line = ({ item }: { item: TimelineItem }) => {
   );
 };
 
-export const UnifiedTimeline = ({ clientId }: { clientId: string }) => {
-  const { data: items, isLoading } = useClientTimeline(clientId);
+export const UnifiedTimeline = ({ clientId, limit }: { clientId: string; limit?: number }) => {
+  const { data: items, isLoading, isError } = useClientTimeline(clientId, limit);
 
   if (isLoading) {
     return (
@@ -93,6 +93,10 @@ export const UnifiedTimeline = ({ clientId }: { clientId: string }) => {
         ))}
       </div>
     );
+  }
+
+  if (isError) {
+    return <p className="text-sm text-muted-foreground">Não foi possível carregar a linha do tempo.</p>;
   }
 
   if (!items?.length) {
