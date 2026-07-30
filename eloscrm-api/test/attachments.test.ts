@@ -188,4 +188,70 @@ describe("anexos", () => {
     });
     expect(link.statusCode).toBe(404);
   });
+
+  it("recusa confirm e delete de anexo de outra organização (404)", async () => {
+    const asked = await askUpload("cross-org.pdf");
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+
+    const confirmCrossOrg = await app.inject({
+      method: "POST",
+      url: `/v1/attachments/${attachmentId}/confirm`,
+      headers: { cookie: cookieOrgB },
+    });
+    expect(confirmCrossOrg.statusCode).toBe(404);
+
+    const deleteCrossOrg = await app.inject({
+      method: "DELETE",
+      url: `/v1/attachments/${attachmentId}`,
+      headers: { cookie: cookieOrgB },
+    });
+    expect(deleteCrossOrg.statusCode).toBe(404);
+  });
+
+  it("apaga anexo do bucket e do banco ao apagar o cliente dono", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Lead a apagar" },
+    });
+    const orphanClientId = created.json().id;
+
+    const asked = await app.inject({
+      method: "POST",
+      url: "/v1/attachments/upload-url",
+      headers: { cookie },
+      payload: {
+        entityType: "CLIENT",
+        entityId: orphanClientId,
+        filename: "contrato-orfao.pdf",
+        contentType: "application/pdf",
+        size: Buffer.byteLength(BODY),
+      },
+    });
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+    await app.inject({ method: "POST", url: `/v1/attachments/${attachmentId}/confirm`, headers: { cookie } });
+
+    const link = await app.inject({
+      method: "GET",
+      url: `/v1/attachments/${attachmentId}/download-url`,
+      headers: { cookie },
+    });
+    const { url } = link.json();
+
+    const removedClient = await app.inject({
+      method: "DELETE",
+      url: `/v1/clients/${orphanClientId}`,
+      headers: { cookie },
+    });
+    expect(removedClient.statusCode).toBe(204);
+
+    const row = await prisma.attachment.findUnique({ where: { id: attachmentId } });
+    expect(row).toBeNull();
+
+    const afterDelete = await fetch(url);
+    expect(afterDelete.ok).toBe(false);
+  });
 });

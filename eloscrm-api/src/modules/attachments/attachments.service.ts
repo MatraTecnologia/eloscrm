@@ -1,6 +1,14 @@
+import type { AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { httpError, notFound } from "../../lib/http-error.js";
-import { R2_PRIVATE_BUCKET, deleteFile, getDownloadUrl, getUploadUrl, headFile } from "../../lib/storage.js";
+import {
+  R2_PRIVATE_BUCKET,
+  deleteFile,
+  deleteFiles,
+  getDownloadUrl,
+  getUploadUrl,
+  headFile,
+} from "../../lib/storage.js";
 import * as repo from "./attachments.repo.js";
 import { MAX_SIZE_BYTES } from "./attachments.schema.js";
 import type { ListAttachmentsQuery, UploadUrlInput } from "./attachments.schema.js";
@@ -64,8 +72,10 @@ export const confirm = async (orgId: string, id: string) => {
   }
 
   // o content-type não entra na assinatura do presign (o SDK o marca como unsignable), então é aqui
-  // que a allowlist vale de verdade: o cliente pode ter subido qualquer coisa na URL assinada
-  if (head.contentType && head.contentType !== attachment.contentType) {
+  // que a allowlist vale de verdade: o cliente pode ter subido qualquer coisa na URL assinada.
+  // Ausência de content-type no HEAD também é tratada como divergência — senão um storage que não
+  // reporte o tipo abriria caminho por baixo da allowlist.
+  if (!head.contentType || head.contentType !== attachment.contentType) {
     throw httpError(422, "UPLOAD_TYPE_MISMATCH", "O arquivo enviado não é do tipo informado");
   }
 
@@ -91,4 +101,17 @@ export const remove = async (orgId: string, id: string) => {
   // objeto primeiro: linha órfã é recuperável, objeto órfão em bucket privado é invisível para sempre
   await deleteFile(R2_PRIVATE_BUCKET, attachment.key);
   await repo.deleteAttachmentById(id);
+};
+
+/**
+ * Apaga objeto e linha dos anexos de um conjunto de registros. Chamado antes do delete da entidade
+ * dona: `Attachment` não tem FK para ela, então sem isto o arquivo fica no bucket privado sem
+ * ninguém que saiba dele — problema de retenção, não só de custo.
+ */
+export const purgeForEntities = async (orgId: string, entityType: AuditEntity, entityIds: string[]) => {
+  if (entityIds.length === 0) return;
+  const rows = await repo.listKeysForEntities(orgId, entityType, entityIds);
+  if (rows.length === 0) return;
+  await deleteFiles(R2_PRIVATE_BUCKET, rows.map((row) => row.key));
+  await repo.deleteForEntities(orgId, entityType, entityIds);
 };

@@ -10,6 +10,8 @@ export const listReady = (orgId: string, filters: ListAttachmentsQuery) =>
       entityId: filters.entityId,
       status: AttachmentStatus.READY,
     },
+    // key é a localização no bucket privado; o tipo do web nem declara o campo, não devolver
+    omit: { key: true },
     orderBy: { createdAt: "desc" },
   });
 
@@ -32,6 +34,17 @@ export const markReady = (id: string, size: number) =>
   prisma.attachment.update({ where: { id }, data: { status: AttachmentStatus.READY, size } });
 
 export const deleteAttachmentById = (id: string) => prisma.attachment.delete({ where: { id } });
+
+export const listKeysForEntities = (orgId: string, entityType: AuditEntity, entityIds: string[]) =>
+  prisma.attachment.findMany({
+    where: { organizationId: orgId, entityType, entityId: { in: entityIds } },
+    select: { key: true },
+  });
+
+export const deleteForEntities = (orgId: string, entityType: AuditEntity, entityIds: string[]) =>
+  prisma.attachment.deleteMany({
+    where: { organizationId: orgId, entityType, entityId: { in: entityIds } },
+  });
 
 // o anexo aponta para cliente, negócio, imóvel ou atividade; a existência dentro da org é checada aqui
 export const entityExistsInOrg = async (orgId: string, entityType: AuditEntity, entityId: string) => {

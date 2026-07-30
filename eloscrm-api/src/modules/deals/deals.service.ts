@@ -3,6 +3,7 @@ import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
+import * as attachments from "../attachments/attachments.service.js";
 import { assertStageInOrgPipeline } from "../pipelines/pipelines.service.js";
 import * as repo from "./deals.repo.js";
 import type { CreateDealInput, ListDealsQuery, UpdateDealInput } from "./deals.schema.js";
@@ -88,6 +89,20 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {
   await getById(orgId, id);
+
+  // activities cascateiam do deal no schema; purgar os anexos delas antes, senão o objeto no
+  // bucket privado fica sem ninguém que saiba dele depois do delete em cascata
+  const dealActivities = await prisma.activity.findMany({
+    where: { organizationId: orgId, dealId: id },
+    select: { id: true },
+  });
+  await attachments.purgeForEntities(orgId, AuditEntity.DEAL, [id]);
+  await attachments.purgeForEntities(
+    orgId,
+    AuditEntity.ACTIVITY,
+    dealActivities.map((activity) => activity.id),
+  );
+
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({
     orgId,
