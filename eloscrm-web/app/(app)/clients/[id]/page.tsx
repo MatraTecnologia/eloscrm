@@ -16,6 +16,7 @@ import { useClientActivities } from "./use-client-activities";
 import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "./activity-timeline";
+import { UnifiedTimeline } from "./unified-timeline";
 import { AuditFeed } from "./audit-feed";
 import { CommentFeed } from "./comment-feed";
 import { AttachmentsPanel } from "./attachments-panel";
@@ -201,7 +202,7 @@ export default function ClientProfilePage() {
                   <CardTitle>Linha do tempo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityTimeline activities={allActivities} isLoading={loadingActivities} limit={5} />
+                  <UnifiedTimeline clientId={client.id} />
                 </CardContent>
               </Card>
             </div>
