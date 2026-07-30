@@ -68,7 +68,7 @@ export const headFile = async (bucket: string, key: string) => {
   const response = await r2().send(
     new HeadObjectCommand({ Bucket: bucket, Key: key }),
   );
-  return { contentLength: response.ContentLength ?? 0 };
+  return { contentLength: response.ContentLength ?? 0, contentType: response.ContentType ?? null };
 };
 
 export const uploadFile = (

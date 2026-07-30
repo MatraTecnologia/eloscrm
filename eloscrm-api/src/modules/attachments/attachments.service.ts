@@ -2,6 +2,7 @@ import type { Actor } from "../../lib/actor.js";
 import { httpError, notFound } from "../../lib/http-error.js";
 import { R2_PRIVATE_BUCKET, deleteFile, getDownloadUrl, getUploadUrl, headFile } from "../../lib/storage.js";
 import * as repo from "./attachments.repo.js";
+import { MAX_SIZE_BYTES } from "./attachments.schema.js";
 import type { ListAttachmentsQuery, UploadUrlInput } from "./attachments.schema.js";
 
 const UPLOAD_EXPIRES_IN = 300;
@@ -57,6 +58,17 @@ export const confirm = async (orgId: string, id: string) => {
   // HEAD de verdade: sem isto, um PUT que falhou deixaria linha READY apontando para objeto inexistente
   const head = await headFile(R2_PRIVATE_BUCKET, attachment.key).catch(() => null);
   if (!head) throw httpError(422, "UPLOAD_NOT_FOUND", "O arquivo não chegou ao storage");
+
+  if (head.contentLength > MAX_SIZE_BYTES) {
+    throw httpError(422, "UPLOAD_TOO_LARGE", "O arquivo enviado passa do tamanho permitido");
+  }
+
+  // o content-type não entra na assinatura do presign (o SDK o marca como unsignable), então é aqui
+  // que a allowlist vale de verdade: o cliente pode ter subido qualquer coisa na URL assinada
+  if (head.contentType && head.contentType !== attachment.contentType) {
+    throw httpError(422, "UPLOAD_TYPE_MISMATCH", "O arquivo enviado não é do tipo informado");
+  }
+
   return repo.markReady(id, head.contentLength);
 };
 

@@ -151,6 +151,23 @@ describe("anexos", () => {
     expect(res.json().error.code).toBe("UPLOAD_NOT_FOUND");
   });
 
+  it("recusa confirm quando o arquivo subido não é do tipo declarado (422)", async () => {
+    const asked = await askUpload("disfarcado.pdf", "application/pdf");
+    const { attachmentId, uploadUrl } = asked.json();
+
+    // content-type não entra na assinatura do presign (é unsignable no SDK), então o browser
+    // consegue subir um tipo diferente do que foi declarado no upload-url
+    await putToBucket(uploadUrl, "text/plain");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/attachments/${attachmentId}/confirm`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("UPLOAD_TYPE_MISMATCH");
+  });
+
   it("não vaza anexo de outra organização", async () => {
     const asked = await askUpload("privado.pdf");
     const { attachmentId, uploadUrl } = asked.json();
