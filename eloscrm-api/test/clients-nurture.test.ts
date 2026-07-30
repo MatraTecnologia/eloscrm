@@ -515,3 +515,177 @@ describe("nutrir com negócios abertos", () => {
     expect(res.statusCode).toBe(200);
   });
 });
+
+describe("POST /clients/:id/reactivate", () => {
+  const nutrirComNegocio = async (name: string, title: string) => {
+    const client = await createClient(name);
+    const dealRes = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title, pipelineId, stageId: openStageId },
+    });
+    const deal = dealRes.json() as { id: string };
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "ADIADO",
+        until: "2026-12-31T23:59:59.999Z",
+        deals: [{ dealId: deal.id, action: "CLOSE_LOST", lostStageId }],
+      },
+    });
+    return { client, deal };
+  };
+
+  it("limpa os quatro campos e volta para ACTIVE", async () => {
+    const { client } = await nutrirComNegocio("Lead a reativar", "Negócio a reabrir");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updated = res.json();
+    expect(updated.status).toBe(ClientStatus.ACTIVE);
+    expect(updated.nurtureReason).toBeNull();
+    expect(updated.nurtureNote).toBeNull();
+    expect(updated.nurtureUntil).toBeNull();
+    expect(updated.nurturedAt).toBeNull();
+  });
+
+  it("não reabre negócio nenhum por padrão", async () => {
+    const { client, deal } = await nutrirComNegocio("Lead sem reabrir", "Negócio que fica perdido");
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: {},
+    });
+
+    const still = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(still.stageId).toBe(lostStageId);
+  });
+
+  it("reabre o negócio marcado no primeiro estágio aberto e limpa o motivo da perda", async () => {
+    const { client, deal } = await nutrirComNegocio("Lead com reabertura", "Negócio reaberto");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: { reopenDealIds: [deal.id] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const reopened = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(reopened.stageId).toBe(openStageId);
+    expect(reopened.lostReason).toBeNull();
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: "DEAL", entityId: deal.id, action: "STAGE_CHANGED" },
+    });
+    // um ao fechar na nutrição, outro ao reabrir
+    expect(events).toHaveLength(2);
+  });
+
+  it("registra a reativação no histórico do lead", async () => {
+    const { client } = await nutrirComNegocio("Lead auditado ao reativar", "Negócio qualquer");
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: {},
+    });
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
+      orderBy: { createdAt: "asc" },
+    });
+    const last = events[events.length - 1].changes as Record<string, { from: unknown; to: unknown }>;
+    expect(last.status).toEqual({ from: "NURTURING", to: "ACTIVE" });
+  });
+
+  it("recusa reativar lead que não está em nutrição (409)", async () => {
+    const client = await createClient("Lead já ativo");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("NOT_NURTURING");
+  });
+
+  it("recusa reabrir negócio que não está perdido (422)", async () => {
+    const client = await createClient("Lead com negócio aberto reaberto");
+    const dealRes = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Negócio mantido", pipelineId, stageId: openStageId },
+    });
+    const deal = dealRes.json() as { id: string };
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO", deals: [{ dealId: deal.id, action: "KEEP" }] },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: { reopenDealIds: [deal.id] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DEAL_NOT_LOST");
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).status).toBe(
+      ClientStatus.NURTURING,
+    );
+  });
+
+  it("recusa reabrir negócio de outro lead (422)", async () => {
+    const { client } = await nutrirComNegocio("Lead alvo da reativação", "Negócio próprio");
+    const { deal: dealAlheio } = await nutrirComNegocio("Lead vizinho nutrido", "Negócio alheio");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: { reopenDealIds: [dealAlheio.id] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DEAL_NOT_LOST");
+  });
+
+  it("não reativa lead de outra organização (404)", async () => {
+    const { cookie: cookieC } = await signUpWithOrg(
+      app,
+      `nurture-c-${stamp}@eloscrm.test`,
+      `nurture-c-${stamp}`,
+    );
+    const { client } = await nutrirComNegocio("Lead protegido", "Negócio protegido");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie: cookieC },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});

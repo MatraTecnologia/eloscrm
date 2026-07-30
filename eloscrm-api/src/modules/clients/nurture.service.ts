@@ -6,7 +6,7 @@ import { prisma } from "../../lib/prisma.js";
 import * as deals from "../deals/deals.service.js";
 import * as repo from "./clients.repo.js";
 import { getById } from "./clients.service.js";
-import type { NurtureInput } from "./nurture.schema.js";
+import type { NurtureInput, ReactivateInput } from "./nurture.schema.js";
 
 // o lostReason do negócio fechado vai para o banco e para a tela; sem este mapa gravaria SEM_ORCAMENTO cru
 export const NURTURE_REASON_LABELS: Record<NurtureReason, string> = {
@@ -76,6 +76,59 @@ export const nurture = async (orgId: string, id: string, data: NurtureInput, act
     nurtureUntil: data.until ?? null,
     // carimbo do servidor: "parado há quanto tempo" não pode ser escolhido por quem chama
     nurturedAt: new Date(),
+  };
+
+  const updated = await repo.updateNurtureState(id, state);
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CLIENT,
+    entityId: id,
+    action: AuditAction.UPDATED,
+    actor,
+    changes: diffFields(client, state),
+  });
+  return updated;
+};
+
+export const reactivate = async (
+  orgId: string,
+  id: string,
+  data: ReactivateInput,
+  actor: Actor,
+) => {
+  const client = await getById(orgId, id);
+  if (client.status !== ClientStatus.NURTURING) {
+    throw httpError(409, "NOT_NURTURING", "Este lead não está em nutrição");
+  }
+
+  const reopenIds = data.reopenDealIds ?? [];
+  // mesma ordem da nutrição: validar tudo antes de mexer em qualquer negócio
+  const targets: { dealId: string; stageId: string }[] = [];
+  for (const dealId of reopenIds) {
+    const deal = await prisma.deal.findFirst({
+      where: { id: dealId, organizationId: orgId, clientId: id, stage: { isLost: true } },
+      select: { id: true, pipelineId: true },
+    });
+    if (!deal) throw invalid("DEAL_NOT_LOST", "Só um negócio perdido deste lead pode ser reaberto");
+    const stage = await prisma.stage.findFirst({
+      where: { organizationId: orgId, pipelineId: deal.pipelineId, isWon: false, isLost: false },
+      orderBy: { position: "asc" },
+      select: { id: true },
+    });
+    if (!stage) throw invalid("NO_OPEN_STAGE", "O pipeline deste negócio não tem estágio aberto");
+    targets.push({ dealId, stageId: stage.id });
+  }
+
+  for (const { dealId, stageId } of targets) {
+    await deals.update(orgId, dealId, { stageId, lostReason: null }, actor);
+  }
+
+  const state = {
+    status: ClientStatus.ACTIVE,
+    nurtureReason: null,
+    nurtureNote: null,
+    nurtureUntil: null,
+    nurturedAt: null,
   };
 
   const updated = await repo.updateNurtureState(id, state);
