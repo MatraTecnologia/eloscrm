@@ -13,6 +13,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { ApiError } from "@/lib/api";
 import { useUpdateClient } from "@/lib/queries/clients";
 import type { Client } from "@/lib/types";
 
@@ -33,8 +34,8 @@ export const ReschedulePopover = ({ client, trigger }: { client: Client; trigger
       await update.mutateAsync({ id: client.id, input: { nurtureUntil } });
       toast.success("Retomada reagendada");
       setOpen(false);
-    } catch {
-      toast.error("Não foi possível reagendar");
+    } catch (e) {
+      toast.error((e as ApiError)?.message ?? "Não foi possível reagendar");
     }
   };
 

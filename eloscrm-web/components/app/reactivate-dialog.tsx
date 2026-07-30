@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import type { ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/labels";
 import { useOrgDeals } from "@/lib/queries/deals";
 import { useReactivateClient, type ReactivateInput } from "@/lib/queries/clients";
@@ -55,8 +56,8 @@ export const ReactivateDialog = ({
       toast.success("Lead reativado");
       setOpen(false);
       onDone?.();
-    } catch {
-      toast.error("Não foi possível reativar o lead");
+    } catch (e) {
+      toast.error((e as ApiError)?.message ?? "Não foi possível reativar o lead");
     }
   };
 

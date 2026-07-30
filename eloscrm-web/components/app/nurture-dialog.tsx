@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { ApiError } from "@/lib/api";
 import { formatCurrency, nurtureReasonLabels } from "@/lib/labels";
 import { useOrgDeals } from "@/lib/queries/deals";
 import { usePipelines } from "@/lib/queries/pipelines";
@@ -111,8 +112,8 @@ export const NurtureDialog = ({
       toast.success("Lead enviado para nutrição");
       setOpen(false);
       onDone?.();
-    } catch {
-      toast.error("Não foi possível enviar para nutrição");
+    } catch (e) {
+      toast.error((e as ApiError)?.message ?? "Não foi possível enviar para nutrição");
     }
   };
 
