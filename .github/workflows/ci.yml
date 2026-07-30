@@ -65,6 +65,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # o build usa um tsconfig próprio e não é exercitado por nenhum dos passos acima:
+      # sem este step, quebrar a compilação de produção só aparece no deploy
+      - run: pnpm build
 
   web:
     runs-on: ubuntu-latest

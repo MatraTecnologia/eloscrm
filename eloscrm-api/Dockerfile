@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 # ---- build: gera o client do prisma e compila para dist/ ----
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json prisma.config.ts ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
 # src/generated não é versionado e todo o código importa dele.
