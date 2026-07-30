@@ -7,6 +7,7 @@ import { MessageSquare, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth-client";
 import { useComments, useCreateComment, useDeleteComment, useUpdateComment } from "@/lib/queries/comments";
+import { useMembers } from "@/lib/queries/members";
 import type { AuditEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +20,10 @@ export const CommentFeed = ({ entityType, entityId }: { entityType: AuditEntity;
   const create = useCreateComment();
   const update = useUpdateComment();
   const remove = useDeleteComment();
+  const { data: members } = useMembers();
+  const myRole = members?.find((member) => member.userId === session?.user.id)?.role ?? null;
+  // a API deixa gestor remover comentário de qualquer um; editar segue só do autor
+  const canManage = myRole === "owner" || myRole === "admin";
 
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,23 +104,26 @@ export const CommentFeed = ({ entityType, entityId }: { entityType: AuditEntity;
                     {comment.editedAt ? " · editado" : ""}
                   </p>
                 </div>
-                {comment.authorId === session?.user.id && editingId !== comment.id && (
+                {(comment.authorId === session?.user.id || canManage) && editingId !== comment.id && (
                   <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Editar comentário"
-                      onClick={() => {
-                        setEditingId(comment.id);
-                        setEditDraft(comment.body);
-                      }}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
+                    {comment.authorId === session?.user.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Editar comentário"
+                        onClick={() => {
+                          setEditingId(comment.id);
+                          setEditDraft(comment.body);
+                        }}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-label="Remover comentário"
+                      disabled={remove.isPending}
                       onClick={() => del(comment.id)}
                     >
                       <Trash2 className="size-3.5" />
