@@ -100,19 +100,25 @@ describe("PATCH de cliente e o estado de nutrição", () => {
     const client = await createClient("Lead com motivo a limpar");
     await prisma.client.update({
       where: { id: client.id },
-      data: { status: ClientStatus.NURTURING, nurtureReason: NurtureReason.OUTRO, nurtureNote: "x" },
+      data: {
+        status: ClientStatus.NURTURING,
+        nurtureReason: NurtureReason.OUTRO,
+        nurtureNote: "x",
+        nurtureUntil: new Date("2026-09-01T23:59:59.999Z"),
+      },
     });
 
     const res = await app.inject({
       method: "PATCH",
       url: `/v1/clients/${client.id}`,
       headers: { cookie },
-      payload: { nurtureReason: null, nurtureNote: null },
+      payload: { nurtureReason: null, nurtureNote: null, nurtureUntil: null },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().nurtureReason).toBeNull();
     expect(res.json().nurtureNote).toBeNull();
+    expect(res.json().nurtureUntil).toBeNull();
   });
 });
 
