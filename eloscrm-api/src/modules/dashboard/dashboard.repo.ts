@@ -1,6 +1,21 @@
 import { prisma } from "../../lib/prisma.js";
+import { ClientStatus } from "../../generated/prisma/client.js";
 
-export const countClients = (orgId: string) => prisma.client.count({ where: { organizationId: orgId } });
+// o painel mede a base que está sendo trabalhada; o lead em nutrição tem KPI próprio
+export const countClients = (orgId: string) =>
+  prisma.client.count({ where: { organizationId: orgId, status: ClientStatus.ACTIVE } });
+
+export const countNurturing = (orgId: string) =>
+  prisma.client.count({ where: { organizationId: orgId, status: ClientStatus.NURTURING } });
+
+export const countNurtureDue = (orgId: string) =>
+  prisma.client.count({
+    where: {
+      organizationId: orgId,
+      status: ClientStatus.NURTURING,
+      nurtureUntil: { lte: new Date() },
+    },
+  });
 
 export const countDeals = (orgId: string) => prisma.deal.count({ where: { organizationId: orgId } });
 
@@ -30,6 +45,6 @@ export const orgStagesWithPipeline = (orgId: string) =>
 export const clientSourceCounts = (orgId: string) =>
   prisma.client.groupBy({
     by: ["source"],
-    where: { organizationId: orgId },
+    where: { organizationId: orgId, status: ClientStatus.ACTIVE },
     _count: { _all: true },
   });

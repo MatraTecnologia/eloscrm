@@ -2,13 +2,16 @@ import { ClientSource } from "../../generated/prisma/client.js";
 import * as repo from "./dashboard.repo.js";
 
 export const getStats = async (orgId: string) => {
-  const [totalClients, totalDeals, stageAggregates, stages, sourceCounts] = await Promise.all([
-    repo.countClients(orgId),
-    repo.countDeals(orgId),
-    repo.dealStageAggregates(orgId),
-    repo.orgStagesWithPipeline(orgId),
-    repo.clientSourceCounts(orgId),
-  ]);
+  const [totalClients, totalDeals, stageAggregates, stages, sourceCounts, nurturing, nurtureDue] =
+    await Promise.all([
+      repo.countClients(orgId),
+      repo.countDeals(orgId),
+      repo.dealStageAggregates(orgId),
+      repo.orgStagesWithPipeline(orgId),
+      repo.clientSourceCounts(orgId),
+      repo.countNurturing(orgId),
+      repo.countNurtureDue(orgId),
+    ]);
 
   const dealsByStage = new Map(stageAggregates.map((row) => [row.stageId, row]));
 
@@ -40,7 +43,7 @@ export const getStats = async (orgId: string) => {
   for (const row of sourceCounts) bySource[row.source] = row._count._all;
 
   return {
-    kpis: { totalClients, totalDeals, openDeals, wonDeals, openValue },
+    kpis: { totalClients, totalDeals, openDeals, wonDeals, openValue, nurturing, nurtureDue },
     funnel,
     bySource,
   };
