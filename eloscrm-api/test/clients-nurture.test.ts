@@ -188,3 +188,125 @@ describe("listagem de clientes por status", () => {
     expect(res.json().status).toBe(ClientStatus.NURTURING);
   });
 });
+
+describe("POST /clients/:id/nurture", () => {
+  it("bloqueia sem sessão (401)", async () => {
+    const client = await createClient("Lead sem sessão");
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      payload: { reason: "ADIADO" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("nutre com data e carimba nurturedAt no servidor", async () => {
+    const client = await createClient("Lead a nutrir com data");
+    const antes = Date.now();
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "SEM_ORCAMENTO",
+        note: "Espera a taxa cair",
+        until: "2026-12-31T23:59:59.999Z",
+        // nurturedAt é do servidor: mandar aqui não pode ter efeito nenhum
+        nurturedAt: "1999-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updated = res.json();
+    expect(updated.status).toBe(ClientStatus.NURTURING);
+    expect(updated.nurtureReason).toBe(NurtureReason.SEM_ORCAMENTO);
+    expect(updated.nurtureNote).toBe("Espera a taxa cair");
+    expect(updated.nurtureUntil).toBe("2026-12-31T23:59:59.999Z");
+    expect(new Date(updated.nurturedAt).getTime()).toBeGreaterThanOrEqual(antes);
+  });
+
+  it("nutre sem data (sem data definida é estado válido)", async () => {
+    const client = await createClient("Lead a nutrir sem data");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "SEM_RESPOSTA" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().nurtureUntil).toBeNull();
+    expect(res.json().nurtureNote).toBeNull();
+  });
+
+  it("registra a transição no histórico", async () => {
+    const client = await createClient("Lead auditado ao nutrir");
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "SO_PESQUISANDO" },
+    });
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
+    });
+    expect(events).toHaveLength(1);
+    const changes = events[0].changes as Record<string, { from: unknown; to: unknown }>;
+    expect(changes.status).toEqual({ from: "ACTIVE", to: "NURTURING" });
+    expect(changes.nurtureReason.to).toBe("SO_PESQUISANDO");
+  });
+
+  it("recusa nutrir um lead já nutrido (409)", async () => {
+    const client = await createClient("Lead nutrido duas vezes");
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO" },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO" },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("ALREADY_NURTURING");
+  });
+
+  it("recusa motivo inválido (422)", async () => {
+    const client = await createClient("Lead com motivo inválido");
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "PORQUE_SIM" },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("VALIDATION");
+  });
+
+  it("não nutre lead de outra organização (404)", async () => {
+    const { cookie: cookieB } = await signUpWithOrg(
+      app,
+      `nurture-b-${stamp}@eloscrm.test`,
+      `nurture-b-${stamp}`,
+    );
+    const client = await createClient("Lead da org A");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie: cookieB },
+      payload: { reason: "ADIADO" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});

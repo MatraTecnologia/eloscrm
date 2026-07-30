@@ -9,6 +9,8 @@ import {
   updateClientSchema,
 } from "../../../modules/clients/clients.schema.js";
 import * as service from "../../../modules/clients/clients.service.js";
+import { nurtureSchema } from "../../../modules/clients/nurture.schema.js";
+import * as nurtureService from "../../../modules/clients/nurture.service.js";
 import { timelineQuerySchema } from "../../../modules/timeline/timeline.schema.js";
 import * as timeline from "../../../modules/timeline/timeline.service.js";
 
@@ -44,6 +46,12 @@ const clientsRoutes = async (app: FastifyInstance) => {
     const { id } = request.params as { id: string };
     const data = updateClientSchema.parse(request.body);
     return service.update(request.orgId!, id, data, actorOf(request));
+  });
+
+  app.post("/:id/nurture", async (request) => {
+    const { id } = request.params as { id: string };
+    const data = nurtureSchema.parse(request.body);
+    return nurtureService.nurture(request.orgId!, id, data, actorOf(request));
   });
 
   app.delete("/:id", async (request, reply) => {
