@@ -3,16 +3,21 @@ import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type { TimelineItem } from "@/lib/types";
 
-export const useClientTimeline = (clientId: string, limit?: number) => {
+/** Só lead e negócio têm timeline na API; o recurso vira o caminho da rota. */
+export type TimelineEntity = "CLIENT" | "DEAL";
+
+const RESOURCES: Record<TimelineEntity, string> = { CLIENT: "clients", DEAL: "deals" };
+
+export const useEntityTimeline = (entityType: TimelineEntity, entityId: string, limit?: number) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
-    queryKey: ["timeline", org?.id, "client", clientId, limit],
+    queryKey: ["timeline", org?.id, entityType, entityId, limit],
     queryFn: async () => {
-      const { data } = await api.get<TimelineItem[]>(`/clients/${clientId}/timeline`, {
+      const { data } = await api.get<TimelineItem[]>(`/${RESOURCES[entityType]}/${entityId}/timeline`, {
         params: limit ? { limit } : undefined,
       });
       return data;
     },
-    enabled: !!org?.id && !!clientId,
+    enabled: !!org?.id && !!entityId,
   });
 };

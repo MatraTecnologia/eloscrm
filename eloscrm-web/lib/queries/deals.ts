@@ -4,13 +4,16 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { usePipelines } from "@/lib/queries/pipelines";
 import type { Deal } from "@/lib/types";
 
+// `null` nos opcionais é o que limpa o campo na API; `undefined` só omite do PATCH e não apaga nada
 export type DealInput = {
   title: string;
   clientId: string;
   pipelineId: string;
   stageId: string;
-  value?: number;
-  propertyId?: string;
+  value?: number | null;
+  propertyId?: string | null;
+  ownerId?: string | null;
+  lostReason?: string | null;
 };
 
 export const useDeals = (pipelineId: string | undefined) => {
@@ -63,6 +66,18 @@ export const useOrgDeals = () => {
   return { deals, isLoading: dealsQuery.isLoading || loadingPipelines };
 };
 
+// Toda escrita em negócio gera evento de auditoria e entra na linha do tempo dele: sem invalidar as
+// três keys, as abas Histórico e Resumo do modal mostram o estado de antes da edição.
+const invalidateDealViews = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: ["deals"] });
+  qc.invalidateQueries({ queryKey: ["audit-events"] });
+  qc.invalidateQueries({ queryKey: ["timeline"] });
+  // as atividades do negócio cascateiam no delete: sem isto, a agenda e a aba Atividades seguem
+  // listando atividade de negócio que não existe mais
+  qc.invalidateQueries({ queryKey: ["activities"] });
+  qc.invalidateQueries({ queryKey: ["agenda"] });
+};
+
 export const useCreateDeal = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -70,7 +85,7 @@ export const useCreateDeal = () => {
       const { data } = await api.post<Deal>("/deals", input);
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deals"] }),
+    onSuccess: () => invalidateDealViews(qc),
   });
 };
 
@@ -98,7 +113,7 @@ export const useUpdateDeal = () => {
     onError: (_err, _vars, ctx) => {
       ctx?.snapshots?.forEach(([key, deals]) => qc.setQueryData(key, deals));
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["deals"] }),
+    onSettled: () => invalidateDealViews(qc),
   });
 };
 
@@ -108,6 +123,6 @@ export const useDeleteDeal = () => {
     mutationFn: async (id: string) => {
       await api.delete(`/deals/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deals"] }),
+    onSuccess: () => invalidateDealViews(qc),
   });
 };

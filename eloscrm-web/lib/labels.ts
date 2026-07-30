@@ -1,4 +1,11 @@
-import type { ActivityType, AuditAction, ClientSource, PropertyStatus, LeadTemperature } from "./types";
+import type {
+  ActivityType,
+  AuditAction,
+  AuditEntity,
+  ClientSource,
+  PropertyStatus,
+  LeadTemperature,
+} from "./types";
 
 export const clientSourceLabels: Record<ClientSource, string> = {
   SITE: "Site",
@@ -89,6 +96,15 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   OWNER_CHANGED: "trocou o responsável",
 };
 
+// Os painéis (arquivos, comentários, histórico, linha do tempo) servem lead e negócio; o texto vazio
+// precisa dizer de qual. Todos masculinos de propósito: o texto que os usa escreve "deste <substantivo>".
+export const ENTITY_NOUNS: Record<AuditEntity, string> = {
+  CLIENT: "lead",
+  DEAL: "negócio",
+  PROPERTY: "imóvel",
+  ACTIVITY: "registro",
+};
+
 // nome do campo do banco não pode vazar para a tela
 export const FIELD_LABELS: Record<string, string> = {
   name: "Nome",
@@ -97,6 +113,8 @@ export const FIELD_LABELS: Record<string, string> = {
   source: "Origem",
   notes: "Observações",
   ownerId: "Responsável",
+  clientId: "Cliente",
+  propertyId: "Imóvel",
   stage: "Estágio",
   status: "Status",
   title: "Título",
@@ -112,15 +130,25 @@ export const FIELD_LABELS: Record<string, string> = {
   budgetMax: "Orçamento máximo",
 };
 
+// Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
+// `resolveName` (membros, imóveis e clientes da org); id que não resolve é registro já removido.
+const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
+
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
 // Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
 // telas traduzirem o mesmo jeito.
-export const formatAuditValue = (field: string, value: unknown) => {
+export const formatAuditValue = (
+  field: string,
+  value: unknown,
+  resolveName?: (id: string) => string | undefined,
+) => {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
   if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
   if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);
+  if (field === "value") return formatCurrency(value as string);
+  if (ID_FIELDS.has(field) && typeof value === "string") return resolveName?.(value) ?? "(removido)";
   return String(value);
 };
 

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { AuditEntity } from "../../../generated/prisma/client.js";
 import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
 import { actorOf } from "../../../lib/actor.js";
@@ -8,6 +9,8 @@ import {
   updateDealSchema,
 } from "../../../modules/deals/deals.schema.js";
 import * as service from "../../../modules/deals/deals.service.js";
+import { timelineQuerySchema } from "../../../modules/timeline/timeline.schema.js";
+import * as timeline from "../../../modules/timeline/timeline.service.js";
 
 const dealsRoutes = async (app: FastifyInstance) => {
   app.addHook("preHandler", authGuard);
@@ -27,6 +30,14 @@ const dealsRoutes = async (app: FastifyInstance) => {
   app.get("/:id", async (request) => {
     const { id } = request.params as { id: string };
     return service.getById(request.orgId!, id);
+  });
+
+  app.get("/:id/timeline", async (request) => {
+    const { id } = request.params as { id: string };
+    const query = timelineQuerySchema.parse(request.query);
+    // getById primeiro: sem ele, negócio de outra org devolveria lista vazia em vez de 404
+    await service.getById(request.orgId!, id);
+    return timeline.forEntity(request.orgId!, AuditEntity.DEAL, id, query);
   });
 
   app.patch("/:id", async (request) => {

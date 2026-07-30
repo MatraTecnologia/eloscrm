@@ -1,4 +1,5 @@
 import * as repo from "./timeline.repo.js";
+import type { TimelineEntity } from "./timeline.repo.js";
 import type { TimelineQuery } from "./timeline.schema.js";
 
 type TimelineItem = {
@@ -8,9 +9,14 @@ type TimelineItem = {
   payload: unknown;
 };
 
-export const forClient = async (orgId: string, clientId: string, query: TimelineQuery) => {
+export const forEntity = async (
+  orgId: string,
+  entityType: TimelineEntity,
+  entityId: string,
+  query: TimelineQuery,
+) => {
   const [doneActivities, dueActivities, plainActivities, events, comments, attachments] =
-    await repo.sources(orgId, clientId, query.limit);
+    await repo.sources(orgId, entityType, entityId, query.limit);
   const activities = [...doneActivities, ...dueActivities, ...plainActivities];
 
   const items: TimelineItem[] = [

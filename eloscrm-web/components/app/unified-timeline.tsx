@@ -3,14 +3,28 @@
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FileText, History, MessageSquare } from "lucide-react";
-import { useClientTimeline } from "@/lib/queries/timeline";
-import { AUDIT_ACTION_LABELS, FIELD_LABELS, activityTypeLabels, formatAuditValue, formatFileSize } from "@/lib/labels";
+import { useEntityTimeline, type TimelineEntity } from "@/lib/queries/timeline";
+import {
+  AUDIT_ACTION_LABELS,
+  ENTITY_NOUNS,
+  FIELD_LABELS,
+  activityTypeLabels,
+  formatAuditValue,
+  formatFileSize,
+} from "@/lib/labels";
 import type { TimelineItem } from "@/lib/types";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { useEntityNames } from "./use-entity-names";
 
-const Line = ({ item }: { item: TimelineItem }) => {
+const Line = ({
+  item,
+  resolveName,
+}: {
+  item: TimelineItem;
+  resolveName: (id: string) => string | undefined;
+}) => {
   if (item.kind === "ACTIVITY") {
     return (
       <>
@@ -72,7 +86,8 @@ const Line = ({ item }: { item: TimelineItem }) => {
           <ul className="space-y-0.5">
             {Object.entries(item.payload.changes).map(([field, change]) => (
               <li key={field} className="text-xs text-muted-foreground">
-                {FIELD_LABELS[field] ?? field}: {formatAuditValue(field, change.from)} → {formatAuditValue(field, change.to)}
+                {FIELD_LABELS[field] ?? field}: {formatAuditValue(field, change.from, resolveName)} →{" "}
+                {formatAuditValue(field, change.to, resolveName)}
               </li>
             ))}
           </ul>
@@ -82,8 +97,17 @@ const Line = ({ item }: { item: TimelineItem }) => {
   );
 };
 
-export const UnifiedTimeline = ({ clientId, limit }: { clientId: string; limit?: number }) => {
-  const { data: items, isLoading, isError } = useClientTimeline(clientId, limit);
+export const UnifiedTimeline = ({
+  entityType,
+  entityId,
+  limit,
+}: {
+  entityType: TimelineEntity;
+  entityId: string;
+  limit?: number;
+}) => {
+  const { data: items, isLoading, isError } = useEntityTimeline(entityType, entityId, limit);
+  const resolveName = useEntityNames();
 
   if (isLoading) {
     return (
@@ -108,7 +132,8 @@ export const UnifiedTimeline = ({ clientId, limit }: { clientId: string; limit?:
           </EmptyMedia>
           <EmptyTitle>Nada por aqui ainda</EmptyTitle>
           <EmptyDescription>
-            Atividades, alterações, comentários e arquivos deste lead aparecem juntos aqui.
+            Atividades, alterações, comentários e arquivos deste {ENTITY_NOUNS[entityType]} aparecem
+            juntos aqui.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -119,7 +144,7 @@ export const UnifiedTimeline = ({ clientId, limit }: { clientId: string; limit?:
     <ol className="space-y-3">
       {items.map((item) => (
         <li key={`${item.kind}-${item.id}`} className="flex gap-3 border-b pb-3 last:border-0">
-          <Line item={item} />
+          <Line item={item} resolveName={resolveName} />
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
             {format(parseISO(item.at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
           </span>

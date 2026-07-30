@@ -12,14 +12,14 @@ import { useMembers } from "@/lib/queries/members";
 import { formatCurrency } from "@/lib/labels";
 import type { Activity } from "@/lib/types";
 import { useOrgDeals } from "@/lib/queries/deals";
-import { useClientActivities } from "./use-client-activities";
+import { useActivities } from "@/lib/queries/activities";
 import { LeadHeader } from "./lead-header";
 import { InterestProperties } from "./interest-properties";
-import { ActivityTimeline } from "./activity-timeline";
-import { UnifiedTimeline } from "./unified-timeline";
-import { AuditFeed } from "./audit-feed";
-import { CommentFeed } from "./comment-feed";
-import { AttachmentsPanel } from "./attachments-panel";
+import { ActivityTimeline } from "@/components/app/activity-timeline";
+import { UnifiedTimeline } from "@/components/app/unified-timeline";
+import { AuditFeed } from "@/components/app/audit-feed";
+import { CommentFeed } from "@/components/app/comment-feed";
+import { AttachmentsPanel } from "@/components/app/attachments-panel";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ export default function ClientProfilePage() {
   // continua true para sempre, prendendo a página em skeleton
   const { data: client, isLoading } = useClient(id);
   const { deals, isLoading: loadingDeals } = useOrgDeals();
-  const { data: activities, isLoading: loadingActivities } = useClientActivities(id);
+  const { data: activities, isLoading: loadingActivities } = useActivities({ clientId: id });
   const { data: properties, isLoading: loadingProperties } = useProperties();
   const { data: members } = useMembers();
   const owner = members?.find((member) => member.userId === client?.ownerId) ?? null;
@@ -202,7 +202,7 @@ export default function ClientProfilePage() {
                   <CardTitle>Linha do tempo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <UnifiedTimeline clientId={client.id} limit={8} />
+                  <UnifiedTimeline entityType="CLIENT" entityId={client.id} limit={8} />
                 </CardContent>
               </Card>
             </div>

@@ -1,6 +1,24 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useActiveOrganization } from "@/lib/auth-client";
 import type { Activity, ActivityType } from "@/lib/types";
+
+/**
+ * Atividades de um lead ou de um negócio. `enabled` amarrado ao vínculo: sem ele a API devolveria a
+ * agenda inteira da imobiliária dentro da tela de um registro só.
+ */
+export const useActivities = (filters: { clientId?: string; dealId?: string }) => {
+  const { data: org } = useActiveOrganization();
+  const linked = filters.clientId ?? filters.dealId;
+  return useQuery({
+    queryKey: ["activities", org?.id, filters],
+    queryFn: async () => {
+      const { data } = await api.get<Activity[]>("/activities", { params: filters });
+      return data;
+    },
+    enabled: !!org?.id && !!linked,
+  });
+};
 
 export type ActivityInput = {
   type: ActivityType;
