@@ -464,6 +464,37 @@ describe("nutrir com negócios abertos", () => {
     expect(res.json().error.code).toBe("INVALID_LOST_STAGE");
   });
 
+  // o cenário que justifica a tarefa: validar tudo antes de escrever qualquer coisa. Sem este teste,
+  // mover o fechamento para dentro do loop de validação "por conveniência" passaria despercebido.
+  it("com dois negócios, falha na validação do segundo não fecha o primeiro (422)", async () => {
+    const client = await createClient("Lead com dois negócios");
+    const primeiro = await createDeal(client.id, "Apartamento válido");
+    const segundo = await createDeal(client.id, "Casa com estágio errado");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "ADIADO",
+        deals: [
+          { dealId: primeiro.id, action: "CLOSE_LOST", lostStageId },
+          { dealId: segundo.id, action: "CLOSE_LOST", lostStageId: openStageId },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("INVALID_LOST_STAGE");
+
+    const primeiroIntacto = await prisma.deal.findUniqueOrThrow({ where: { id: primeiro.id } });
+    expect(primeiroIntacto.stageId).toBe(openStageId);
+    expect(primeiroIntacto.lostReason).toBeNull();
+
+    const leadIntacto = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(leadIntacto.status).toBe(ClientStatus.ACTIVE);
+  });
+
   it("negócio já perdido não precisa de decisão", async () => {
     const client = await createClient("Lead com negócio já perdido");
     const deal = await createDeal(client.id, "Negócio antigo");
