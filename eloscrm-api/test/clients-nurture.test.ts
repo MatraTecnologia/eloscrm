@@ -671,6 +671,119 @@ describe("POST /clients/:id/reactivate", () => {
     expect(res.json().error.code).toBe("DEAL_NOT_LOST");
   });
 
+  // a mesma invariante da Task 5: validar tudo antes de escrever qualquer coisa. Os dois testes de
+  // 422 acima usam um único reopenDealIds e nem chegam a começar o loop de escrita — este aqui prova
+  // que um negócio válido no início da lista fica intacto quando um posterior falha na validação.
+  it("com dois negócios marcados, falha na validação do segundo não reabre o primeiro (422)", async () => {
+    const client = await createClient("Lead com dois negócios perdidos");
+    const dealRes1 = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Negócio perdido válido", pipelineId, stageId: openStageId },
+    });
+    const primeiro = dealRes1.json() as { id: string };
+    const dealRes2 = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: client.id, title: "Negócio perdido também", pipelineId, stageId: openStageId },
+    });
+    const segundo = dealRes2.json() as { id: string };
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "ADIADO",
+        deals: [
+          { dealId: primeiro.id, action: "CLOSE_LOST", lostStageId },
+          { dealId: segundo.id, action: "CLOSE_LOST", lostStageId },
+        ],
+      },
+    });
+
+    const outro = await createClient("Lead vizinho com negócio alheio aberto");
+    const dealResAlheio = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId: outro.id, title: "Negócio alheio aberto", pipelineId, stageId: openStageId },
+    });
+    const alheio = dealResAlheio.json() as { id: string };
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: { reopenDealIds: [primeiro.id, alheio.id] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DEAL_NOT_LOST");
+
+    const primeiroIntacto = await prisma.deal.findUniqueOrThrow({ where: { id: primeiro.id } });
+    expect(primeiroIntacto.stageId).toBe(lostStageId);
+
+    const leadIntacto = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(leadIntacto.status).toBe(ClientStatus.NURTURING);
+  });
+
+  it("recusa reabrir quando o pipeline do negócio não tem estágio aberto (422)", async () => {
+    const pipelineRes = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: {
+        name: `Pipeline sem estágio aberto ${stamp}`,
+        stages: [
+          { name: "Ganho", isWon: true },
+          { name: "Perdido", isLost: true },
+        ],
+      },
+    });
+    const semAberto = pipelineRes.json() as {
+      id: string;
+      stages: { id: string; isLost: boolean }[];
+    };
+    const semAbertoLostStageId = semAberto.stages.find((s) => s.isLost)!.id;
+
+    const client = await createClient("Lead em pipeline sem estágio aberto");
+    const dealRes = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: {
+        clientId: client.id,
+        title: "Negócio sem estágio aberto para voltar",
+        pipelineId: semAberto.id,
+        stageId: semAbertoLostStageId,
+      },
+    });
+    const deal = dealRes.json() as { id: string };
+
+    // o negócio já nasce perdido (fora do filtro de "aberto"), então nutrir sem decisão sobre ele é válido
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO" },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/reactivate`,
+      headers: { cookie },
+      payload: { reopenDealIds: [deal.id] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("NO_OPEN_STAGE");
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).status).toBe(
+      ClientStatus.NURTURING,
+    );
+  });
+
   it("não reativa lead de outra organização (404)", async () => {
     const { cookie: cookieC } = await signUpWithOrg(
       app,
