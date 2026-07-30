@@ -46,14 +46,14 @@ export default function DashboardPage() {
           isLoading={loading}
         />
         <StatCard
-          label="Negócios em aberto"
+          label="Em aberto"
           value={stats?.kpis.openDeals}
           icon={Handshake}
           color="var(--chart-4)"
           isLoading={loading}
         />
         <StatCard
-          label="Negócios fechados"
+          label="Fechados"
           value={stats?.kpis.wonDeals}
           icon={CircleCheck}
           color="var(--chart-3)"
