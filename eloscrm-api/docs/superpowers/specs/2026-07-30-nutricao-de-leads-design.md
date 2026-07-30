@@ -313,4 +313,27 @@ Dois planos sequenciais, pela mesma linha que separa os dois projetos do repo:
   `app/(app)/agenda/page.tsx` e `app/(app)/dashboard/recent-activities-card.tsx` ainda filtram só por
   `activity.dueAt` — ficam em branco, sem erro, até o Plano B acompanhar.
 
-> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 17:13 (-03)
+---
+
+## 8. Débitos conhecidos do Plano A
+
+Achados da revisão final que não bloqueiam o merge, registrados para não virarem descoberta futura:
+
+- **Sem `$transaction` nas escritas múltiplas.** `nurture` faz N `deals.update` + `updateNurtureState`
+  + audit fora de transação; `reactivate` idem. A validação-antes-de-escrever cobre o caso realista
+  (entrada inválida); uma falha de infra no meio deixaria negócios fechados com o lead ainda `ACTIVE`.
+  Envolver chamadas de service em `$transaction` seria refatoração maior que o ganho.
+- **`PATCH` grava campos de nutrição em lead `ACTIVE`.** O dado é inerte — agenda, listagem e painel
+  filtram por `status = NURTURING` primeiro, e as duas transições sobrescrevem os quatro campos. Mas
+  `GET /clients` devolve o objeto inteiro, então a UI poderia renderizar "retomar em" num lead ativo.
+- **`overdue` é ignorado em silêncio com `status=ALL`**, não só em `ACTIVE`. É leitura defensável da
+  §3.3, mas não devolve erro nem aviso.
+- **`listClientsQuerySchema` fixa `["ACTIVE","NURTURING","ALL"]` na mão** em vez de derivar de
+  `ClientStatus`, ao contrário de `source`/`temperature`. Quando o `DESCARTADO` da §2 chegar, será
+  gravável e não consultável.
+- **`note: z.string().min(1)`** recusa `""` com 422 — o textarea vazio do diálogo do Plano B tem que
+  ser omitido do payload, não enviado vazio.
+- **`deals` tem `.max(50)`**: um lead com mais de 50 negócios abertos torna `DEALS_NOT_COVERED`
+  insatisfazível e não pode ser nutrido pela API.
+
+> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 17:20 (-03)
