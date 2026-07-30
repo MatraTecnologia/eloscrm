@@ -4,6 +4,9 @@ import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from "./c
 
 export const listClients = (orgId: string, filters: ListClientsQuery) => {
   const where: Prisma.ClientWhereInput = { organizationId: orgId };
+  if (filters.status !== "ALL") where.status = filters.status;
+  // vencido só faz sentido dentro da nutrição: em ACTIVE/ALL o campo é nulo e o filtro esvaziaria a lista
+  if (filters.overdue && filters.status === "NURTURING") where.nurtureUntil = { lte: new Date() };
   if (filters.source) where.source = filters.source;
   if (filters.ownerId) where.ownerId = filters.ownerId;
   if (filters.temperature) where.temperature = filters.temperature;

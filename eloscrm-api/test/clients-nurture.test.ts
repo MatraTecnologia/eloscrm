@@ -103,3 +103,88 @@ describe("PATCH de cliente e o estado de nutrição", () => {
     expect(res.json().nurtureNote).toBeNull();
   });
 });
+
+describe("listagem de clientes por status", () => {
+  let ativo = { id: "", name: "" };
+  let nutridoVencido = { id: "", name: "" };
+  let nutridoFuturo = { id: "", name: "" };
+  let nutridoSemData = { id: "", name: "" };
+
+  beforeAll(async () => {
+    ativo = await createClient(`Ativo ${stamp}`);
+    nutridoVencido = await createClient(`Vencido ${stamp}`);
+    nutridoFuturo = await createClient(`Futuro ${stamp}`);
+    nutridoSemData = await createClient(`Sem data ${stamp}`);
+
+    await prisma.client.update({
+      where: { id: nutridoVencido.id },
+      data: { status: ClientStatus.NURTURING, nurtureUntil: new Date("2020-01-01T00:00:00.000Z") },
+    });
+    await prisma.client.update({
+      where: { id: nutridoFuturo.id },
+      data: { status: ClientStatus.NURTURING, nurtureUntil: new Date("2099-01-01T00:00:00.000Z") },
+    });
+    await prisma.client.update({
+      where: { id: nutridoSemData.id },
+      data: { status: ClientStatus.NURTURING },
+    });
+  });
+
+  const list = async (query: string) => {
+    const res = await app.inject({ method: "GET", url: `/v1/clients${query}`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    return (res.json() as { id: string }[]).map((c) => c.id);
+  };
+
+  it("sem filtro devolve só os ativos", async () => {
+    const ids = await list("");
+    expect(ids).toContain(ativo.id);
+    expect(ids).not.toContain(nutridoVencido.id);
+    expect(ids).not.toContain(nutridoFuturo.id);
+    expect(ids).not.toContain(nutridoSemData.id);
+  });
+
+  it("status=NURTURING devolve só os nutridos", async () => {
+    const ids = await list("?status=NURTURING");
+    expect(ids).not.toContain(ativo.id);
+    expect(ids).toContain(nutridoVencido.id);
+    expect(ids).toContain(nutridoFuturo.id);
+    expect(ids).toContain(nutridoSemData.id);
+  });
+
+  it("status=ALL devolve os dois", async () => {
+    const ids = await list("?status=ALL");
+    expect(ids).toContain(ativo.id);
+    expect(ids).toContain(nutridoFuturo.id);
+  });
+
+  it("overdue=true traz só os vencidos, e não os sem data", async () => {
+    const ids = await list("?status=NURTURING&overdue=true");
+    expect(ids).toContain(nutridoVencido.id);
+    expect(ids).not.toContain(nutridoFuturo.id);
+    expect(ids).not.toContain(nutridoSemData.id);
+  });
+
+  // "false" é string com valor booleano true em JS; z.coerce.boolean() aqui devolveria todo mundo
+  // como vencido. O parse é explícito por causa disso.
+  it("overdue=false não filtra nada", async () => {
+    const ids = await list("?status=NURTURING&overdue=false");
+    expect(ids).toContain(nutridoFuturo.id);
+    expect(ids).toContain(nutridoSemData.id);
+  });
+
+  it("busca por nome continua funcionando junto do status", async () => {
+    const ids = await list(`?status=NURTURING&q=Vencido ${stamp}`);
+    expect(ids).toEqual([nutridoVencido.id]);
+  });
+
+  it("GET /clients/:id de lead nutrido continua 200", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/v1/clients/${nutridoFuturo.id}`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe(ClientStatus.NURTURING);
+  });
+});

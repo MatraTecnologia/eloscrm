@@ -37,6 +37,13 @@ export const listClientsQuerySchema = z.object({
   q: z.string().optional(),
   temperature: z.enum(LeadTemperature).optional(),
   tag: z.string().optional(),
+  // default ACTIVE: a listagem é a lista de trabalho e o lead em nutrição não pertence a ela
+  status: z.enum(["ACTIVE", "NURTURING", "ALL"]).default("ACTIVE"),
+  // z.coerce.boolean() leria a string "false" como true — todo mundo viraria vencido
+  overdue: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 export type CreateClientInput = z.infer<typeof createClientSchema>;
