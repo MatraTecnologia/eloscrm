@@ -2,6 +2,14 @@ export type ClientSource = "SITE" | "INSTAGRAM" | "INDICACAO" | "WHATSAPP" | "OU
 export type ActivityType = "CALL" | "VISIT" | "PROPOSAL" | "NOTE";
 export type PropertyStatus = "DISPONIVEL" | "RESERVADO" | "VENDIDO" | "INATIVO";
 export type LeadTemperature = "FRIO" | "MORNO" | "QUENTE";
+export type ClientStatus = "ACTIVE" | "NURTURING";
+export type NurtureReason =
+  | "SEM_ORCAMENTO"
+  | "ADIADO"
+  | "SEM_RESPOSTA"
+  | "COMPROU_COM_OUTRO"
+  | "SO_PESQUISANDO"
+  | "OUTRO";
 
 export type Client = {
   id: string;
@@ -18,6 +26,11 @@ export type Client = {
   interestType: string | null;
   budgetMin: string | null;
   budgetMax: string | null;
+  status: ClientStatus;
+  nurtureReason: NurtureReason | null;
+  nurtureNote: string | null;
+  nurtureUntil: string | null;
+  nurturedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -93,7 +106,15 @@ export type Property = {
 };
 
 export type DashboardStats = {
-  kpis: { totalClients: number; totalDeals: number; openDeals: number; wonDeals: number; openValue: number };
+  kpis: {
+    totalClients: number;
+    totalDeals: number;
+    openDeals: number;
+    wonDeals: number;
+    openValue: number;
+    nurturing: number;
+    nurtureDue: number;
+  };
   funnel: { name: string; total: number }[];
   bySource: Record<ClientSource, number>;
 };
@@ -178,3 +199,17 @@ export type TimelineItem =
       at: string;
       payload: { filename: string; contentType: string; size: number; uploadedByName: string };
     };
+
+// /v1/agenda passou a ter duas fontes e devolve uma união discriminada, no mesmo formato do
+// TimelineItem. `at` é o dueAt da atividade ou o nurtureUntil do lead a retomar.
+export type NurturePayload = {
+  clientId: string;
+  clientName: string;
+  phone: string | null;
+  reason: NurtureReason | null;
+  note: string | null;
+};
+
+export type AgendaItem =
+  | { kind: "ACTIVITY"; id: string; at: string; payload: Activity }
+  | { kind: "NURTURE"; id: string; at: string; payload: NurturePayload };

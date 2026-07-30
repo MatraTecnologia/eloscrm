@@ -3,6 +3,8 @@ import type {
   AuditAction,
   AuditEntity,
   ClientSource,
+  ClientStatus,
+  NurtureReason,
   PropertyStatus,
   LeadTemperature,
 } from "./types";
@@ -33,6 +35,20 @@ export const leadTemperatureLabels: Record<LeadTemperature, string> = {
   FRIO: "Frio",
   MORNO: "Morno",
   QUENTE: "Quente",
+};
+
+export const clientStatusLabels: Record<ClientStatus, string> = {
+  ACTIVE: "Ativo",
+  NURTURING: "Em nutrição",
+};
+
+export const nurtureReasonLabels: Record<NurtureReason, string> = {
+  SEM_ORCAMENTO: "Orçamento não fecha",
+  ADIADO: "Vai comprar mais para frente",
+  SEM_RESPOSTA: "Sem resposta",
+  COMPROU_COM_OUTRO: "Comprou com outro",
+  SO_PESQUISANDO: "Só pesquisando",
+  OUTRO: "Outro motivo",
 };
 
 // Telefone é persistido em E.164 (+5543998414904) e só formatado na exibição/digitação.
@@ -128,6 +144,9 @@ export const FIELD_LABELS: Record<string, string> = {
   interestType: "Tipo de interesse",
   budgetMin: "Orçamento mínimo",
   budgetMax: "Orçamento máximo",
+  nurtureReason: "Motivo da nutrição",
+  nurtureNote: "Detalhe da nutrição",
+  nurtureUntil: "Retomar em",
 };
 
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
@@ -147,6 +166,8 @@ export const formatAuditValue = (
   if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
   if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);
+  if (field === "status") return clientStatusLabels[value as ClientStatus] ?? String(value);
+  if (field === "nurtureReason") return nurtureReasonLabels[value as NurtureReason] ?? String(value);
   if (field === "value") return formatCurrency(value as string);
   if (ID_FIELDS.has(field) && typeof value === "string") return resolveName?.(value) ?? "(removido)";
   return String(value);
