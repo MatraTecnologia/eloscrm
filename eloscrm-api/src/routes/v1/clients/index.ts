@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { AuditEntity } from "../../../generated/prisma/client.js";
 import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
 import { actorOf } from "../../../lib/actor.js";
@@ -36,7 +37,7 @@ const clientsRoutes = async (app: FastifyInstance) => {
     const query = timelineQuerySchema.parse(request.query);
     // getById primeiro: sem ele, cliente de outra org devolveria lista vazia em vez de 404
     await service.getById(request.orgId!, id);
-    return timeline.forClient(request.orgId!, id, query);
+    return timeline.forEntity(request.orgId!, AuditEntity.CLIENT, id, query);
   });
 
   app.patch("/:id", async (request) => {
