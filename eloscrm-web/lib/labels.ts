@@ -1,3 +1,5 @@
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import type {
   ActivityType,
   AuditAction,
@@ -147,11 +149,15 @@ export const FIELD_LABELS: Record<string, string> = {
   nurtureReason: "Motivo da nutrição",
   nurtureNote: "Detalhe da nutrição",
   nurtureUntil: "Retomar em",
+  nurturedAt: "Em nutrição desde",
 };
 
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
 // `resolveName` (membros, imóveis e clientes da org); id que não resolve é registro já removido.
 const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
+
+// Datas chegam do audit como ISO; sem isto o histórico mostra 2026-07-21T02:59:59.999Z na tela
+const DATE_FIELDS = new Set(["dueAt", "doneAt", "nurtureUntil", "nurturedAt"]);
 
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
 // Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
@@ -169,6 +175,9 @@ export const formatAuditValue = (
   if (field === "status") return clientStatusLabels[value as ClientStatus] ?? String(value);
   if (field === "nurtureReason") return nurtureReasonLabels[value as NurtureReason] ?? String(value);
   if (field === "value") return formatCurrency(value as string);
+  if (DATE_FIELDS.has(field) && typeof value === "string") {
+    return format(parseISO(value), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  }
   if (ID_FIELDS.has(field) && typeof value === "string") return resolveName?.(value) ?? "(removido)";
   return String(value);
 };
