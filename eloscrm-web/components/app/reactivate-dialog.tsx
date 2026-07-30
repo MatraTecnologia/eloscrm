@@ -31,10 +31,15 @@ export const ReactivateDialog = ({
   onOpenChange?: (open: boolean) => void;
   onDone?: () => void;
 }) => {
-  // mesma solução do NurtureDialog: modo trigger é descontrolado, modo controlado usa o `open` de fora
+  // reabrir negócio é decisão consciente do corretor, nunca default: começa sempre vazio
+  const [reopenIds, setReopenIds] = useState<string[]>([]);
+
+  // mesma solução do NurtureDialog: o pai não desmonta no modo trigger, então reabrir sem resetar
+  // deixaria negócios pré-marcados de uma sessão anterior do diálogo
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
   const setOpen = (next: boolean) => {
+    if (next) setReopenIds([]);
     if (open === undefined) setInternalOpen(next);
     onOpenChange?.(next);
   };
@@ -42,9 +47,6 @@ export const ReactivateDialog = ({
   const reactivate = useReactivateClient();
   const { deals, isLoading: loadingDeals } = useOrgDeals();
   const lostDeals = deals.filter((deal) => deal.clientId === client.id && deal.isLost);
-
-  // reabrir negócio é decisão consciente do corretor, nunca default: começa sempre vazio
-  const [reopenIds, setReopenIds] = useState<string[]>([]);
 
   const submit = async () => {
     const input: ReactivateInput = reopenIds.length ? { reopenDealIds: reopenIds } : {};

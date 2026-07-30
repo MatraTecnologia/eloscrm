@@ -28,7 +28,7 @@ import { usePipelines } from "@/lib/queries/pipelines";
 import { useNurtureClient, type DealDecision, type NurtureInput } from "@/lib/queries/clients";
 import type { Client, NurtureReason } from "@/lib/types";
 
-const REASONS: NurtureReason[] = [
+export const REASONS: NurtureReason[] = [
   "ADIADO", "SEM_ORCAMENTO", "SEM_RESPOSTA", "COMPROU_COM_OUTRO", "SO_PESQUISANDO", "OUTRO",
 ];
 
@@ -59,9 +59,25 @@ export const NurtureDialog = ({
 }) => {
   // modo trigger é descontrolado (sem `open`/`onOpenChange` de fora): o estado interno cobre esse
   // caso, e o modo controlado (Task 5, sem trigger) usa o `open` recebido em vez dele
+  const [reason, setReason] = useState<NurtureReason>("ADIADO");
+  const [note, setNote] = useState("");
+  const [until, setUntil] = useState("");
+  const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  // congelado na abertura, não no módulo: evita `new Date()` impuro dentro do .map() dos presets
+  const [today, setToday] = useState(() => new Date());
+
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
+  // o componente pai não desmonta no modo trigger — só o conteúdo do portal. Sem resetar aqui, um
+  // rascunho antigo (inclusive um CLOSE_LOST já cancelado) sobrevive e é reenviado na reabertura
   const setOpen = (next: boolean) => {
+    if (next) {
+      setReason("ADIADO");
+      setNote("");
+      setUntil("");
+      setDecisions({});
+      setToday(new Date());
+    }
     if (open === undefined) setInternalOpen(next);
     onOpenChange?.(next);
   };
@@ -69,11 +85,6 @@ export const NurtureDialog = ({
   const nurture = useNurtureClient();
   const { deals, isLoading: loadingDeals } = useOrgDeals();
   const { data: pipelines } = usePipelines();
-
-  const [reason, setReason] = useState<NurtureReason>("ADIADO");
-  const [note, setNote] = useState("");
-  const [until, setUntil] = useState("");
-  const [decisions, setDecisions] = useState<Record<string, Decision>>({});
 
   const openDeals = deals.filter((deal) => deal.clientId === client.id && deal.isOpen);
 
@@ -144,7 +155,7 @@ export const NurtureDialog = ({
             <Label>Retomar em</Label>
             <div className="flex flex-wrap gap-2">
               {PRESETS.map((preset) => {
-                const value = format(addDays(new Date(), preset.days), "yyyy-MM-dd");
+                const value = format(addDays(today, preset.days), "yyyy-MM-dd");
                 return (
                   <Button
                     key={preset.label}
