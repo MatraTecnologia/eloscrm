@@ -254,4 +254,50 @@ describe("anexos", () => {
     const afterDelete = await fetch(url);
     expect(afterDelete.ok).toBe(false);
   });
+
+  it("apaga anexo do bucket e do banco ao apagar a atividade dona diretamente", async () => {
+    const createdActivity = await app.inject({
+      method: "POST",
+      url: "/v1/activities",
+      headers: { cookie },
+      payload: { type: "CALL", description: "Ligação de retorno", clientId },
+    });
+    const activityId = createdActivity.json().id;
+
+    const asked = await app.inject({
+      method: "POST",
+      url: "/v1/attachments/upload-url",
+      headers: { cookie },
+      payload: {
+        entityType: "ACTIVITY",
+        entityId: activityId,
+        filename: "audio-ligacao.pdf",
+        contentType: "application/pdf",
+        size: Buffer.byteLength(BODY),
+      },
+    });
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+    await app.inject({ method: "POST", url: `/v1/attachments/${attachmentId}/confirm`, headers: { cookie } });
+
+    const link = await app.inject({
+      method: "GET",
+      url: `/v1/attachments/${attachmentId}/download-url`,
+      headers: { cookie },
+    });
+    const { url } = link.json();
+
+    const removedActivity = await app.inject({
+      method: "DELETE",
+      url: `/v1/activities/${activityId}`,
+      headers: { cookie },
+    });
+    expect(removedActivity.statusCode).toBe(204);
+
+    const row = await prisma.attachment.findUnique({ where: { id: attachmentId } });
+    expect(row).toBeNull();
+
+    const afterDelete = await fetch(url);
+    expect(afterDelete.ok).toBe(false);
+  });
 });
