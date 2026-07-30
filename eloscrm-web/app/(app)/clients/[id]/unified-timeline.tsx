@@ -4,17 +4,11 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FileText, History, MessageSquare } from "lucide-react";
 import { useClientTimeline } from "@/lib/queries/timeline";
-import { AUDIT_ACTION_LABELS, FIELD_LABELS, activityTypeLabels, formatFileSize } from "@/lib/labels";
+import { AUDIT_ACTION_LABELS, FIELD_LABELS, activityTypeLabels, formatAuditValue, formatFileSize } from "@/lib/labels";
 import type { TimelineItem } from "@/lib/types";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-
-const showValue = (value: unknown) => {
-  if (value === null || value === undefined || value === "") return "—";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
-  return String(value);
-};
 
 const Line = ({ item }: { item: TimelineItem }) => {
   if (item.kind === "ACTIVITY") {
@@ -78,7 +72,7 @@ const Line = ({ item }: { item: TimelineItem }) => {
           <ul className="space-y-0.5">
             {Object.entries(item.payload.changes).map(([field, change]) => (
               <li key={field} className="text-xs text-muted-foreground">
-                {FIELD_LABELS[field] ?? field}: {showValue(change.from)} → {showValue(change.to)}
+                {FIELD_LABELS[field] ?? field}: {formatAuditValue(field, change.from)} → {formatAuditValue(field, change.to)}
               </li>
             ))}
           </ul>
