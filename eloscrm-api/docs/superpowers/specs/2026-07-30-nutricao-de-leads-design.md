@@ -164,6 +164,9 @@ graça, mas duplicaria a data em dois lugares — editar num e não no outro des
 
 - `totalClients` passa a contar **só ativos** — senão o KPI de leads cresce para sempre com gente que
   não está sendo trabalhada.
+- `bySource` (o donut de origem) também passa a contar só ativos. O teste atual já grava a invariante
+  `soma(bySource) === totalClients`; contar bases diferentes nos dois quebraria o painel de forma
+  silenciosa.
 - KPI novo: `nurturing` (total em nutrição) e `nurtureDue` (a retomar / vencidos).
 - `openDeals`, `openValue` e `funnel` **ficam como estão**. Se o corretor escolheu explicitamente
   manter o negócio no funil ao nutrir o lead, o negócio conta mesmo — o dashboard não pode contradizer
