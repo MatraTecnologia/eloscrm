@@ -9,6 +9,9 @@ let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
 let orgId = "";
+let pipelineId = "";
+let openStageId = "";
+let lostStageId = "";
 
 const createClient = async (name: string) => {
   const res = await app.inject({
@@ -23,6 +26,15 @@ const createClient = async (name: string) => {
 beforeAll(async () => {
   app = await makeApp();
   ({ cookie, orgId } = await signUpWithOrg(app, `nurture-${stamp}@eloscrm.test`, `nurture-${stamp}`));
+
+  const pipelines = await app.inject({ method: "GET", url: "/v1/pipelines", headers: { cookie } });
+  const pipeline = pipelines.json()[0] as {
+    id: string;
+    stages: { id: string; isWon: boolean; isLost: boolean; position: number }[];
+  };
+  pipelineId = pipeline.id;
+  openStageId = pipeline.stages.find((s) => !s.isWon && !s.isLost)!.id;
+  lostStageId = pipeline.stages.find((s) => s.isLost)!.id;
 });
 
 afterAll(async () => {
@@ -308,5 +320,167 @@ describe("POST /clients/:id/nurture", () => {
     });
 
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe("nutrir com negócios abertos", () => {
+  const createDeal = async (clientId: string, title: string) => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/deals",
+      headers: { cookie },
+      payload: { clientId, title, pipelineId, stageId: openStageId },
+    });
+    return res.json() as { id: string };
+  };
+
+  it("fecha como perdido e herda a nota como motivo", async () => {
+    const client = await createClient("Lead com negócio a fechar");
+    const deal = await createDeal(client.id, "Apartamento centro");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "SEM_ORCAMENTO",
+        note: "Não fecha em nada abaixo de 600k",
+        deals: [{ dealId: deal.id, action: "CLOSE_LOST", lostStageId }],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const closed = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(closed.stageId).toBe(lostStageId);
+    expect(closed.lostReason).toBe("Não fecha em nada abaixo de 600k");
+
+    const events = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: "DEAL", entityId: deal.id, action: "STAGE_CHANGED" },
+    });
+    expect(events).toHaveLength(1);
+  });
+
+  it("sem nota, o motivo do negócio vem do rótulo do reason", async () => {
+    const client = await createClient("Lead sem nota");
+    const deal = await createDeal(client.id, "Casa bairro alto");
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "COMPROU_COM_OUTRO",
+        deals: [{ dealId: deal.id, action: "CLOSE_LOST", lostStageId }],
+      },
+    });
+
+    const closed = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(closed.lostReason).toBe("Comprou com outro");
+  });
+
+  it("KEEP deixa o negócio onde está", async () => {
+    const client = await createClient("Lead com negócio mantido");
+    const deal = await createDeal(client.id, "Sala comercial");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO", deals: [{ dealId: deal.id, action: "KEEP" }] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const kept = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(kept.stageId).toBe(openStageId);
+    expect(kept.lostReason).toBeNull();
+  });
+
+  // a UI tem que mostrar a consequência; deixar passar em silêncio esconderia o efeito colateral
+  it("recusa quando um negócio aberto ficou de fora (422)", async () => {
+    const client = await createClient("Lead com negócio esquecido");
+    const deal = await createDeal(client.id, "Terreno beira-rio");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO" },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DEALS_NOT_COVERED");
+
+    const untouched = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(untouched.status).toBe(ClientStatus.ACTIVE);
+    expect((await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } })).stageId).toBe(openStageId);
+  });
+
+  it("recusa decisão sobre negócio que não é do lead (422)", async () => {
+    const client = await createClient("Lead alvo");
+    const outro = await createClient("Lead vizinho");
+    const dealDoOutro = await createDeal(outro.id, "Negócio do vizinho");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO", deals: [{ dealId: dealDoOutro.id, action: "KEEP" }] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DEAL_NOT_OPEN");
+  });
+
+  it("recusa CLOSE_LOST sem lostStageId (422)", async () => {
+    const client = await createClient("Lead sem estágio de perda");
+    const deal = await createDeal(client.id, "Cobertura");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO", deals: [{ dealId: deal.id, action: "CLOSE_LOST" }] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("INVALID_LOST_STAGE");
+  });
+
+  it("recusa lostStageId que não é estágio de perda (422)", async () => {
+    const client = await createClient("Lead com estágio errado");
+    const deal = await createDeal(client.id, "Kitnet");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "ADIADO",
+        deals: [{ dealId: deal.id, action: "CLOSE_LOST", lostStageId: openStageId }],
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("INVALID_LOST_STAGE");
+  });
+
+  it("negócio já perdido não precisa de decisão", async () => {
+    const client = await createClient("Lead com negócio já perdido");
+    const deal = await createDeal(client.id, "Negócio antigo");
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/deals/${deal.id}`,
+      headers: { cookie },
+      payload: { stageId: lostStageId },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: { reason: "ADIADO" },
+    });
+
+    expect(res.statusCode).toBe(200);
   });
 });
