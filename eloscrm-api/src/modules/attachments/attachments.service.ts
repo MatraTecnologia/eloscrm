@@ -1,6 +1,7 @@
 import type { AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { httpError, notFound } from "../../lib/http-error.js";
+import { isOrgManager } from "../../lib/org-roles.js";
 import {
   R2_PRIVATE_BUCKET,
   deleteFile,
@@ -96,8 +97,12 @@ export const downloadUrl = async (orgId: string, id: string) => {
   return { url, expiresIn: DOWNLOAD_EXPIRES_IN };
 };
 
-export const remove = async (orgId: string, id: string) => {
+export const remove = async (orgId: string, id: string, actor: Actor) => {
   const attachment = await getOwn(orgId, id);
+  // mesma regra do comentário: quem subiu mexe no que é dele, e gestor tira o que não presta
+  if (attachment.uploadedById !== actor.id && !(await isOrgManager(orgId, actor.id))) {
+    throw httpError(403, "FORBIDDEN", "Só quem enviou o arquivo ou um gestor pode removê-lo");
+  }
   // objeto primeiro: linha órfã é recuperável, objeto órfão em bucket privado é invisível para sempre
   await deleteFile(R2_PRIVATE_BUCKET, attachment.key);
   await repo.deleteAttachmentById(id);

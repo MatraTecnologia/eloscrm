@@ -11,6 +11,8 @@ import {
   useDeleteAttachment,
   useUploadAttachment,
 } from "@/lib/queries/attachments";
+import { useSession } from "@/lib/auth-client";
+import { useMembers } from "@/lib/queries/members";
 import { formatFileSize } from "@/lib/labels";
 import type { AuditEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,11 @@ export const AttachmentsPanel = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { data: attachments, isLoading, isError } = useAttachments(entityType, entityId);
+  const { data: session } = useSession();
+  const { data: members } = useMembers();
+  const myRole = members?.find((member) => member.userId === session?.user.id)?.role ?? null;
+  // a API deixa gestor remover anexo de qualquer um; corretor só mexe no que ele mesmo subiu
+  const canManage = myRole === "owner" || myRole === "admin";
   const upload = useUploadAttachment();
   const remove = useDeleteAttachment();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -124,19 +131,21 @@ export const AttachmentsPanel = ({
                 >
                   <Download className="size-3.5" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remover ${file.filename}`}
-                  disabled={remove.isPending}
-                  onClick={() =>
-                    remove.mutate(file.id, {
-                      onError: () => toast.error("Não foi possível remover o arquivo"),
-                    })
-                  }
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                {(file.uploadedById === session?.user.id || canManage) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remover ${file.filename}`}
+                    disabled={remove.isPending}
+                    onClick={() =>
+                      remove.mutate(file.id, {
+                        onError: () => toast.error("Não foi possível remover o arquivo"),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
               </div>
             </li>
           ))}
