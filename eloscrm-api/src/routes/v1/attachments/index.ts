@@ -35,7 +35,7 @@ const attachmentsRoutes = async (app: FastifyInstance) => {
 
   app.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    await service.remove(request.orgId!, id);
+    await service.remove(request.orgId!, id, actorOf(request));
     return reply.status(204).send();
   });
 };

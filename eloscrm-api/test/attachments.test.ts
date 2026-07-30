@@ -1,21 +1,37 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { makeApp } from "./helpers/app.js";
-import { signUpWithOrg } from "./helpers/session.js";
+import { asCookie, signUp, signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
 let cookieOrgB = "";
+let cookieColega = "";
+let orgId = "";
 let clientId = "";
 
 const BODY = "conteudo do contrato";
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ cookie } = await signUpWithOrg(app, `att-a-${stamp}@eloscrm.test`, `att-a-${stamp}`));
+  ({ cookie, orgId } = await signUpWithOrg(app, `att-a-${stamp}@eloscrm.test`, `att-a-${stamp}`));
   ({ cookie: cookieOrgB } = await signUpWithOrg(app, `att-b-${stamp}@eloscrm.test`, `att-b-${stamp}`));
+
+  // segundo membro da MESMA organização, com papel member, para provar a regra de autoria
+  cookieColega = await signUp(app, `att-c-${stamp}@eloscrm.test`);
+  const colega = await prisma.user.findFirst({ where: { email: `att-c-${stamp}@eloscrm.test` } });
+  await prisma.member.create({ data: { organizationId: orgId, userId: colega!.id, role: "member" } });
+  // set-active pelo endpoint, não por UPDATE na tabela: o cookieCache guarda a sessão por 60s no
+  // cookie, e mexer só no banco deixaria o guard lendo activeOrganizationId nulo
+  const ativou = await app.inject({
+    method: "POST",
+    url: "/api/auth/organization/set-active",
+    headers: { cookie: cookieColega },
+    payload: { organizationId: orgId },
+  });
+  cookieColega = ativou.headers["set-cookie"] ? asCookie(ativou.headers["set-cookie"]) : cookieColega;
 
   const created = await app.inject({
     method: "POST",
@@ -166,6 +182,88 @@ describe("anexos", () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().error.code).toBe("UPLOAD_TYPE_MISMATCH");
+  });
+
+  it("colega da mesma organização não remove anexo alheio (403)", async () => {
+    const asked = await askUpload("do-outro.pdf");
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+    await app.inject({ method: "POST", url: `/v1/attachments/${attachmentId}/confirm`, headers: { cookie } });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/attachments/${attachmentId}`,
+      headers: { cookie: cookieColega },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("FORBIDDEN");
+
+    // o objeto continua no bucket: recusa não pode ter apagado nada
+    const link = await app.inject({
+      method: "GET",
+      url: `/v1/attachments/${attachmentId}/download-url`,
+      headers: { cookie },
+    });
+    const still = await fetch(link.json().url);
+    expect(still.ok).toBe(true);
+  });
+
+  it("quem subiu remove o próprio anexo (204)", async () => {
+    const asked = await app.inject({
+      method: "POST",
+      url: "/v1/attachments/upload-url",
+      headers: { cookie: cookieColega },
+      payload: {
+        entityType: "CLIENT",
+        entityId: clientId,
+        filename: "meu-arquivo.pdf",
+        contentType: "application/pdf",
+        size: Buffer.byteLength(BODY),
+      },
+    });
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+    await app.inject({
+      method: "POST",
+      url: `/v1/attachments/${attachmentId}/confirm`,
+      headers: { cookie: cookieColega },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/attachments/${attachmentId}`,
+      headers: { cookie: cookieColega },
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("dono da imobiliária remove anexo de outro membro (204)", async () => {
+    const asked = await app.inject({
+      method: "POST",
+      url: "/v1/attachments/upload-url",
+      headers: { cookie: cookieColega },
+      payload: {
+        entityType: "CLIENT",
+        entityId: clientId,
+        filename: "do-colega.pdf",
+        contentType: "application/pdf",
+        size: Buffer.byteLength(BODY),
+      },
+    });
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+    await app.inject({
+      method: "POST",
+      url: `/v1/attachments/${attachmentId}/confirm`,
+      headers: { cookie: cookieColega },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/attachments/${attachmentId}`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(204);
   });
 
   it("não vaza anexo de outra organização", async () => {

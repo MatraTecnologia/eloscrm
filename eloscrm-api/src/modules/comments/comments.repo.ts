@@ -23,11 +23,3 @@ export const updateCommentById = (id: string, body: string) =>
   prisma.comment.update({ where: { id }, data: { body, editedAt: new Date() } });
 
 export const deleteCommentById = (id: string) => prisma.comment.delete({ where: { id } });
-
-export const findMemberRole = async (orgId: string, userId: string) => {
-  const member = await prisma.member.findFirst({
-    where: { organizationId: orgId, userId },
-    select: { role: true },
-  });
-  return member?.role ?? null;
-};
