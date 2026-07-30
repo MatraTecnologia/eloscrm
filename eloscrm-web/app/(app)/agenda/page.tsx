@@ -4,14 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { endOfDay, endOfMonth, format, parse, parseISO, startOfDay, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Snowflake, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAgenda } from "@/lib/queries/agenda";
 import { useDeleteActivity, useUpdateActivity } from "@/lib/queries/activities";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { activityTypeLabels } from "@/lib/labels";
+import { activityTypeLabels, nurtureReasonLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import type { Activity } from "@/lib/types";
+import type { Activity, AgendaItem } from "@/lib/types";
 import { ActivityIcon } from "@/components/app/activity-visuals";
 import { ActivityDialog } from "@/components/app/activity-dialog";
 import { Button } from "@/components/ui/button";
@@ -34,12 +34,11 @@ import {
 
 const DATE_FORMAT = "yyyy-MM-dd";
 
-const groupByDay = (activities: Activity[]) =>
-  activities.reduce<Record<string, Activity[]>>((acc, activity) => {
-    if (!activity.dueAt) return acc;
-    const day = format(parseISO(activity.dueAt), DATE_FORMAT);
+const groupByDay = (items: AgendaItem[]) =>
+  items.reduce<Record<string, AgendaItem[]>>((acc, item) => {
+    const day = format(parseISO(item.at), DATE_FORMAT);
     acc[day] = acc[day] ?? [];
-    acc[day].push(activity);
+    acc[day].push(item);
     return acc;
   }, {});
 
@@ -47,7 +46,7 @@ export default function AgendaPage() {
   const [from, setFrom] = useState(() => format(startOfMonth(new Date()), DATE_FORMAT));
   const [to, setTo] = useState(() => format(endOfMonth(new Date()), DATE_FORMAT));
 
-  const { data: activities, isLoading } = useAgenda({
+  const { data: items, isLoading } = useAgenda({
     from: startOfDay(parse(from, DATE_FORMAT, new Date())).toISOString(),
     to: endOfDay(parse(to, DATE_FORMAT, new Date())).toISOString(),
   });
@@ -59,7 +58,7 @@ export default function AgendaPage() {
   // "agora" congelado na montagem: chamar Date.now() no render torna o atraso instável entre renders
   const [now] = useState(() => Date.now());
 
-  const groups = Object.entries(groupByDay(activities ?? []));
+  const groups = Object.entries(groupByDay(items ?? []));
 
   const toggleDone = async (activity: Activity) => {
     try {
@@ -127,29 +126,62 @@ export default function AgendaPage() {
               ))}
 
             {!isLoading && groups.length === 0 && (
-              <p className="py-10 text-center text-muted-foreground">Nenhuma atividade no período.</p>
+              <p className="py-10 text-center text-muted-foreground">Nenhum compromisso no período.</p>
             )}
 
             {!isLoading &&
-              groups.map(([day, dayActivities]) => (
+              groups.map(([day, dayItems]) => (
                 <div key={day} className="space-y-2">
                   {/* first-letter e não capitalize: "24 de julho" não vira "24 De Julho" */}
                   <h2 className="font-medium first-letter:uppercase">
                     {format(parseISO(day), "dd 'de' MMMM", { locale: ptBR })}
                   </h2>
                   <div className="rounded-lg border divide-y">
-                    {dayActivities.map((activity) => {
+                    {dayItems.map((item) => {
+                      if (item.kind === "NURTURE") {
+                        const payload = item.payload;
+                        const overdue = new Date(item.at).getTime() < now;
+                        return (
+                          <div key={`${item.kind}-${item.id}`} className="flex items-center gap-3 p-3">
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                              <Snowflake className="size-3.5" />
+                            </span>
+                            <span className="w-12 shrink-0 text-sm text-muted-foreground">
+                              {format(parseISO(item.at), "HH:mm")}
+                            </span>
+                            <Badge variant="secondary">Nutrição</Badge>
+                            <Link
+                              href={`/clients/${payload.clientId}`}
+                              className="min-w-0 truncate text-sm hover:underline"
+                            >
+                              {payload.clientName}
+                            </Link>
+                            {payload.reason && (
+                              <span className="shrink-0 text-sm text-muted-foreground">
+                                {nurtureReasonLabels[payload.reason]}
+                              </span>
+                            )}
+                            {overdue && (
+                              <Badge variant="outline" className="shrink-0 border-destructive/20 bg-destructive/10 text-destructive">
+                                Atrasada
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      const activity = item.payload;
                       const done = !!activity.doneAt;
-                      const overdue = !done && new Date(activity.dueAt!).getTime() < now;
+                      const overdue = !done && new Date(item.at).getTime() < now;
                       return (
-                        <div key={activity.id} className="group flex items-center gap-3 p-3">
+                        <div key={`${item.kind}-${item.id}`} className="group flex items-center gap-3 p-3">
                           <Checkbox
                             checked={done}
                             onCheckedChange={() => toggleDone(activity)}
                             aria-label={done ? "Reabrir atividade" : "Concluir atividade"}
                           />
                           <span className="w-12 shrink-0 text-sm text-muted-foreground">
-                            {format(parseISO(activity.dueAt!), "HH:mm")}
+                            {format(parseISO(item.at), "HH:mm")}
                           </span>
                           <ActivityIcon type={activity.type} size="sm" />
                           <Badge variant="secondary">{activityTypeLabels[activity.type]}</Badge>

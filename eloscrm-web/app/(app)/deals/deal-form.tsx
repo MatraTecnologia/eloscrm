@@ -40,7 +40,7 @@ export const DealForm = ({
   const editing = !!deal;
   const create = useCreateDeal();
   const update = useUpdateDeal();
-  const { data: clients } = useClients();
+  const { data: clients } = useClients({ status: "ALL" });
   const { data: properties } = useProperties();
   const { data: members } = useMembers();
 

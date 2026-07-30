@@ -83,7 +83,7 @@ export const DealDetailDialog = ({
   nativeButton?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
-  const { data: clients } = useClients();
+  const { data: clients } = useClients({ status: "ALL" });
   const { data: members } = useMembers();
   const { data: properties } = useProperties();
 

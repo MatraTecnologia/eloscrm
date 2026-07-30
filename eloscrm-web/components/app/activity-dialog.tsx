@@ -54,7 +54,8 @@ export const ActivityDialog = ({
   const editing = !!activity;
   const create = useCreateActivity();
   const update = useUpdateActivity();
-  const { data: clients } = useClients();
+  // status: "ALL" — o corretor precisa poder registrar atividade num lead nutrido sem reativá-lo
+  const { data: clients } = useClients({ status: "ALL" });
   const { deals } = useOrgDeals();
 
   const [type, setType] = useState<ActivityType>(activity?.type ?? "CALL");
