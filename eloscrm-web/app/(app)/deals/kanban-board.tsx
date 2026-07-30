@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Settings2, Trash2, User } from "lucide-react";
+import { Building2, Plus, Settings2, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
 import { useClients } from "@/lib/queries/clients";
+import { useMembers } from "@/lib/queries/members";
+import { useProperties } from "@/lib/queries/properties";
 import { formatCurrency } from "@/lib/labels";
-import type { Deal, Pipeline } from "@/lib/types";
+import type { Deal, Pipeline, Stage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,19 +23,35 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { DealDialog } from "./deal-dialog";
+import { DealDetailDialog } from "./deal-detail-dialog";
+import { DealFormDialog } from "./deal-form-dialog";
+import { LostReasonDialog } from "./lost-reason-dialog";
 import { StageManagerDialog } from "./stage-manager-dialog";
 
 export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const { data: deals, isLoading } = useDeals(pipeline.id);
   const { data: clients } = useClients();
+  const { data: members } = useMembers();
+  const { data: properties } = useProperties();
   const move = useUpdateDeal();
   const remove = useDeleteDeal();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
+  // negócio arrastado para estágio de perda espera aqui até alguém dizer o motivo
+  const [pendingLoss, setPendingLoss] = useState<{ deal: Deal; stage: Stage } | null>(null);
 
   const stages = [...pipeline.stages].sort((a, b) => a.position - b.position);
   const clientNames = new Map((clients ?? []).map((c) => [c.id, c.name] as const));
+  const memberNames = new Map((members ?? []).map((m) => [m.userId, m.name] as const));
+  const propertyTitles = new Map((properties ?? []).map((p) => [p.id, p.title] as const));
+
+  const moveDeal = async (id: string, input: { stageId: string; lostReason?: string | null }) => {
+    try {
+      await move.mutateAsync({ id, input });
+    } catch {
+      toast.error("Não foi possível mover o negócio");
+    }
+  };
 
   const drop = async (stageId: string) => {
     setOverStage(null);
@@ -42,11 +60,17 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     if (!id) return;
     const deal = deals?.find((d) => d.id === id);
     if (!deal || deal.stageId === stageId) return;
-    try {
-      await move.mutateAsync({ id, input: { stageId } });
-    } catch {
-      toast.error("Não foi possível mover o negócio");
+
+    const target = stages.find((stage) => stage.id === stageId);
+    const from = stages.find((stage) => stage.id === deal.stageId);
+    if (target?.isLost) {
+      setPendingLoss({ deal, stage: target });
+      return;
     }
+    // saiu da perda: o motivo antigo deixaria o negócio reaberto carregando um "perdido porque…"
+    // que não vale mais. O texto continua no histórico.
+    const reopened = from?.isLost && deal.lostReason ? { lostReason: null } : {};
+    await moveDeal(id, { stageId, ...reopened });
   };
 
   const handleDelete = async (deal: Deal) => {
@@ -71,7 +95,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
               </Button>
             }
           />
-          <DealDialog
+          <DealFormDialog
             pipelineId={pipeline.id}
             stages={stages}
             trigger={
@@ -132,11 +156,13 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                 )}
                 {stageDeals.map((deal) => {
                   const clientName = clientNames.get(deal.clientId);
+                  const ownerName = deal.ownerId ? memberNames.get(deal.ownerId) : null;
+                  const propertyTitle = deal.propertyId ? propertyTitles.get(deal.propertyId) : null;
                   return (
-                    // o botão de excluir fica fora do trigger do DealDialog: aninhar um trigger
-                    // dentro do outro faria o clique na lixeira abrir também o dialog de edição
+                    // o botão de excluir fica fora do trigger do DealDetailDialog: aninhar um trigger
+                    // dentro do outro faria o clique na lixeira abrir também o modal do negócio
                     <div key={deal.id} className="group/card relative">
-                      <DealDialog
+                      <DealDetailDialog
                         pipelineId={pipeline.id}
                         stages={stages}
                         deal={deal}
@@ -158,9 +184,36 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                                 <span className="truncate">{clientName}</span>
                               </div>
                             )}
-                            {/* != null e não truthy: valor 0 é um valor definido, só ausente é undefined */}
-                            {deal.value != null && (
-                              <div className="mt-1 text-xs font-medium">{formatCurrency(deal.value)}</div>
+                            {propertyTitle && (
+                              <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                <Building2 className="size-3 shrink-0" />
+                                <span className="truncate">{propertyTitle}</span>
+                              </div>
+                            )}
+                            <div className="mt-1.5 flex items-center justify-between gap-2">
+                              {/* != null e não truthy: valor 0 é um valor definido, só ausente é undefined */}
+                              <span className="text-xs font-medium">
+                                {deal.value != null ? formatCurrency(deal.value) : ""}
+                              </span>
+                              {ownerName && (
+                                // só as iniciais: o nome inteiro empurraria o valor para fora do card
+                                <span
+                                  title={ownerName}
+                                  className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground"
+                                >
+                                  {ownerName
+                                    .split(" ")
+                                    .slice(0, 2)
+                                    .map((part) => part[0])
+                                    .join("")
+                                    .toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            {stage.isLost && deal.lostReason && (
+                              <p className="mt-1.5 line-clamp-2 border-t pt-1.5 text-xs text-muted-foreground">
+                                {deal.lostReason}
+                              </p>
                             )}
                           </div>
                         }
@@ -202,6 +255,21 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
           );
         })}
       </div>
+
+      {pendingLoss && (
+        <LostReasonDialog
+          open
+          dealTitle={pendingLoss.deal.title}
+          stageName={pendingLoss.stage.name}
+          saving={move.isPending}
+          onCancel={() => setPendingLoss(null)}
+          onConfirm={async (reason) => {
+            const { deal, stage } = pendingLoss;
+            setPendingLoss(null);
+            await moveDeal(deal.id, { stageId: stage.id, lostReason: reason });
+          }}
+        />
+      )}
     </div>
   );
 };

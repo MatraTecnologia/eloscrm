@@ -42,10 +42,12 @@ const toLocalInput = (iso: string | null | undefined) =>
 export const ActivityDialog = ({
   activity,
   defaultClientId,
+  defaultDealId,
   trigger,
 }: {
   activity?: Activity;
   defaultClientId?: string;
+  defaultDealId?: string;
   trigger: React.ReactNode;
 }) => {
   const [open, setOpen] = useState(false);
@@ -59,7 +61,7 @@ export const ActivityDialog = ({
   const [description, setDescription] = useState(activity?.description ?? "");
   const [dueAt, setDueAt] = useState(toLocalInput(activity?.dueAt));
   const [clientId, setClientId] = useState(activity?.clientId ?? defaultClientId ?? NONE);
-  const [dealId, setDealId] = useState(activity?.dealId ?? NONE);
+  const [dealId, setDealId] = useState(activity?.dealId ?? defaultDealId ?? NONE);
 
   const saving = create.isPending || update.isPending;
   // negócio sempre pertence a um cliente: com um cliente escolhido, só faz sentido oferecer os dele
@@ -73,7 +75,7 @@ export const ActivityDialog = ({
       setDescription(activity?.description ?? "");
       setDueAt(toLocalInput(activity?.dueAt));
       setClientId(activity?.clientId ?? defaultClientId ?? NONE);
-      setDealId(activity?.dealId ?? NONE);
+      setDealId(activity?.dealId ?? defaultDealId ?? NONE);
     }
     setOpen(next);
   };

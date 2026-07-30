@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useSession } from "@/lib/auth-client";
 import { useComments, useCreateComment, useDeleteComment, useUpdateComment } from "@/lib/queries/comments";
 import { useMembers } from "@/lib/queries/members";
+import { ENTITY_NOUNS } from "@/lib/labels";
 import type { AuditEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,7 +90,9 @@ export const CommentFeed = ({ entityType, entityId }: { entityType: AuditEntity;
               <MessageSquare />
             </EmptyMedia>
             <EmptyTitle>Nenhum comentário</EmptyTitle>
-            <EmptyDescription>Registre aqui o que a equipe precisa saber sobre este lead.</EmptyDescription>
+            <EmptyDescription>
+              Registre aqui o que a equipe precisa saber sobre este {ENTITY_NOUNS[entityType]}.
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (

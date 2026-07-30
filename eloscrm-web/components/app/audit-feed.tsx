@@ -4,13 +4,15 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { History } from "lucide-react";
 import { useAuditEvents } from "@/lib/queries/audit";
-import { AUDIT_ACTION_LABELS, FIELD_LABELS, formatAuditValue } from "@/lib/labels";
+import { AUDIT_ACTION_LABELS, ENTITY_NOUNS, FIELD_LABELS, formatAuditValue } from "@/lib/labels";
 import type { AuditEntity } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { useEntityNames } from "./use-entity-names";
 
 export const AuditFeed = ({ entityType, entityId }: { entityType: AuditEntity; entityId: string }) => {
   const { data: events, isLoading } = useAuditEvents(entityType, entityId);
+  const resolveName = useEntityNames();
 
   if (isLoading) {
     return (
@@ -30,7 +32,9 @@ export const AuditFeed = ({ entityType, entityId }: { entityType: AuditEntity; e
             <History />
           </EmptyMedia>
           <EmptyTitle>Sem histórico</EmptyTitle>
-          <EmptyDescription>As alterações feitas neste lead vão aparecer aqui.</EmptyDescription>
+          <EmptyDescription>
+            As alterações feitas neste {ENTITY_NOUNS[entityType]} vão aparecer aqui.
+          </EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -52,7 +56,8 @@ export const AuditFeed = ({ entityType, entityId }: { entityType: AuditEntity; e
               <ul className="space-y-0.5">
                 {Object.entries(event.changes).map(([field, change]) => (
                   <li key={field} className="text-xs text-muted-foreground">
-                    {FIELD_LABELS[field] ?? field}: {formatAuditValue(field, change.from)} → {formatAuditValue(field, change.to)}
+                    {FIELD_LABELS[field] ?? field}: {formatAuditValue(field, change.from, resolveName)} →{" "}
+                    {formatAuditValue(field, change.to, resolveName)}
                   </li>
                 ))}
               </ul>

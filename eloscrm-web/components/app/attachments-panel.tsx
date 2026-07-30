@@ -13,7 +13,7 @@ import {
 } from "@/lib/queries/attachments";
 import { useSession } from "@/lib/auth-client";
 import { useMembers } from "@/lib/queries/members";
-import { formatFileSize } from "@/lib/labels";
+import { ENTITY_NOUNS, formatFileSize } from "@/lib/labels";
 import type { AuditEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,7 +104,9 @@ export const AttachmentsPanel = ({
               <FileText />
             </EmptyMedia>
             <EmptyTitle>Nenhum arquivo</EmptyTitle>
-            <EmptyDescription>Contratos, documentos e propostas deste lead ficam aqui.</EmptyDescription>
+            <EmptyDescription>
+              Contratos, documentos e propostas deste {ENTITY_NOUNS[entityType]} ficam aqui.
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
