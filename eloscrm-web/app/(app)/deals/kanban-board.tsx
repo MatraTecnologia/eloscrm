@@ -30,7 +30,7 @@ import { StageManagerDialog } from "./stage-manager-dialog";
 
 export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const { data: deals, isLoading } = useDeals(pipeline.id);
-  const { data: clients } = useClients();
+  const { data: clients } = useClients({ status: "ALL" });
   const { data: members } = useMembers();
   const { data: properties } = useProperties();
   const move = useUpdateDeal();

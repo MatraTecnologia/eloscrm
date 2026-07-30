@@ -12,7 +12,7 @@ import { useProperties } from "@/lib/queries/properties";
 export const useEntityNames = () => {
   const { data: members } = useMembers();
   const { data: properties } = useProperties();
-  const { data: clients } = useClients();
+  const { data: clients } = useClients({ status: "ALL" });
 
   const names = new Map<string, string>();
   for (const member of members ?? []) names.set(member.userId, member.name);

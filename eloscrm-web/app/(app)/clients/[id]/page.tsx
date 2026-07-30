@@ -14,6 +14,7 @@ import type { Activity } from "@/lib/types";
 import { useOrgDeals } from "@/lib/queries/deals";
 import { useActivities } from "@/lib/queries/activities";
 import { LeadHeader } from "./lead-header";
+import { NurtureBanner } from "./nurture-banner";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "@/components/app/activity-timeline";
 import { UnifiedTimeline } from "@/components/app/unified-timeline";
@@ -97,6 +98,8 @@ export default function ClientProfilePage() {
         interest={interestProperty?.type ?? null}
         budget={budget}
       />
+
+      <NurtureBanner client={client} />
 
       <Tabs defaultValue="resumo">
         <TabsList variant="line">

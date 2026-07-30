@@ -37,9 +37,11 @@ import { TagsInput } from './tags-input'
 export const ClientDialog = ({
   client,
   trigger,
+  onCreated,
 }: {
   client?: Client
   trigger: React.ReactNode
+  onCreated?: (created: Client) => void
 }) => {
   const editing = !!client
   const create = useCreateClient()
@@ -99,8 +101,12 @@ export const ClientDialog = ({
       budgetMax: parseCurrencyInput(budgetMax) ?? (editing ? null : undefined),
     }
     try {
-      if (editing) await update.mutateAsync({ id: client.id, input })
-      else await create.mutateAsync(input)
+      if (editing) {
+        await update.mutateAsync({ id: client.id, input })
+      } else {
+        const created = await create.mutateAsync(input)
+        onCreated?.(created)
+      }
       toast.success(editing ? 'Cliente atualizado' : 'Cliente criado')
       setOpen(false)
     } catch {

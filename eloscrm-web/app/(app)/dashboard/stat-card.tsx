@@ -8,12 +8,14 @@ export const StatCard = ({
   icon: Icon,
   color,
   isLoading,
+  hint,
 }: {
   label: string;
   value: string | number | undefined;
   icon: LucideIcon;
   color: string;
   isLoading: boolean;
+  hint?: string;
 }) => {
   return (
     <Card>
@@ -31,6 +33,7 @@ export const StatCard = ({
           ) : (
             <p className="text-2xl font-semibold tabular-nums">{value}</p>
           )}
+          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         </div>
       </CardContent>
     </Card>

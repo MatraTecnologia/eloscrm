@@ -1,9 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Client, ClientSource, LeadTemperature } from "@/lib/types";
+import type { Client, ClientSource, ClientStatus, LeadTemperature, NurtureReason } from "@/lib/types";
 
-export type ClientFilters = { source?: ClientSource; q?: string; temperature?: LeadTemperature; tag?: string };
+export type ClientFilters = {
+  source?: ClientSource;
+  q?: string;
+  temperature?: LeadTemperature;
+  tag?: string;
+  // "ALL" não é um ClientStatus: é o valor que a API aceita para não filtrar nada
+  status?: ClientStatus | "ALL";
+  overdue?: boolean;
+};
 export type ClientInput = {
   name: string;
   email?: string;
@@ -16,6 +24,9 @@ export type ClientInput = {
   interestType?: string | null;
   budgetMin?: number | null;
   budgetMax?: number | null;
+  nurtureReason?: NurtureReason | null;
+  nurtureNote?: string | null;
+  nurtureUntil?: string | null;
 };
 
 export const useClients = (filters?: ClientFilters) => {
@@ -64,6 +75,7 @@ export const useUpdateClient = () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["audit-events"] });
       qc.invalidateQueries({ queryKey: ["timeline"] });
+      qc.invalidateQueries({ queryKey: ["agenda"] });
     },
   });
 };
@@ -79,5 +91,47 @@ export const useDeleteClient = () => {
       qc.invalidateQueries({ queryKey: ["audit-events"] });
       qc.invalidateQueries({ queryKey: ["timeline"] });
     },
+  });
+};
+
+export type DealDecision = { dealId: string; action: "KEEP" | "CLOSE_LOST"; lostStageId?: string };
+export type NurtureInput = {
+  reason: NurtureReason;
+  note?: string;
+  until?: string;
+  deals?: DealDecision[];
+};
+export type ReactivateInput = { reopenDealIds?: string[] };
+
+// nutrir/reativar move negócio, muda a listagem, entra na agenda e no painel: invalidar só
+// ["clients"] deixaria o kanban e a agenda mostrando o estado anterior
+const invalidateNurtureViews = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: ["clients"] });
+  qc.invalidateQueries({ queryKey: ["deals"] });
+  qc.invalidateQueries({ queryKey: ["agenda"] });
+  qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  qc.invalidateQueries({ queryKey: ["audit-events"] });
+  qc.invalidateQueries({ queryKey: ["timeline"] });
+};
+
+export const useNurtureClient = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: NurtureInput }) => {
+      const { data } = await api.post<Client>(`/clients/${id}/nurture`, input);
+      return data;
+    },
+    onSuccess: () => invalidateNurtureViews(qc),
+  });
+};
+
+export const useReactivateClient = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: ReactivateInput }) => {
+      const { data } = await api.post<Client>(`/clients/${id}/reactivate`, input);
+      return data;
+    },
+    onSuccess: () => invalidateNurtureViews(qc),
   });
 };

@@ -1,8 +1,12 @@
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import type {
   ActivityType,
   AuditAction,
   AuditEntity,
   ClientSource,
+  ClientStatus,
+  NurtureReason,
   PropertyStatus,
   LeadTemperature,
 } from "./types";
@@ -33,6 +37,20 @@ export const leadTemperatureLabels: Record<LeadTemperature, string> = {
   FRIO: "Frio",
   MORNO: "Morno",
   QUENTE: "Quente",
+};
+
+export const clientStatusLabels: Record<ClientStatus, string> = {
+  ACTIVE: "Ativo",
+  NURTURING: "Em nutrição",
+};
+
+export const nurtureReasonLabels: Record<NurtureReason, string> = {
+  SEM_ORCAMENTO: "Orçamento não fecha",
+  ADIADO: "Vai comprar mais para frente",
+  SEM_RESPOSTA: "Sem resposta",
+  COMPROU_COM_OUTRO: "Comprou com outro",
+  SO_PESQUISANDO: "Só pesquisando",
+  OUTRO: "Outro motivo",
 };
 
 // Telefone é persistido em E.164 (+5543998414904) e só formatado na exibição/digitação.
@@ -88,6 +106,18 @@ export const formatCurrency = (value: string | number | null | undefined) =>
     ? "—"
     : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
 
+// KPI de painel: "R$ 10,5 mi" cabe no card, "R$ 10.514.550,00" não. O valor exato continua no
+// funil e na tela de negócios; aqui o que importa é a ordem de grandeza.
+export const formatCurrencyCompact = (value: string | number | null | undefined) =>
+  value == null
+    ? "—"
+    : new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(Number(value));
+
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   CREATED: "criou",
   UPDATED: "alterou",
@@ -128,11 +158,18 @@ export const FIELD_LABELS: Record<string, string> = {
   interestType: "Tipo de interesse",
   budgetMin: "Orçamento mínimo",
   budgetMax: "Orçamento máximo",
+  nurtureReason: "Motivo da nutrição",
+  nurtureNote: "Detalhe da nutrição",
+  nurtureUntil: "Retomar em",
+  nurturedAt: "Em nutrição desde",
 };
 
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
 // `resolveName` (membros, imóveis e clientes da org); id que não resolve é registro já removido.
 const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
+
+// Datas chegam do audit como ISO; sem isto o histórico mostra 2026-07-21T02:59:59.999Z na tela
+const DATE_FIELDS = new Set(["dueAt", "doneAt", "nurtureUntil", "nurturedAt"]);
 
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
 // Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
@@ -147,7 +184,12 @@ export const formatAuditValue = (
   if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
   if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);
+  if (field === "status") return clientStatusLabels[value as ClientStatus] ?? String(value);
+  if (field === "nurtureReason") return nurtureReasonLabels[value as NurtureReason] ?? String(value);
   if (field === "value") return formatCurrency(value as string);
+  if (DATE_FIELDS.has(field) && typeof value === "string") {
+    return format(parseISO(value), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  }
   if (ID_FIELDS.has(field) && typeof value === "string") return resolveName?.(value) ?? "(removido)";
   return String(value);
 };

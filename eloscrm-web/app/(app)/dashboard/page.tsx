@@ -1,9 +1,10 @@
 "use client";
 
-import { CircleCheck, Handshake, Users, Wallet } from "lucide-react";
+import Link from "next/link";
+import { CircleCheck, Handshake, Snowflake, Users, Wallet } from "lucide-react";
 import { useDashboardStats } from "@/lib/queries/dashboard";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { clientSourceLabels, formatCurrency } from "@/lib/labels";
+import { clientSourceLabels, formatCurrencyCompact } from "@/lib/labels";
 import { StatCard } from "./stat-card";
 import { FunnelCard } from "./funnel-card";
 import { SourceDonutCard } from "./source-donut-card";
@@ -36,7 +37,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Clientes"
           value={stats?.kpis.totalClients}
@@ -45,14 +46,14 @@ export default function DashboardPage() {
           isLoading={loading}
         />
         <StatCard
-          label="Negócios em aberto"
+          label="Em aberto"
           value={stats?.kpis.openDeals}
           icon={Handshake}
           color="var(--chart-4)"
           isLoading={loading}
         />
         <StatCard
-          label="Negócios fechados"
+          label="Fechados"
           value={stats?.kpis.wonDeals}
           icon={CircleCheck}
           color="var(--chart-3)"
@@ -60,11 +61,21 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Valor em aberto"
-          value={stats ? formatCurrency(stats.kpis.openValue) : undefined}
+          value={stats ? formatCurrencyCompact(stats.kpis.openValue) : undefined}
           icon={Wallet}
           color="var(--chart-2)"
           isLoading={loading}
         />
+        <Link href="/nurturing" className="contents">
+          <StatCard
+            label="Em nutrição"
+            value={stats?.kpis.nurturing}
+            icon={Snowflake}
+            color="var(--chart-5)"
+            isLoading={loading}
+            hint={stats?.kpis.nurtureDue ? `${stats.kpis.nurtureDue} a retomar` : undefined}
+          />
+        </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

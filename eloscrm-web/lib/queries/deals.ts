@@ -32,6 +32,7 @@ export type EnrichedDeal = Deal & {
   stageName: string;
   stageColor: string | null;
   isOpen: boolean;
+  isLost: boolean;
 };
 
 // A API não filtra /deals por clientId, então buscamos todos os negócios da org
@@ -58,6 +59,7 @@ export const useOrgDeals = () => {
       stageName: stage?.name ?? "—",
       stageColor: stage?.color ?? null,
       isOpen: stage ? !stage.isWon && !stage.isLost : false,
+      isLost: stage?.isLost ?? false,
     };
   });
 
