@@ -36,6 +36,12 @@ export const nurture = async (orgId: string, id: string, data: NurtureInput, act
   const decisions = data.deals ?? [];
   const byDealId = new Map(decisions.map((decision) => [decision.dealId, decision]));
 
+  // o Map colapsa duplicata, mas o loop de validação itera a lista: sem isto, dois pedidos para o
+  // mesmo negócio o moveriam duas vezes e deixariam dois STAGE_CHANGED no histórico
+  if (byDealId.size !== decisions.length) {
+    throw invalid("DUPLICATE_DEAL", "Negócio repetido na lista de decisões");
+  }
+
   // validar tudo antes de escrever: falhar no meio deixaria o lead meio nutrido e negócios fechados
   // sem volta
   const uncovered = open.filter((deal) => !byDealId.has(deal.id));

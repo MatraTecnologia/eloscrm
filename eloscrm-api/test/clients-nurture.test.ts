@@ -495,6 +495,35 @@ describe("nutrir com negócios abertos", () => {
     expect(leadIntacto.status).toBe(ClientStatus.ACTIVE);
   });
 
+  // o Map de cobertura colapsa duplicata, mas o loop de fechamento iterava a lista inteira: sem a
+  // rejeição, o mesmo negócio seria movido duas vezes e o histórico ganharia dois STAGE_CHANGED
+  it("recusa dealId duplicado na lista de decisões (422)", async () => {
+    const client = await createClient("Lead com negócio duplicado na lista");
+    const deal = await createDeal(client.id, "Cobertura duplicada");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/clients/${client.id}/nurture`,
+      headers: { cookie },
+      payload: {
+        reason: "ADIADO",
+        deals: [
+          { dealId: deal.id, action: "KEEP" },
+          { dealId: deal.id, action: "CLOSE_LOST", lostStageId },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("DUPLICATE_DEAL");
+
+    const dealIntacto = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+    expect(dealIntacto.stageId).toBe(openStageId);
+
+    const leadIntacto = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(leadIntacto.status).toBe(ClientStatus.ACTIVE);
+  });
+
   it("negócio já perdido não precisa de decisão", async () => {
     const client = await createClient("Lead com negócio já perdido");
     const deal = await createDeal(client.id, "Negócio antigo");
