@@ -9,7 +9,9 @@ type TimelineItem = {
 };
 
 export const forClient = async (orgId: string, clientId: string, query: TimelineQuery) => {
-  const [activities, events, comments, attachments] = await repo.sources(orgId, clientId, query.limit);
+  const [doneActivities, dueActivities, plainActivities, events, comments, attachments] =
+    await repo.sources(orgId, clientId, query.limit);
+  const activities = [...doneActivities, ...dueActivities, ...plainActivities];
 
   const items: TimelineItem[] = [
     // atividade usa a data do fato (concluída, ou agendada) e cai no createdAt quando não tem nenhuma
