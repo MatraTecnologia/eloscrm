@@ -4,7 +4,7 @@ import Link from "next/link";
 import { CircleCheck, Handshake, Snowflake, Users, Wallet } from "lucide-react";
 import { useDashboardStats } from "@/lib/queries/dashboard";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { clientSourceLabels, formatCurrency } from "@/lib/labels";
+import { clientSourceLabels, formatCurrencyCompact } from "@/lib/labels";
 import { StatCard } from "./stat-card";
 import { FunnelCard } from "./funnel-card";
 import { SourceDonutCard } from "./source-donut-card";
@@ -61,7 +61,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Valor em aberto"
-          value={stats ? formatCurrency(stats.kpis.openValue) : undefined}
+          value={stats ? formatCurrencyCompact(stats.kpis.openValue) : undefined}
           icon={Wallet}
           color="var(--chart-2)"
           isLoading={loading}

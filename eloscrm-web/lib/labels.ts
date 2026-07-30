@@ -106,6 +106,18 @@ export const formatCurrency = (value: string | number | null | undefined) =>
     ? "—"
     : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
 
+// KPI de painel: "R$ 10,5 mi" cabe no card, "R$ 10.514.550,00" não. O valor exato continua no
+// funil e na tela de negócios; aqui o que importa é a ordem de grandeza.
+export const formatCurrencyCompact = (value: string | number | null | undefined) =>
+  value == null
+    ? "—"
+    : new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(Number(value));
+
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   CREATED: "criou",
   UPDATED: "alterou",
