@@ -1,12 +1,22 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { organization } from "better-auth/plugins";
+import { emailOTP, organization } from "better-auth/plugins";
 import { prisma } from "./prisma.js";
 import { env } from "../env.js";
+import { sendEmail } from "./email/send.js";
+import { verifyEmailTemplate } from "./email/templates/verify-email.js";
+import { resetPasswordTemplate } from "./email/templates/reset-password.js";
+import { otpCodeTemplate } from "./email/templates/otp-code.js";
+import { passwordChangedTemplate } from "./email/templates/password-changed.js";
+import { changeEmailTemplate } from "./email/templates/change-email.js";
+import { orgInvitationTemplate } from "./email/templates/org-invitation.js";
 
 const isProduction = env.NODE_ENV === "production";
 
+const OTP_EXPIRES_IN_SECONDS = 600;
+
 export const auth = betterAuth({
+  appName: "elosCRM",
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
@@ -14,6 +24,14 @@ export const auth = betterAuth({
   // origem confiável a mais sem nenhum uso.
   trustedOrigins: isProduction ? [env.WEB_ORIGIN] : [env.WEB_ORIGIN, "http://localhost"],
   advanced: {
+    // Sem prefixo próprio os cookies se chamam "better-auth.session_token"/"session_data" — o nome
+    // que TODO projeto Better Auth usa. Cookie em localhost não é isolado por porta: outro app em
+    // localhost:XXXX grava no mesmo jar e, com Domain/Path diferente do nosso (host-only), passam a
+    // existir dois cookies homônimos. O navegador manda os dois, o servidor lê o primeiro, a
+    // assinatura HMAC falha contra o nosso secret e get-session responde null — o login "entra" e
+    // volta para /login até limpar os dados do site. Reproduzido: cookie estranho antes do válido
+    // derruba a sessão; depois, não.
+    cookiePrefix: "eloscrm",
     // Em produção web e API ficam em hosts distintos: com o SameSite=Lax padrão o navegador
     // não devolve o cookie de sessão nas requisições do front e todo request autenticado dá 401.
     // Exige https nos dois lados. Em dev fica no Lax, que funciona em http://localhost.
@@ -40,18 +58,71 @@ export const auth = betterAuth({
     // limitaria os próprios usuários muito antes de limitar qualquer abuso.
     customRules: { "/get-session": false },
   },
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    // Sem isto qualquer endereço digitado no cadastro vira conta válida. Consequência: o sign-up
+    // não devolve mais sessão, e o sign-in de quem não confirmou responde 403 (o front trata).
+    requireEmailVerification: true,
+    // Redefinir senha é o caminho de quem perdeu o acesso — deixar as outras sessões vivas manteria
+    // um invasor logado justamente no cenário em que a senha foi comprometida.
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      // `url` já é o endpoint da API que consome o token e só então redireciona para o `redirectTo`
+      // pedido pelo cliente — montar a URL do web à mão aqui pularia a validação do token.
+      const mail = resetPasswordTemplate({ name: user.name, url });
+      void sendEmail({ to: user.email, ...mail });
+    },
+    onPasswordReset: async ({ user }) => {
+      const mail = passwordChangedTemplate({ name: user.name });
+      void sendEmail({ to: user.email, ...mail });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    // Quem acabou de confirmar já provou que é dono do endereço; mandar para o login de novo seria
+    // um passo a mais sem ganho nenhum.
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      const mail = verifyEmailTemplate({ name: user.name, url });
+      void sendEmail({ to: user.email, ...mail });
+    },
+  },
   user: {
     changeEmail: {
       enabled: true,
-      // Não há provedor de e-mail no projeto: sem isto o Better Auth só troca o endereço depois
-      // que o novo for verificado por link, e o link nunca sai. Com a flag, a troca é imediata —
-      // mas só para quem tem emailVerified false, que é todo mundo enquanto não houver verificação.
-      // Ao ligar verificação de e-mail um dia, isto precisa de um sendVerificationEmail junto.
-      updateEmailWithoutVerification: true,
+      // Com verificação obrigatória, todo usuário com sessão tem o e-mail confirmado: a troca passa
+      // sempre por este link, enviado ao endereço **atual**, que é quem autoriza a mudança.
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        const mail = changeEmailTemplate({ name: user.name, newEmail, url });
+        void sendEmail({ to: user.email, ...mail });
+      },
     },
   },
-  plugins: [organization()],
+  plugins: [
+    organization({
+      sendInvitationEmail: async ({ id, email, role, organization: org, inviter }) => {
+        const mail = orgInvitationTemplate({
+          organizationName: org.name,
+          inviterName: inviter.user.name,
+          role,
+          url: `${env.WEB_ORIGIN}/accept-invitation/${id}`,
+        });
+        void sendEmail({ to: email, ...mail });
+      },
+    }),
+    emailOTP({
+      expiresIn: OTP_EXPIRES_IN_SECONDS,
+      // O código é atalho de login para quem já tem conta. Sem isto, digitar um e-mail desconhecido
+      // na tela de código criaria uma conta sem nome pela porta dos fundos.
+      disableSignUp: true,
+      // A confirmação de e-mail do cadastro continua por link (o OTP aqui é só para login e
+      // recuperação); ligar overrideDefaultEmailVerification trocaria o link por código.
+      sendVerificationOTP: async ({ email, otp, type }) => {
+        const mail = otpCodeTemplate({ otp, type, expiresInMinutes: OTP_EXPIRES_IN_SECONDS / 60 });
+        void sendEmail({ to: email, ...mail });
+      },
+    }),
+  ],
   databaseHooks: {
     session: {
       create: {

@@ -17,6 +17,12 @@ export const env = createEnv({
     R2_ACCESS_KEY_ID: z.string().trim().min(1),
     R2_SECRET_ACCESS_KEY: z.string().trim().min(1),
     R2_PRIVATE_BUCKET_NAME: z.string().trim().min(1),
+
+    // Resend. Opcional de propósito: sem a chave o mailer não envia nada e imprime o conteúdo no
+    // stdout — é o que mantém dev, teste e CI rodando sem credencial de provedor.
+    RESEND_API_KEY: z.string().trim().min(1).optional(),
+    // onboarding@resend.dev é o remetente de teste do Resend, que funciona sem domínio verificado.
+    EMAIL_FROM: z.string().trim().min(1).default("elosCRM <onboarding@resend.dev>"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

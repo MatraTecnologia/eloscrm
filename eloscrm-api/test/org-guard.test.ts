@@ -1,22 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { makeApp } from "./helpers/app.js";
+import { asCookie, signUp as signUpWithSession } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
-const asCookie = (raw: string | string[] | undefined) =>
-  Array.isArray(raw) ? raw.join("; ") : String(raw);
-
-const signUp = async (email: string) => {
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/auth/sign-up/email",
-    payload: { email, password: "senha123456", name: "Corretor Guard" },
-  });
-  return asCookie(res.headers["set-cookie"]);
-};
+const signUp = (email: string) => signUpWithSession(app, email);
 
 beforeAll(async () => {
   app = await makeApp();

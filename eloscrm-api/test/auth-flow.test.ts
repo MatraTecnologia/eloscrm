@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { makeApp } from "./helpers/app.js";
+import { signUp } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 
 let app: FastifyInstance;
@@ -21,18 +22,9 @@ describe("auth flow", () => {
   });
 
   it("cria conta e retorna sessão em /v1/me", async () => {
-    const signup = await app.inject({
-      method: "POST",
-      url: "/api/auth/sign-up/email",
-      payload: { email, password: "senha123456", name: "Corretor Teste" },
-    });
-    expect([200, 201]).toContain(signup.statusCode);
-    const cookie = signup.headers["set-cookie"];
-    const me = await app.inject({
-      method: "GET",
-      url: "/v1/me",
-      headers: { cookie: Array.isArray(cookie) ? cookie.join("; ") : String(cookie) },
-    });
+    // o helper cobre a confirmação de e-mail, obrigatória para o sign-in abrir sessão
+    const cookie = await signUp(app, email);
+    const me = await app.inject({ method: "GET", url: "/v1/me", headers: { cookie } });
     expect(me.statusCode).toBe(200);
     expect(me.json().email).toBe(email);
     expect(me.json().userId).toBeTruthy();
@@ -42,7 +34,9 @@ describe("auth flow", () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/me",
-      headers: { cookie: "better-auth.session_token=garbage.invalid.token" },
+      // precisa ser o nome real do cookie (advanced.cookiePrefix): com nome desconhecido o teste
+      // passaria sem nunca exercitar a verificação de assinatura
+      headers: { cookie: "eloscrm.session_token=garbage.invalid.token" },
     });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe("UNAUTHORIZED");

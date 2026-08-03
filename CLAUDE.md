@@ -61,7 +61,7 @@ pnpm typecheck  # tsc --noEmit
 
 ## Testes dependem de Postgres real
 
-Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts` → `buildApp()`) e fazem sign-up de verdade via `app.inject` em `/api/auth/*` (`test/helpers/session.ts`).
+Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts` → `buildApp()`) e fazem sign-up de verdade via `app.inject` em `/api/auth/*` (`test/helpers/session.ts`). Como `requireEmailVerification` está ligado, o sign-up não abre sessão: o helper marca `emailVerified` no banco e só então faz o sign-in — nenhum teste deve voltar a ler o cookie direto da resposta do sign-up.
 
 - **Banco separado do de dev.** `test/setup.ts` carrega `.env.test` com `override: true`, então o `DATABASE_URL` de teste vence qualquer coisa já presente no ambiente. Nunca apontar esse arquivo para o banco de dev ou para um remoto.
 - **Limpeza é global, não por arquivo.** `test/global-setup.ts` trunca todas as tabelas uma vez antes da run. Os arquivos rodam em paralelo e cada um cria a própria organização, então não há cleanup em `afterAll` — não reintroduza correntes de `deleteMany`.
@@ -110,4 +110,4 @@ Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`,
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-07-27 11:15 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 18:05 (-03)

@@ -1,20 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { makeApp } from "./helpers/app.js";
-import { asCookie } from "./helpers/session.js";
+import { asCookie, signUp as signUpWithSession } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
-const signUp = async (email: string) => {
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/auth/sign-up/email",
-    payload: { email, password: "senha123456", name: "Corretor Teste" },
-  });
-  return asCookie(res.headers["set-cookie"]);
-};
+const signUp = (email: string) => signUpWithSession(app, email);
 
 beforeAll(async () => {
   app = await makeApp();
@@ -51,7 +44,7 @@ describe("conta do usuário", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("troca o e-mail sem verificação por link", async () => {
+  it("só troca o e-mail depois da confirmação por link", async () => {
     const email = `conta-email-${stamp}@eloscrm.test`;
     const novoEmail = `conta-email-novo-${stamp}@eloscrm.test`;
     const cookie = await signUp(email);
@@ -64,12 +57,10 @@ describe("conta do usuário", () => {
     });
     expect(res.statusCode).toBe(200);
 
-    // updateEmailWithoutVerification só vale enquanto o e-mail atual não é verificado; se um dia
-    // o projeto ligar verificação, esta expectativa quebra e a UI precisa de outro fluxo
-    const user = await prisma.user.findUnique({ where: { email: novoEmail } });
-    expect(user).toBeTruthy();
-    expect(user?.emailVerified).toBe(false);
-    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+    // o 200 diz só que o e-mail de confirmação saiu: o endereço antigo continua sendo o da conta
+    // até alguém abrir o link, e é isso que impede sequestro de conta por troca de e-mail
+    expect(await prisma.user.findUnique({ where: { email: novoEmail } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { email } })).toBeTruthy();
   });
 
   it("troca a senha e permite entrar com a nova", async () => {

@@ -1,98 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuthShell } from "../auth-shell";
+import { SignInForm } from "./sign-in-form";
+import { SignUpForm } from "./sign-up-form";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+// `next` traz de volta a rota que exigiu login (hoje só o aceite de convite usa).
+// Só caminho relativo: um destino absoluto viraria open redirect.
+const safeNext = (value: string | null) => (value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard");
 
-  const handleSignIn = async () => {
-    setLoading(true);
-    const res = await authClient.signIn.email({ email, password });
-    setLoading(false);
-    if (res.error) {
-      toast.error("E-mail ou senha inválidos");
-      return;
-    }
-    router.replace("/dashboard");
-  };
-
-  const handleSignUp = async () => {
-    setLoading(true);
-    const res = await authClient.signUp.email({ name, email, password });
-    setLoading(false);
-    if (res.error) {
-      toast.error(res.error.message ?? "Não foi possível criar a conta");
-      return;
-    }
-    router.replace("/dashboard");
-  };
+const LoginTabs = () => {
+  const next = safeNext(useSearchParams().get("next"));
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
-      <Card className="w-full max-w-sm">
-        {/* CardHeader é grid: items-center alinha no eixo vertical, quem centraliza é justify-items */}
-        <CardHeader className="justify-items-center gap-3 text-center">
-          {/* logo-oficial e logo-white têm o "elos" em branco, invisível no card claro */}
-          <Image src="/logo-dark.svg" alt="elosCRM" width={160} height={48} priority style={{ height: "auto" }} />
-          <CardTitle className="text-base font-medium text-muted-foreground">Conectando oportunidades</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="signin">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Entrar</TabsTrigger>
-              <TabsTrigger value="signup">Criar conta</TabsTrigger>
-            </TabsList>
-            <TabsContent value="signin" className="space-y-3 pt-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Senha</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-              <Button className="w-full" onClick={handleSignIn} disabled={loading}>
-                {loading ? "Entrando…" : "Entrar"}
-              </Button>
-            </TabsContent>
-            <TabsContent value="signup" className="space-y-3 pt-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="name">Nome</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email-up">E-mail</Label>
-                <Input id="email-up" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password-up">Senha</Label>
-                <Input
-                  id="password-up"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <Button className="w-full" onClick={handleSignUp} disabled={loading}>
-                {loading ? "Criando…" : "Criar conta"}
-              </Button>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-    </div>
+    <Tabs defaultValue="signin">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="signin">Entrar</TabsTrigger>
+        <TabsTrigger value="signup">Criar conta</TabsTrigger>
+      </TabsList>
+      <TabsContent value="signin" className="pt-4">
+        <SignInForm next={next} />
+      </TabsContent>
+      <TabsContent value="signup" className="pt-4">
+        <SignUpForm />
+      </TabsContent>
+    </Tabs>
+  );
+};
+
+export default function LoginPage() {
+  return (
+    <AuthShell>
+      {/* useSearchParams empurra a árvore para client-side rendering: sem o boundary o build falha */}
+      <Suspense fallback={<div className="h-64" />}>
+        <LoginTabs />
+      </Suspense>
+    </AuthShell>
   );
 }

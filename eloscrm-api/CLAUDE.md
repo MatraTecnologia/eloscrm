@@ -72,7 +72,9 @@ pnpm auth:generate                        # regera os models do Better Auth no s
   na raiz, ou qualquer Postgres na 5432).
 - `cp .env.test.example .env.test` + `pnpm db:push:test` — **banco separado**, exclusivo dos testes.
   Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem
-  sign-up de verdade em `/api/auth/*` via `app.inject`.
+  sign-up de verdade em `/api/auth/*` via `app.inject`. Com `requireEmailVerification` ligado o
+  sign-up não devolve sessão: `test/helpers/session.ts` marca `emailVerified` no banco e faz o
+  sign-in em seguida. Teste novo deve usar esse helper, nunca ler o cookie da resposta do sign-up.
 
 **Isolamento dos testes.** `test/global-setup.ts` trunca todas as tabelas uma vez antes da run;
 `test/setup.ts` carrega `.env.test` com `override: true` em cada worker. Os arquivos rodam em
@@ -99,4 +101,4 @@ existiam neste documento: `no-console` (liberado em `prisma/` e `scripts/`, que 
 - Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-07-27 11:15 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 18:05 (-03)
