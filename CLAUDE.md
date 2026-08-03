@@ -73,6 +73,20 @@ Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpe
 
 `.github/workflows/ci.yml`, em push para `main` e em todo PR. Job `api`: service container `postgres:17-alpine`, `db:generate` → `db:push` → `lint` → `typecheck` → `test`, com as envs no próprio job (sem `.env` no runner — o `dotenv` do `test/setup.ts` simplesmente não encontra arquivo e o ambiente prevalece). Job `web`: `lint` → `typecheck` → `build`.
 
+Os dois jobs passam `package_json_file` ao `pnpm/action-setup`: `defaults.run.working-directory` só afeta steps `run`, e sem apontar o arquivo a action procura o `packageManager` no `package.json` da raiz — que não existe aqui.
+
+## Deploy: aplicar o schema é passo manual
+
+**Todo deploy que leva schema novo exige `prisma db push` no banco de produção, à mão, antes ou junto de subir a imagem.** Não há migrations (é o Padrão A) e nada no pipeline aplica schema: o `Dockerfile` roda `db:generate` com um `DATABASE_URL` de fachada (que não conecta) e o runner só executa `node dist/src/server.js`.
+
+Esquecer isso não dá erro de boot — a API sobe normal e só as rotas que tocam as colunas novas respondem **500**. Já aconteceu: o schema de nutrição (`ClientStatus`, `NurtureReason`, `client.nurtureUntil`…) chegou em produção sem ser aplicado e derrubou `/v1/dashboard/stats` e `/v1/agenda`, que filtram por `status`.
+
+```bash
+DATABASE_URL="postgres://…produção…" pnpm -C eloscrm-api exec prisma db push
+```
+
+Se o `db push` pedir `--accept-data-loss`, **pare**: significa drift entre o schema e o banco, e a mudança não é puramente aditiva.
+
 ## Contrato entre os dois projetos
 
 - **Auth é servida pelo Fastify**, não pelo Next: `authHandler` monta o Better Auth em `/api/auth/*` na API. O web fala com ela via `lib/auth-client.ts` (`baseURL = NEXT_PUBLIC_API_URL`, default `http://localhost:3333`).
@@ -110,4 +124,4 @@ Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`,
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 18:05 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 20:47 (-03)
