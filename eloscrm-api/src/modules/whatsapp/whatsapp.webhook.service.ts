@@ -8,10 +8,11 @@ import { hashToken } from "../../lib/crypto.js";
 import { httpError } from "../../lib/http-error.js";
 import { applyInstanceSnapshot, eventForTransition, parseStatus, str } from "../../lib/uazapi/snapshot.js";
 import { enqueueMessageEvent } from "./ingest.service.js";
+import { applyStatusUpdate, parseStatusUpdate } from "./status.service.js";
 import * as repo from "./whatsapp.repo.js";
 import { connectionDataOf, eventNameOf, type WebhookBody } from "./whatsapp.schema.js";
 
-const HANDLED_EVENTS = new Set(["connection", "messages"]);
+const HANDLED_EVENTS = new Set(["connection", "messages", "messages_update"]);
 
 const constantTimeEquals = (a: string, b: string) => {
   const bufA = Buffer.from(a);
@@ -79,6 +80,13 @@ export const process = async (
   // retentativa em /webhook/errors por um evento que nós deliberadamente ignoramos. `event: null`
   // significa envelope irreconhecível — a rota loga, para o sintoma aparecer no nosso log.
   if (!event || !HANDLED_EVENTS.has(event)) return { event, handled: false };
+
+  if (event === "messages_update") {
+    // barato: é um updateMany por lote de ids, sem chamada externa. Não precisa de fila.
+    const parsed = parseStatusUpdate(body as Record<string, unknown>);
+    if (parsed) await applyStatusUpdate(instance.organizationId, parsed);
+    return { event, handled: true };
+  }
 
   if (event === "messages") {
     // só enfileira: persistir e baixar mídia aqui dentro faria a uazapi esperar e acumular

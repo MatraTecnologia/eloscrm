@@ -674,11 +674,22 @@ já existente fica com chave nula e nunca casa.
 - Extensão sai do `fileName` quando existe, senão do mimetype; `audio/ogg; codecs=opus` precisa
   perder o parâmetro antes do lookup.
 
-### Fase 4 — status (`messages_update`)
+### Fase 4 — status (`messages_update`) ✅ concluída
 
-- [ ] Reconciliação em lote por `providerMessageId` (`MessageIDs` é array)
-- [ ] `IsFromMe` string e `Timestamp` em segundos tratados (§2.6)
-- [ ] `WhatsappMessage.status` refletindo `Delivered`/`Read`
+- [x] Reconciliação em lote por `providerMessageId` (`MessageIDs` é array)
+- [x] `WhatsappMessage.status` refletindo `Delivered`/`Read`
+- [x] Status **nunca regride** — recibo atrasado não desfaz leitura
+- [x] Recibo de leitura em mensagem recebida zera o `unreadCount`
+- [x] 9 testes com o payload real, incluindo isolamento entre organizações
+
+**Decisão: `IsFromMe` e `Timestamp` não entram na lógica.**
+`IsFromMe` chega como a **string** `"False"` e sua semântica exata — quem emitiu o recibo — não foi
+confirmada em tráfego. `Timestamp` vem em segundos, ao contrário do `messageTimestamp`. Como os
+`MessageIDs` já dizem exatamente quais mensagens mudaram, não é preciso inferir nada dos dois: o
+efeito no não lido é derivado da **direção das mensagens efetivamente atualizadas**, que é dado
+nosso e não interpretação do payload.
+
+Processado **fora da fila**: é um `updateMany` por lote de ids, sem chamada externa.
 
 ### Fase 5 — leitura no web
 
@@ -729,4 +740,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:58 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 03:04 (-03)
