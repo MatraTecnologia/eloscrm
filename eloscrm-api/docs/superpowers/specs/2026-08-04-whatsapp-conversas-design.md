@@ -106,13 +106,31 @@ direta. Pior: `Client.phone` é `z.string().optional()` sem normalização e **s
 
 ## 3. Decisões de arquitetura
 
-**3.1 — Ingestão em dois tempos: `WhatsappInboxEvent` + worker.**
-O webhook valida, grava o evento cru e responde `200` em milissegundos. Um worker no mesmo processo
-consome pendentes. Sem Redis (infra nova em dev e produção), durável a restart (o evento está no
-banco, não em memória) e a uazapi nunca espera por download de mídia.
+**3.1 — Redis + BullMQ, com duas filas.**
+O webhook valida, enfileira e responde `200` em milissegundos. O trabalho pesado — persistir,
+baixar mídia, subir ao R2 — roda no worker.
 
-O custo assumido: ordem e retry são nossos. Ordenação por `messageTimestamp`, não por chegada;
-retry com contador e backoff simples na própria linha.
+```
+fila `whatsapp-message`   payload cru do webhook → Conversation + WhatsappMessage
+                          → se tem mídia, enfileira na fila abaixo
+fila `whatsapp-media`     /message/download → URL temporária → baixa → R2 → mediaKey
+```
+
+Duas filas e não uma: mídia é lenta e pode falhar sem que a mensagem falhe junto. Separar deixa a
+mensagem aparecer na tela na hora, com a mídia chegando depois (§7).
+
+Retry, backoff exponencial e concorrência vêm do BullMQ (`attempts: 3`, `backoff exponential`), no
+mesmo padrão do `matra-notification-manager` (`packages/api/src/lib/queue.ts`) — `createQueue` /
+`createWorker` que devolvem `null` sem `REDIS_URL`.
+
+**Sem `REDIS_URL` o processamento é inline**, na mesma função. É o que mantém dev, teste e CI
+rodando sem subir Redis, e o que torna os testes determinísticos (sem corrida com worker). Em
+produção o Redis é obrigatório: o boot loga aviso quando falta, porque inline devolve o problema que
+esta fase existe para resolver.
+
+**Rede de segurança:** perder um job no Redis perde a mensagem. Por isso existe
+`POST /conversations/:id/sync`, que relê o histórico por `/message/find` e reconcilia por
+`providerId` (§3.2). Sem isso, um Redis efêmero significaria buraco silencioso na conversa.
 
 **3.2 — Chave de idempotência é `message.id` (`owner:messageid`).**
 Webhook repete — a captura desta investigação foi feita justamente sobre uma entrega que falhou e
@@ -134,9 +152,19 @@ então sem isso o próximo lead cadastrado à mão volta a não casar.
 mensagem, o corretor lê e **então** decide criar o lead. Amarrar conversa a lead obrigaria a criar
 lead para todo número que escreve — inclusive engano e spam.
 
-**3.5 — Mídia baixada na ingestão e guardada no R2 privado.**
-Por causa da §2.5. Reaproveita `src/lib/storage.ts` e o padrão de `Attachment` (bucket privado +
-presigned URL); nada de URL pública.
+**3.5 — Mídia no R2, com a URL temporária da uazapi cobrindo o intervalo.**
+O destino final é o R2 privado (§2.5 — em 2 dias o link da uazapi morre). Mas o corretor não pode
+esperar o upload para ver a foto que acabou de chegar.
+
+Então a mensagem tem **dois endereços de mídia e uma ordem de precedência**:
+
+1. `mediaKey` no R2 → **presigned URL** de curta duração. É o caminho definitivo.
+2. Ainda na fila → `mediaTempUrl` da uazapi, enquanto não expirou.
+3. Nenhum dos dois → indisponível, dito explicitamente.
+
+Quem resolve isso é o backend, num único ponto (§7.2); o front recebe uma URL pronta e não conhece a
+diferença. Assim que o upload conclui, a mensagem é atualizada com a `mediaKey` e a URL temporária é
+descartada.
 
 **3.6 — Atualização da tela por polling, não WebSocket.**
 O projeto não tem realtime e introduzi-lo é uma fase inteira. Polling curto (3–5s) na conversa
@@ -156,23 +184,8 @@ enum WhatsappMessageType {           // `message.type` da uazapi, normalizado
 
 enum WhatsappMessageStatus { pending sent delivered read failed }
 
-enum InboxEventStatus { pending processing done failed }
-
-/// Evento cru do webhook. O handler grava e responde; o worker processa.
-model WhatsappInboxEvent {
-  id         String   @id @default(cuid())
-  instanceId String
-  instance   UazapiInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  eventType  String
-  payload    Json
-  status     InboxEventStatus @default(pending)
-  attempts   Int      @default(0)
-  lastError  String?
-  receivedAt DateTime @default(now())
-  processedAt DateTime?
-
-  @@index([status, receivedAt])
-}
+/// Ciclo da mídia: a mensagem existe antes do arquivo estar no R2 (§3.5).
+enum WhatsappMediaStatus { none pending ready failed }
 
 model Conversation {
   id             String       @id @default(cuid())
@@ -232,12 +245,17 @@ model WhatsappMessage {
   senderLid   String?
   senderName  String?
 
-  // mídia copiada para o R2 privado (§3.5); null enquanto não baixou ou se falhou
+  mediaStatus   WhatsappMediaStatus @default(none)
+  // destino final: chave no R2 privado. Preenchida quando o upload conclui.
   mediaKey      String?
   mediaMime     String?
   mediaSize     Int?
   mediaFilename String?
-  mediaFailed   Boolean @default(false)
+  // ponte enquanto o upload não terminou (§3.5). A uazapi expira em ~2 dias — guardar a validade
+  // evita entregar ao front uma URL que já morreu.
+  mediaTempUrl       String?
+  mediaTempExpiresAt DateTime?
+  mediaError    String?
 
   // quem enviou pelo CRM; null em mensagem recebida ou enviada pelo celular
   sentById String?
@@ -264,29 +282,47 @@ Em `Client`: `phoneKey String?` + `@@index([organizationId, phoneKey])` + relaç
 ```
 POST /webhooks/uazapi/:instanceId/:secret
   1. autentica (já existe)
-  2. EventType === "messages" → grava WhatsappInboxEvent(pending) e responde 200
+  2. EventType === "messages" → enqueue("whatsapp-message", payload) → 200
   3. "connection" segue no caminho atual (síncrono, é barato)
 
-worker (setInterval no processo, lock por UPDATE ... RETURNING)
-  4. pega N pendentes por receivedAt
-  5. resolve/cria Conversation por (instanceId, chatid)
-  6. upsert de WhatsappMessage por (conversationId, providerId)  ← idempotente
-  7. se tem mídia: /message/download → upload R2 → grava mediaKey
-  8. atualiza lastMessageAt / lastMessageText / unreadCount
-  9. tenta casar Client por phoneKey (§6)
+worker `whatsapp-message`
+  4. resolve/cria Conversation por (instanceId, chatid)
+  5. upsert de WhatsappMessage por (conversationId, providerId)   ← idempotente
+  6. atualiza lastMessageAt / lastMessageText / unreadCount
+  7. casa Client por phoneKey (§6)
+  8. tem mídia? mediaStatus = pending  →  enqueue("whatsapp-media", messageId)
+
+worker `whatsapp-media`
+  9. /message/download → fileURL + mimetype
+ 10. grava mediaTempUrl + mediaTempExpiresAt   ← a tela já mostra a mídia daqui
+ 11. baixa e sobe para o R2 privado
+ 12. mediaKey + mediaStatus = ready, limpa mediaTempUrl
 ```
 
-### 5.2 O worker
+O passo 10 é o que torna a espera invisível: a mensagem aparece com a mídia servida pela URL
+temporária antes mesmo de o upload começar.
 
-`setInterval` de ~2s no processo da API, com lock otimista
-(`UPDATE ... SET status='processing' WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *`) —
-seguro se um dia rodar mais de uma instância da API.
+### 5.2 A fila
 
-Falha: `attempts++`, `lastError`, volta a `pending` até 5 tentativas; depois `failed` e fica visível
-numa tela de diagnóstico. **Nunca descartar em silêncio** — foi o que a fase 1 ensinou.
+`src/lib/queue.ts` no padrão do `matra-notification-manager`: `createQueue` / `createWorker`
+devolvendo `null` sem `REDIS_URL`, `attempts: 3` e backoff exponencial.
 
-Em teste o worker **não** sobe sozinho: a suíte chama a função de processamento direto, senão os
-testes viram corrida.
+`enqueue(name, data)` é o ponto único: com Redis, adiciona o job; **sem Redis, chama o processador
+direto**. É o que mantém teste e CI sem infra e torna a suíte determinística — nada de esperar
+worker em teste.
+
+Job que esgota as tentativas fica em `failed` no BullMQ. Como isso é observável só pelo Redis, a
+reconciliação por `/message/find` (§3.1) é a saída de verdade para buraco na conversa.
+
+### 5.3 Infra nova
+
+| Onde | O quê |
+|---|---|
+| `src/env.ts` | `REDIS_URL` opcional (mesma linha das envs de uazapi) |
+| `docker-compose.yml` (raiz) | serviço `redis:7-alpine`, junto do Postgres |
+| `.github/workflows/ci.yml` | **não** precisa: sem `REDIS_URL` a suíte roda inline |
+| produção | Redis obrigatório; sem ele o boot avisa e o webhook processa inline |
+| deps | `bullmq` (a referência usa `^5.77.3`) |
 
 ---
 
@@ -318,20 +354,48 @@ normalizada no `clients.service` — criar **e** atualizar.
 ## 7. Mídia
 
 Endpoint **novo na lib**: `messages.download({ id, return_link: true })` — hoje `messages.ts` só tem
-`find`.
+`find`. Resposta: `{ fileURL, mimetype, base64Data?, transcription? }`.
+
+### 7.1 Fluxo
 
 ```
-mensagem com mediaType → POST /message/download
-  → fileURL (válida por 2 dias)
-  → baixa e sobe para o R2 privado: org/<orgId>/whatsapp/<conversationId>/<messageId>.<ext>
-  → grava mediaKey/mediaMime/mediaSize
-falhou → mediaFailed = true, mensagem aparece como "mídia indisponível"
+mediaStatus = pending                       ← mensagem já visível na tela, sem mídia
+  ↓ worker whatsapp-media
+POST /message/download { id, return_link: true }
+  → fileURL válida ~2 dias
+  → mediaTempUrl + mediaTempExpiresAt       ← A PARTIR DAQUI a tela já mostra a mídia
+  ↓
+baixa a fileURL e sobe ao R2 privado
+  org/<orgId>/whatsapp/<conversationId>/<messageId>.<ext>
+  → mediaKey + mediaMime + mediaSize, mediaStatus = ready, mediaTempUrl = null
 ```
 
-Sem retry infinito: depois de 2 dias não há o que buscar. Limite de tamanho (sugestão: 20 MB) para
-um vídeo não estourar a memória do processo.
+Falha esgotadas as tentativas: `mediaStatus = failed` + `mediaError`. A mensagem continua na
+conversa, marcada como mídia indisponível — **nunca sumir com a mensagem por causa do anexo**.
 
-Leitura na UI por **presigned URL** de curta duração, como `Attachment` já faz.
+Sem retry indefinido: passados os 2 dias não há o que buscar (§2.5). Limite de tamanho (sugestão:
+20 MB) para um vídeo não estourar a memória do processo.
+
+### 7.2 A URL que o front recebe
+
+Um único resolvedor no backend decide, por mensagem:
+
+| Condição | O que devolve |
+|---|---|
+| `mediaStatus = ready` | **presigned URL** do R2, curta (~10 min), como `Attachment` já faz |
+| `mediaStatus = pending` e `mediaTempExpiresAt` no futuro | `mediaTempUrl` da uazapi |
+| resto | `null` + motivo |
+
+O front nunca sabe de onde veio — pede a URL e exibe. Como a presigned expira, a URL **não** é
+cacheada na resposta de listagem por muito tempo: ou vem junto da mensagem com TTL curto, ou por
+`GET /messages/:id/media` no momento de exibir. Preferir a segunda para vídeo e documento; embutir
+para imagem, que aparece imediatamente na thread.
+
+> **A confirmar na fase 3.** O evento capturado era de texto e não trazia `fileURL` entre os 30
+> campos de `message` — o que sugere que a URL só existe **após** o `/message/download`. Se o
+> webhook de mídia já trouxer um link utilizável (`fileURL` ou algo em `content`), dá para preencher
+> `mediaTempUrl` já no passo 5 da ingestão e a mídia aparece ainda mais cedo. Capturar um evento de
+> imagem custa o mesmo que custou o de texto: ligar a trilha e mandar uma foto.
 
 ---
 
@@ -364,7 +428,8 @@ Envio pelo celular também aparece: chega por webhook com `fromMe: true` e `wasS
 | `POST` | `/v1/whatsapp/conversations/:id/link-client` | vincula a lead existente |
 | `POST` | `/v1/whatsapp/conversations/:id/create-client` | cria lead a partir da conversa |
 | `POST` | `/v1/whatsapp/conversations/:id/archive` | arquiva |
-| `GET` | `/v1/whatsapp/messages/:id/media` | presigned URL da mídia |
+| `POST` | `/v1/whatsapp/conversations/:id/sync` | relê o histórico por `/message/find` e reconcilia (§3.1) |
+| `GET` | `/v1/whatsapp/messages/:id/media` | URL de exibição, resolvida como na §7.2 |
 
 Todas com `authGuard` + `orgGuard`. **Leitura e envio são de qualquer membro** — conversar é o
 trabalho do corretor, diferente de gerenciar a instância (que é de gestor).
@@ -415,18 +480,21 @@ O painel lateral da conversa é onde a conversa vira CRM:
 
 Mesma linha da fase 1: Postgres real, uazapi mockada (`vi.mock`).
 
-1. Webhook `messages` grava `InboxEvent` e responde 200 sem tocar em `Conversation`.
-2. Worker processa: cria conversa e mensagem.
+1. Webhook `messages` enfileira e responde 200 (sem Redis na suíte, o processador roda inline).
+2. Processamento cria conversa e mensagem a partir do envelope real da §2.1.
 3. **Idempotência**: mesmo `message.id` duas vezes → uma mensagem só.
 4. `phoneKey` casa `(43) 99183-4229` com `554391834229`.
 5. Dois leads com a mesma `phoneKey` → conversa fica **sem** vínculo.
 6. `sender` em LID não é usado como telefone.
 7. `messageTimestamp` em ms vira `sentAt` correto (não 1970).
-8. Mídia: download mockado → `mediaKey` gravado; falha → `mediaFailed`.
+8. Mídia: download mockado → `mediaTempUrl` primeiro, `mediaKey` + `ready` depois; falha → `failed`
+   com a mensagem preservada.
+8b. Resolvedor da §7.2: `ready` → presigned; `pending` com temp válida → temp; temp expirada → nulo.
 9. Envio grava `pending` antes e `sent` depois; erro `whatsapp_server` → código próprio.
 10. Isolamento entre organizações em cada rota.
 11. `create-client` cria com `source: WHATSAPP` e vincula.
-12. Evento com `EventType` desconhecido não cria `InboxEvent`.
+12. Evento com `EventType` desconhecido não enfileira nada e responde 200.
+13. Sem `REDIS_URL`, `enqueue` processa inline — é o modo da própria suíte.
 
 ---
 
@@ -437,10 +505,12 @@ Cada uma fecha com `lint` + `typecheck` + `test` verdes.
 **Fase 1 — telefone.** `phoneKey` em `Client`, índice, normalização no service, backfill. Sem isso
 nada casa. *Independente do resto: pode ir para produção sozinha.*
 
-**Fase 2 — ingestão.** Models, `messages` no webhook registrado, `InboxEvent`, worker, matching.
-Sem UI: verificável por teste e pelo banco.
+**Fase 2 — ingestão.** `bullmq` + `REDIS_URL` + `src/lib/queue.ts`, Redis no `docker-compose`, models,
+`messages` no webhook registrado, fila `whatsapp-message`, matching. Sem UI: verificável por teste e
+pelo banco.
 
-**Fase 3 — mídia.** `messages.download` na lib, cópia para o R2, presigned URL.
+**Fase 3 — mídia.** Capturar um evento de mídia real (§7.2) **antes** de codar, `messages.download`
+na lib, fila `whatsapp-media`, cópia para o R2 e o resolvedor de URL.
 
 **Fase 4 — leitura no web.** Inbox, thread, painel do lead, aba na ficha. Já entrega valor sem envio.
 
@@ -457,9 +527,11 @@ formatos novos observados (mídia, áudio, resposta, reação) aqui e no `CLAUDE
 
 | Risco | Mitigação |
 |---|---|
-| **Mídia perdida** — 2 dias e sumiu | baixar na ingestão; `mediaFailed` explícito na UI, sem fingir que existe |
-| **Worker parado** = conversa congelada sem aviso | contador de `pending`/`failed` exposto e alerta na tela quando a fila cresce |
-| **Volume** — inbox de imobiliária movimentada | `InboxEvent` cresce rápido; definir expurgo dos `done` (sugestão: 30 dias) |
+| **Mídia perdida** — 2 dias e sumiu | baixar assim que a mensagem chega; `failed` explícito na UI, sem fingir que existe |
+| **Redis fora do ar** | webhook responde 200 e processa inline (degradado, mas não perde); boot avisa quando falta `REDIS_URL` em produção |
+| **Job perdido no Redis** = buraco na conversa | `POST /conversations/:id/sync` relê por `/message/find` e reconcilia por `providerId` |
+| **Presigned expirada na tela** | TTL curto de propósito; a URL é resolvida no momento de exibir, não cacheada na listagem (§7.2) |
+| **Volume** — inbox de imobiliária movimentada | `removeOnComplete`/`removeOnFail` do BullMQ contêm o Redis; a mídia no R2 é que precisa de política de retenção |
 | **Nono dígito com colisão fixo/celular** | não auto-vincular quando ambíguo (§3.3) |
 | **Envelope muda** | o receptor tolerante da fase 1 continua valendo; `log.warn` no desconhecido |
 | **LGPD** | conversa inteira é dado pessoal: mídia em bucket privado, presigned curto, e uma decisão de retenção antes de produção |
@@ -475,4 +547,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 01:29 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 01:44 (-03)
