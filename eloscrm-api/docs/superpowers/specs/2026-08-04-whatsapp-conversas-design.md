@@ -84,7 +84,32 @@ número.
 estado em dois lugares cria divergência sem dono. Ler `chat.lead_name` só como *sugestão* de nome ao
 criar lead — nunca escrever de volta.
 
-### 2.5 Mídia expira em 2 dias
+### 2.5 O que vem numa mensagem de mídia (observado: image, ptt, document)
+
+`message` **não tem `fileURL`**. O que existe é `content`, com os campos crus do WhatsApp:
+
+| Campo em `content` | image | ptt | document |
+|---|---|---|---|
+| `mimetype` | `image/jpeg` | `audio/ogg; codecs=opus` | `application/pdf` |
+| `fileLength` | 18196 | 12313 | 18810 |
+| `JPEGThumbnail` | 1440 chars b64 | — | 700 chars b64 |
+| `caption` | `legenda` | — | `Legenda` |
+| outros | `width`, `height` | `seconds`, `waveform`, `PTT` | `fileName`, `pageCount` |
+| `URL` / `directPath` | `.enc` no CDN da Meta | idem | idem |
+
+Três consequências:
+
+1. **`URL` é inútil direto.** Aponta para `mmg.whatsapp.net/….enc` — arquivo cifrado que exige
+   `mediaKey` para decifrar. Não entra num `<img src>`. Confirma que a URL exibível só nasce do
+   `/message/download`.
+2. **`JPEGThumbnail` é preview grátis e instantâneo.** ~1 KB de base64 que chega junto do webhook.
+   Dá para desenhar a bolha com a miniatura antes de qualquer download — melhor que qualquer URL
+   temporária, porque tem latência zero.
+3. **Os metadados chegam antes do arquivo**: nome, tamanho, duração, dimensões, páginas. A tela
+   mostra "sample.pdf · 18 KB" de imediato, e `fileLength` permite recusar arquivo grande **antes**
+   de baixar.
+
+### 2.6 Mídia expira em 2 dias
 
 Da spec de `/message/download`: *"mantemos as mídias no nosso storage por 2 dias. Após 2 dias, elas
 são removidas na limpeza automática e o link retornado deixa de ficar disponível."*
@@ -92,7 +117,7 @@ são removidas na limpeza automática e o link retornado deixa de ficar disponí
 Consequência dura: **se não baixarmos na ingestão, o áudio que o lead mandou some.** É a única parte
 deste sistema onde a falha é irreversível — todo o resto se recupera com um sync.
 
-### 2.6 Telefone: o nono dígito quebra o matching
+### 2.7 Telefone: o nono dígito quebra o matching
 
 | Origem | Formato | Exemplo |
 |---|---|---|
@@ -153,14 +178,18 @@ mensagem, o corretor lê e **então** decide criar o lead. Amarrar conversa a le
 lead para todo número que escreve — inclusive engano e spam.
 
 **3.5 — Mídia no R2, com a URL temporária da uazapi cobrindo o intervalo.**
-O destino final é o R2 privado (§2.5 — em 2 dias o link da uazapi morre). Mas o corretor não pode
+O destino final é o R2 privado (§2.6 — em 2 dias o link da uazapi morre). Mas o corretor não pode
 esperar o upload para ver a foto que acabou de chegar.
 
-Então a mensagem tem **dois endereços de mídia e uma ordem de precedência**:
+Então a mensagem tem **três estágios de exibição**, em ordem de precedência:
 
 1. `mediaKey` no R2 → **presigned URL** de curta duração. É o caminho definitivo.
 2. Ainda na fila → `mediaTempUrl` da uazapi, enquanto não expirou.
-3. Nenhum dos dois → indisponível, dito explicitamente.
+3. Nada disso ainda → **`JPEGThumbnail`** (§2.5), que chegou junto do webhook e não custa
+   requisição nenhuma. Some assim que (1) ou (2) existir.
+
+O estágio 3 é o que faz a bolha nunca aparecer vazia: a miniatura está no banco no mesmo instante em
+que a mensagem aparece, antes de qualquer chamada à uazapi.
 
 Quem resolve isso é o backend, num único ponto (§7.2); o front recebe uma URL pronta e não conhece a
 diferença. Assim que o upload conclui, a mensagem é atualizada com a `mediaKey` e a URL temporária é
@@ -248,9 +277,16 @@ model WhatsappMessage {
   mediaStatus   WhatsappMediaStatus @default(none)
   // destino final: chave no R2 privado. Preenchida quando o upload conclui.
   mediaKey      String?
+  // metadados vêm do `content` do webhook, antes de qualquer download (§2.5)
   mediaMime     String?
-  mediaSize     Int?
-  mediaFilename String?
+  mediaSize     Int?      // content.fileLength — permite recusar arquivo grande sem baixar
+  mediaFilename String?   // content.fileName (documento)
+  mediaDuration Int?      // content.seconds (áudio/vídeo)
+  mediaWidth    Int?
+  mediaHeight   Int?      // dimensões evitam o layout pular quando a imagem carrega
+  // content.JPEGThumbnail: ~1 KB de base64 que já chega no webhook e cobre o intervalo até o
+  // arquivo existir. É o estágio 3 da §3.5.
+  mediaThumb    String?
   // ponte enquanto o upload não terminou (§3.5). A uazapi expira em ~2 dias — guardar a validade
   // evita entregar ao front uma URL que já morreu.
   mediaTempUrl       String?
@@ -359,7 +395,10 @@ Endpoint **novo na lib**: `messages.download({ id, return_link: true })` — hoj
 ### 7.1 Fluxo
 
 ```
-mediaStatus = pending                       ← mensagem já visível na tela, sem mídia
+ingestão (fila whatsapp-message)
+  → grava mediaMime/mediaSize/mediaFilename/mediaDuration/mediaWidth/mediaHeight/mediaThumb
+  → mediaStatus = pending
+  ← A BOLHA JÁ APARECE: miniatura, nome do arquivo, tamanho e duração, sem nenhuma chamada externa
   ↓ worker whatsapp-media
 POST /message/download { id, return_link: true }
   → fileURL válida ~2 dias
@@ -373,8 +412,9 @@ baixa a fileURL e sobe ao R2 privado
 Falha esgotadas as tentativas: `mediaStatus = failed` + `mediaError`. A mensagem continua na
 conversa, marcada como mídia indisponível — **nunca sumir com a mensagem por causa do anexo**.
 
-Sem retry indefinido: passados os 2 dias não há o que buscar (§2.5). Limite de tamanho (sugestão:
-20 MB) para um vídeo não estourar a memória do processo.
+Sem retry indefinido: passados os 2 dias não há o que buscar (§2.6). O limite de tamanho (sugestão:
+20 MB) é aplicado **antes de baixar**, com o `content.fileLength` que já veio no webhook — arquivo
+acima do teto vira `failed` com motivo, e a bolha ainda mostra nome, tamanho e miniatura.
 
 ### 7.2 A URL que o front recebe
 
@@ -384,18 +424,17 @@ Um único resolvedor no backend decide, por mensagem:
 |---|---|
 | `mediaStatus = ready` | **presigned URL** do R2, curta (~10 min), como `Attachment` já faz |
 | `mediaStatus = pending` e `mediaTempExpiresAt` no futuro | `mediaTempUrl` da uazapi |
-| resto | `null` + motivo |
+| resto | `null` + motivo — a UI cai no `mediaThumb`, que sempre esteve lá |
 
 O front nunca sabe de onde veio — pede a URL e exibe. Como a presigned expira, a URL **não** é
 cacheada na resposta de listagem por muito tempo: ou vem junto da mensagem com TTL curto, ou por
 `GET /messages/:id/media` no momento de exibir. Preferir a segunda para vídeo e documento; embutir
 para imagem, que aparece imediatamente na thread.
 
-> **A confirmar na fase 3.** O evento capturado era de texto e não trazia `fileURL` entre os 30
-> campos de `message` — o que sugere que a URL só existe **após** o `/message/download`. Se o
-> webhook de mídia já trouxer um link utilizável (`fileURL` ou algo em `content`), dá para preencher
-> `mediaTempUrl` já no passo 5 da ingestão e a mídia aparece ainda mais cedo. Capturar um evento de
-> imagem custa o mesmo que custou o de texto: ligar a trilha e mandar uma foto.
+> **Confirmado em 2026-08-04** com image, ptt e document reais (§2.5): não há `fileURL` no
+> webhook, e o `content.URL` aponta para o `.enc` cifrado do CDN da Meta. A URL exibível **só nasce
+> do `/message/download`** — o fluxo acima está certo. O consolo é o `JPEGThumbnail`, que cobre o
+> intervalo melhor do que uma URL cobriria.
 
 ---
 
@@ -487,9 +526,10 @@ Mesma linha da fase 1: Postgres real, uazapi mockada (`vi.mock`).
 5. Dois leads com a mesma `phoneKey` → conversa fica **sem** vínculo.
 6. `sender` em LID não é usado como telefone.
 7. `messageTimestamp` em ms vira `sentAt` correto (não 1970).
-8. Mídia: download mockado → `mediaTempUrl` primeiro, `mediaKey` + `ready` depois; falha → `failed`
-   com a mensagem preservada.
+8. Mídia: metadados e `mediaThumb` gravados na ingestão, sem chamar a uazapi; download mockado →
+   `mediaTempUrl`; upload → `mediaKey` + `ready`; falha → `failed` com a mensagem preservada.
 8b. Resolvedor da §7.2: `ready` → presigned; `pending` com temp válida → temp; temp expirada → nulo.
+8c. `fileLength` acima do teto → `failed` **sem** chamar `/message/download`.
 9. Envio grava `pending` antes e `sent` depois; erro `whatsapp_server` → código próprio.
 10. Isolamento entre organizações em cada rota.
 11. `create-client` cria com `source: WHATSAPP` e vincula.
@@ -509,8 +549,8 @@ nada casa. *Independente do resto: pode ir para produção sozinha.*
 `messages` no webhook registrado, fila `whatsapp-message`, matching. Sem UI: verificável por teste e
 pelo banco.
 
-**Fase 3 — mídia.** Capturar um evento de mídia real (§7.2) **antes** de codar, `messages.download`
-na lib, fila `whatsapp-media`, cópia para o R2 e o resolvedor de URL.
+**Fase 3 — mídia.** `messages.download` na lib, fila `whatsapp-media`, cópia para o R2 e o
+resolvedor de URL. O formato já está observado (§2.5) — não há captura pendente.
 
 **Fase 4 — leitura no web.** Inbox, thread, painel do lead, aba na ficha. Já entrega valor sem envio.
 
@@ -547,4 +587,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 01:44 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:05 (-03)

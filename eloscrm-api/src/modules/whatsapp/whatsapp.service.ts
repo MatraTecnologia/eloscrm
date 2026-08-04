@@ -33,7 +33,10 @@ import type {
 } from "./whatsapp.schema.js";
 import { serializeInstance } from "./whatsapp.serialize.js";
 
-const WEBHOOK_EVENTS = ["connection"] as const;
+// `messages` traz o que o lead escreve; `messages_update` traz a mudança de status
+// (entregue/lido/editado/apagado) de mensagem já existente. Ambos são a base da fase 2 — o receptor
+// ainda só *trata* `connection`, mas assinar desde já é o que permite observar o formato real.
+const WEBHOOK_EVENTS = ["connection", "messages", "messages_update"] as const;
 
 const requireManager = async (orgId: string, actor: Actor) => {
   if (!(await isOrgManager(orgId, actor.id))) {
