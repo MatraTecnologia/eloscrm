@@ -265,6 +265,17 @@ possível reagir a mensagens enviadas por outros usuários"*. Por isso o botão 
 em bolha própria. **Não foi testado contra a API real** — se a limitação não valer, soltar é uma
 linha em `reactions.service.ts`.
 
+**Remover tem duas formas.** Quem remove **de fora** manda `content` **sem** o campo `text`; a
+remoção que sai daqui manda `content.text: ""`. Nos dois casos `message.text` é vazio — por isso o
+parse lê `message.text` e não `content.text`, que quebraria justamente na remoção vinda do contato:
+
+```jsonc
+// removida pelo contato                    // removida por nós
+"content": { "key": {…},                    "content": { "key": {…},
+             "senderTimestampMS": … },                   "text": "",
+"text": "",                                              "senderTimestampMS": … },
+```
+
 **Uma reação por pessoa e por mensagem**, garantido pelo provedor: trocar substitui, `text` vazio
 remove. O `@@unique([messageId, authorLid])` espelha isso. `authorLid` colapsa em `me` para tudo que
 sai daqui, **inclusive** o que volta pelo webhook com o LID da própria instância — sem isso, reagir
@@ -890,4 +901,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:36 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:41 (-03)

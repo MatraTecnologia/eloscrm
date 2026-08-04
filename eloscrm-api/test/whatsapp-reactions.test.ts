@@ -150,6 +150,32 @@ describe("reação recebida", () => {
     expect(items[0].reactions).toEqual([]);
   });
 
+  it("remoção de fora vem sem `content.text`, e não só com ele vazio", async () => {
+    const alvo = await criarMensagem();
+    await post(eventoReacao(alvo.providerMessageId!, "😮"));
+
+    // Payload real de 2026-08-04: quem remove de fora manda `content` SEM o campo `text`, enquanto
+    // a remoção que sai daqui manda `text: ""`. Quem decide é `message.text`, vazio nos dois casos
+    // — ler `content.text` quebraria justamente na remoção vinda do contato.
+    const evento = eventoReacao(alvo.providerMessageId!, "");
+    delete (evento.message.content as { text?: string }).text;
+
+    const res = await post(evento);
+    expect(res.statusCode).toBe(200);
+
+    const { items } = await thread();
+    expect(items[0].reactions).toEqual([]);
+  });
+
+  it("remover o que não existe não quebra — a remoção pode chegar sozinha", async () => {
+    const alvo = await criarMensagem();
+
+    const res = await post(eventoReacao(alvo.providerMessageId!, ""));
+
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.whatsappReaction.count()).toBe(0);
+  });
+
   it("não mexe na prévia nem no não lido — reagir não é escrever", async () => {
     const alvo = await criarMensagem();
 
