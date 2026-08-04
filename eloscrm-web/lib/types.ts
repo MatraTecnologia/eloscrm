@@ -255,6 +255,7 @@ export type WhatsappLogEvent =
   | "synced"
   | "name_updated"
   | "webhook_configured"
+  | "test_message_sent"
   | "remote_deleted"
   | "deleted"
   | "error";
@@ -276,4 +277,45 @@ export type WhatsappWebhookConfig = {
   excludeMessages?: string[];
   url: string;
   isOurs: boolean;
+};
+
+export type WhatsappWebhookErrors = {
+  errors: {
+    url: string;
+    event: string;
+    type: string;
+    error: string;
+    attempts: number;
+    status_code?: number;
+    created: string;
+    message_type?: string;
+  }[];
+  captureStartedAt?: string;
+};
+
+// Passthrough de GET /instance/wa-limits. Os campos vêm da uazapi; nem todos aparecem sempre.
+export type WhatsappLimits = {
+  can_send_new_messages: boolean | null;
+  reachable: boolean;
+  message: string;
+  message_ptbr: string;
+  provider: string;
+  provider_message_ptbr?: string;
+  diagnostics_endpoint?: string;
+  new_chat_message_capping?: {
+    available: boolean;
+    status?: string;
+    total_quota?: number;
+    used_quota?: number;
+    cycle_start?: string;
+    cycle_end?: string;
+    lookup_error?: string;
+  };
+  reachout_timelock?: {
+    active: boolean;
+    available: boolean;
+    until?: string;
+    enforcement_type?: string;
+    lookup_error?: string;
+  };
 };

@@ -12,8 +12,11 @@ import { useCreateWhatsappInstance, useWhatsappInstance } from "@/lib/queries/wh
 import { toast } from "sonner";
 import { ConnectPanel } from "./connect-panel";
 import { DangerZone } from "./danger-zone";
+import { DiagnosticsTab } from "./diagnostics-tab";
 import { InstanceHeader } from "./instance-header";
 import { LogsTab } from "./logs-tab";
+import { OverviewTab } from "./overview-tab";
+import { TestSendTab } from "./test-send-tab";
 import { useAutoSyncProfile } from "./use-auto-sync-profile";
 import { WebhookTab } from "./webhook-tab";
 
@@ -111,15 +114,31 @@ export default function WhatsappIntegrationPage() {
             <ConnectPanel instance={instance} canManage={canManage} />
           )}
 
-          <Tabs defaultValue="webhook">
+          <Tabs defaultValue="overview">
             <TabsList>
+              <TabsTrigger value="overview">Visão geral</TabsTrigger>
               <TabsTrigger value="webhook">Sincronização</TabsTrigger>
+              {canManage && <TabsTrigger value="test">Teste</TabsTrigger>}
+              {canManage && <TabsTrigger value="diagnostics">Diagnóstico</TabsTrigger>}
               <TabsTrigger value="logs">Histórico</TabsTrigger>
               {canManage && <TabsTrigger value="danger">Zona de risco</TabsTrigger>}
             </TabsList>
+            <TabsContent value="overview">
+              <OverviewTab instance={instance} canManage={canManage} />
+            </TabsContent>
             <TabsContent value="webhook">
               <WebhookTab canManage={canManage} />
             </TabsContent>
+            {canManage && (
+              <TabsContent value="test">
+                <TestSendTab instance={instance} />
+              </TabsContent>
+            )}
+            {canManage && (
+              <TabsContent value="diagnostics">
+                <DiagnosticsTab />
+              </TabsContent>
+            )}
             <TabsContent value="logs">
               <LogsTab />
             </TabsContent>

@@ -20,6 +20,7 @@ const remote = {
     waMessagesLimits: vi.fn(),
   },
   webhook: { upsert: vi.fn(), get: vi.fn(), errors: vi.fn() },
+  send: { text: vi.fn() },
 };
 
 vi.mock("../src/lib/uazapi/index.js", () => ({
@@ -381,6 +382,59 @@ describe("POST /webhooks/uazapi/:instanceId/:secret", () => {
   it("o tokenHash guardado corresponde ao token da instância", async () => {
     const saved = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
     expect(saved.tokenHash).toBe(hashToken(TOKEN));
+  });
+});
+
+describe("POST /v1/whatsapp/instance/test-send", () => {
+  beforeEach(async () => {
+    await dropInstance();
+    await createInstance();
+  });
+
+  const send = (payload: Record<string, unknown>, headers = { cookie }) =>
+    app.inject({ method: "POST", url: "/v1/whatsapp/instance/test-send", headers, payload });
+
+  const connect = () =>
+    prisma.uazapiInstance.updateMany({
+      where: { organizationId: orgId },
+      data: { status: "connected" },
+    });
+
+  it("recusa envio com a instância desconectada (409)", async () => {
+    const res = await send({ number: "5543999140409", text: "oi" });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("INSTANCE_NOT_CONNECTED");
+    expect(remote.send.text).not.toHaveBeenCalled();
+  });
+
+  it("envia quando conectada e registra o log sem o texto da mensagem", async () => {
+    await connect();
+    remote.send.text.mockResolvedValue(ok({ id: "msg-1", status: "Sent" }));
+
+    const res = await send({ number: "5543999140409", text: "conteúdo sigiloso do teste" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: "msg-1", status: "Sent" });
+    expect(remote.send.text).toHaveBeenCalledWith({
+      number: "5543999140409",
+      text: "conteúdo sigiloso do teste",
+    });
+
+    const log = await prisma.uazapiInstanceLog.findFirst({ where: { event: "test_message_sent" } });
+    expect(log?.message).toContain("5543999140409");
+    // o texto não tem valor de auditoria e é conteúdo de conversa
+    expect(JSON.stringify(log?.payload)).not.toContain("sigiloso");
+  });
+
+  it("valida o número (422)", async () => {
+    await connect();
+    const res = await send({ number: "123", text: "oi" });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("recusa texto vazio (422)", async () => {
+    await connect();
+    const res = await send({ number: "5543999140409", text: "   " });
+    expect(res.statusCode).toBe(422);
   });
 });
 

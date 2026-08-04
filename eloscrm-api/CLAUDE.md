@@ -175,6 +175,12 @@ apontado em `PUBLIC_API_URL`, o estado da conexão só muda pelo botão **Sincro
 as rotas de WhatsApp respondem `503 INTEGRATION_NOT_CONFIGURED`. `GET /v1/whatsapp/instance` funciona
 mesmo assim — lê só o estado local.
 
+**`POST /instance/test-send` é a única rota que faz o número enviar mensagem.** Gestor apenas,
+recusa com `409 INSTANCE_NOT_CONNECTED` se a instância não estiver conectada, e o log
+(`test_message_sent`) guarda o número de destino e o id da mensagem — **não o texto**, que é conteúdo
+de conversa e não tem valor de auditoria. Se um dia virar envio em massa, isso deixa de ser uma rota
+de diagnóstico e precisa de fila e limite.
+
 **Perder a `UAZAPI_TOKEN_ENCRYPTION_KEY` inutiliza todos os tokens salvos** (AES-256-GCM em
 `src/lib/crypto.ts`). Ela pertence ao cofre de produção, junto com `BETTER_AUTH_SECRET`.
 
@@ -194,4 +200,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 - WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:22 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:36 (-03)

@@ -5,6 +5,7 @@ import {
   createInstanceSchema,
   listLogsQuerySchema,
   renameInstanceSchema,
+  testSendSchema,
 } from "../../../modules/whatsapp/whatsapp.schema.js";
 import * as service from "../../../modules/whatsapp/whatsapp.service.js";
 import { authGuard } from "../../../plugins/auth-guard.js";
@@ -54,6 +55,11 @@ const whatsappRoutes = async (app: FastifyInstance) => {
   );
 
   app.get("/instance/webhook/errors", async (request) => service.webhookErrors(request.orgId!, actorOf(request)));
+
+  app.post("/instance/test-send", async (request) => {
+    const data = testSendSchema.parse(request.body);
+    return service.testSend(request.orgId!, data, actorOf(request));
+  });
 
   app.get("/instance/logs", async (request) => {
     const query = listLogsQuerySchema.parse(request.query);

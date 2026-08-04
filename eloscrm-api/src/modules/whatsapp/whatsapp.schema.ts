@@ -17,6 +17,14 @@ export const connectInstanceSchema = z.object({
     .optional(),
 });
 
+export const testSendSchema = z.object({
+  number: z
+    .string()
+    .trim()
+    .regex(/^\d{10,15}$/, "informe só os dígitos, com DDI e DDD"),
+  text: z.string().trim().min(1).max(1000),
+});
+
 export const listLogsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   cursor: z.string().optional(),
@@ -72,5 +80,6 @@ export const connectionDataOf = (body: WebhookBody): Record<string, unknown> => 
 export type CreateInstanceInput = z.infer<typeof createInstanceSchema>;
 export type RenameInstanceInput = z.infer<typeof renameInstanceSchema>;
 export type ConnectInstanceInput = z.infer<typeof connectInstanceSchema>;
+export type TestSendInput = z.infer<typeof testSendSchema>;
 export type ListLogsQuery = z.infer<typeof listLogsQuerySchema>;
 export type WebhookBody = z.infer<typeof webhookBodySchema>;

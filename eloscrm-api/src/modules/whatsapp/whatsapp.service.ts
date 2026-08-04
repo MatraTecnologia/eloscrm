@@ -24,7 +24,13 @@ import {
   type IntegrationConfig,
 } from "./whatsapp.gateway.js";
 import * as repo from "./whatsapp.repo.js";
-import type { ConnectInstanceInput, CreateInstanceInput, ListLogsQuery, RenameInstanceInput } from "./whatsapp.schema.js";
+import type {
+  ConnectInstanceInput,
+  CreateInstanceInput,
+  ListLogsQuery,
+  RenameInstanceInput,
+  TestSendInput,
+} from "./whatsapp.schema.js";
 import { serializeInstance } from "./whatsapp.serialize.js";
 
 const WEBHOOK_EVENTS = ["connection"] as const;
@@ -366,6 +372,32 @@ export const webhookErrors = async (orgId: string, actor: Actor) => {
   const instance = await requireInstance(orgId);
   guardRemoteAlive(instance);
   return callRemote(instance, (client) => client.webhook.errors());
+};
+
+export const testSend = async (orgId: string, data: TestSendInput, actor: Actor) => {
+  await requireManager(orgId, actor);
+  const instance = await requireInstance(orgId);
+  guardRemoteAlive(instance);
+  // sem esta checagem o erro viria da uazapi como 502 genérico, sem dizer o que fazer a respeito
+  if (instance.status !== UazapiInstanceStatus.connected) {
+    throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar uma mensagem de teste");
+  }
+
+  const result = await callRemote(instance, (client) =>
+    client.send.text({ number: data.number, text: data.text }),
+  );
+
+  await repo.writeLog({
+    instanceId: instance.id,
+    event: LogEvent.test_message_sent,
+    source: LogSource.manual,
+    actorUserId: actor.id,
+    message: `teste enviado para ${data.number}`,
+    // o texto da mensagem fica de fora: não tem valor de auditoria e é conteúdo de conversa
+    payload: { number: data.number, messageId: result.id, status: result.status },
+  });
+
+  return { id: result.id, status: result.status ?? null };
 };
 
 export const logs = async (orgId: string, query: ListLogsQuery, actor: Actor) => {

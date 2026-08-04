@@ -26,6 +26,7 @@ export const logEventLabels: Record<WhatsappLogEvent, string> = {
   synced: "Sincronizado",
   name_updated: "Nome alterado",
   webhook_configured: "Webhook configurado",
+  test_message_sent: "Mensagem de teste enviada",
   remote_deleted: "Removido no servidor",
   deleted: "Excluído",
   error: "Erro",

@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { WhatsappInstance, WhatsappLog, WhatsappWebhookConfig } from "@/lib/types";
+import type {
+  WhatsappInstance,
+  WhatsappLimits,
+  WhatsappLog,
+  WhatsappWebhookConfig,
+  WhatsappWebhookErrors,
+} from "@/lib/types";
 
 const key = (orgId?: string) => ["whatsapp", orgId] as const;
 
@@ -50,12 +56,25 @@ export const useWhatsappWebhook = (enabled: boolean) => {
   });
 };
 
+export const useWhatsappWebhookErrors = (enabled: boolean) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), "webhook-errors"],
+    queryFn: async () => {
+      const { data } = await api.get<WhatsappWebhookErrors>("/whatsapp/instance/webhook/errors");
+      return data;
+    },
+    enabled: enabled && !!org?.id,
+    retry: false,
+  });
+};
+
 export const useWhatsappLimits = (enabled: boolean) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
     queryKey: [...key(org?.id), "wa-limits"],
     queryFn: async () => {
-      const { data } = await api.get<Record<string, unknown>>("/whatsapp/instance/wa-limits");
+      const { data } = await api.get<WhatsappLimits>("/whatsapp/instance/wa-limits");
       return data;
     },
     enabled: enabled && !!org?.id,
@@ -114,4 +133,17 @@ export const useReconcileWhatsappWebhook = () =>
 export const useDeleteWhatsappInstance = () =>
   useWhatsappMutation(async () => {
     await api.delete("/whatsapp/instance");
+  });
+
+// fora do useWhatsappMutation de propósito: enviar teste não muda estado da instância, então
+// invalidar o cache inteiro só provocaria refetch à toa
+export const useTestSendWhatsapp = () =>
+  useMutation({
+    mutationFn: async (input: { number: string; text: string }) => {
+      const { data } = await api.post<{ id: string; status: string | null }>(
+        "/whatsapp/instance/test-send",
+        input,
+      );
+      return data;
+    },
   });

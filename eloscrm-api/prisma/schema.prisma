@@ -404,6 +404,7 @@ enum UazapiInstanceLogEvent {
   synced
   name_updated
   webhook_configured
+  test_message_sent
   remote_deleted
   deleted
   error

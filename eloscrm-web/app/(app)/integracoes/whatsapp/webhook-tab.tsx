@@ -1,12 +1,18 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useReconcileWhatsappWebhook, useWhatsappWebhook } from "@/lib/queries/whatsapp";
+import {
+  useReconcileWhatsappWebhook,
+  useWhatsappWebhook,
+  useWhatsappWebhookErrors,
+} from "@/lib/queries/whatsapp";
 import { toast } from "sonner";
 
 export const WebhookTab = ({ canManage }: { canManage: boolean }) => {
@@ -89,7 +95,55 @@ export const WebhookTab = ({ canManage }: { canManage: boolean }) => {
             </Button>
           </div>
         )}
+
+        <DeliveryErrors />
       </CardContent>
     </Card>
+  );
+};
+
+/**
+ * Falhas de entrega respondem à pergunta "o webhook está registrado, então por que o status não
+ * atualiza?". Sem isso, o único jeito de descobrir seria o painel da uazapi.
+ */
+const DeliveryErrors = () => {
+  const { data, isLoading } = useWhatsappWebhookErrors(true);
+
+  if (isLoading || !data) return null;
+
+  return (
+    <div className="border-t pt-4">
+      <h3 className="mb-2 text-sm font-medium">Falhas de entrega recentes</h3>
+
+      {data.errors.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Nenhuma falha registrada
+          {data.captureStartedAt &&
+            ` desde ${format(parseISO(data.captureStartedAt), "dd/MM 'às' HH:mm", { locale: ptBR })}`}
+          .
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {data.errors.slice(0, 10).map((entry, index) => (
+            <div key={`${entry.created}-${index}`} className="rounded-md border px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="destructive">{entry.status_code ?? "sem resposta"}</Badge>
+                <span className="font-medium">{entry.event}</span>
+                <span className="text-muted-foreground text-xs">
+                  {format(parseISO(entry.created), "dd/MM HH:mm", { locale: ptBR })} ·{" "}
+                  {entry.attempts} tentativa{entry.attempts === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-1 text-xs break-all">{entry.error}</p>
+            </div>
+          ))}
+          {data.errors.length > 10 && (
+            <p className="text-muted-foreground text-xs">
+              e mais {data.errors.length - 10} falha{data.errors.length - 10 === 1 ? "" : "s"}.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
