@@ -106,14 +106,37 @@ describe("download de mídia", () => {
   });
 
   it("recusa arquivo grande SEM chamar o download", async () => {
-    const msg = await criarMensagem({ mediaSize: 40 * 1024 * 1024 });
+    const msg = await criarMensagem({ mediaSize: 150 * 1024 * 1024 });
 
     await processMediaJob({ messageId: msg.id });
 
     expect(remote.messages.download).not.toHaveBeenCalled();
     const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
     expect(salvo.mediaStatus).toBe("failed");
+    // o texto vai direto para a bolha: tamanho e teto em unidade legível, não bytes crus
+    expect(salvo.mediaError).toBe("arquivo de 150 MB acima do limite de 100 MB");
+  });
+
+  it("corta no meio do stream quando o tamanho declarado no webhook mente", async () => {
+    // 1 KB no webhook, 6 MB descendo pelo fio: sem contar o que passa, o teto não pegaria nada.
+    // 6 MB também garante mais de uma parte de 5 MB, então o multipart chega a ser aberto.
+    const msg = await criarMensagem({ mediaSize: 1024 });
+    remote.messages.download.mockResolvedValue({
+      success: true,
+      data: { fileURL: "https://uazapi.test/grande.mp4", mimetype: "video/mp4" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(Buffer.alloc(6 * 1024 * 1024), { status: 200 })),
+    );
+
+    await processMediaJob({ messageId: msg.id }, 4 * 1024 * 1024);
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(salvo.mediaStatus).toBe("failed");
     expect(salvo.mediaError).toContain("limite");
+    // a URL temporária do provedor sobrevive: a mídia ainda dá para ver por ~2 dias
+    expect(salvo.mediaTempUrl).toBe("https://uazapi.test/grande.mp4");
   });
 
   it("falha do provedor não apaga a mensagem — só marca a mídia", async () => {

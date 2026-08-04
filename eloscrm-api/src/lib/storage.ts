@@ -1,3 +1,6 @@
+import type { Readable } from "node:stream";
+
+import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import {
@@ -83,20 +86,30 @@ export const headFile = async (bucket: string, key: string) => {
   return { contentLength: response.ContentLength ?? 0, contentType: response.ContentType ?? null };
 };
 
-export const uploadFile = (
+/**
+ * Sobe direto da origem, sem o arquivo inteiro passar pela memória.
+ *
+ * `queueSize: 1` é o ponto: com o default (4 partes em voo) o consumo volta a crescer com o
+ * tamanho do arquivo, que é justamente o que este caminho existe para evitar. Com uma parte por
+ * vez o pico fica em ~5 MB, seja o arquivo de 1 MB ou de 100 MB.
+ *
+ * Corpo que cabe numa parte só vira um PutObject simples — o multipart nem chega a ser aberto.
+ * E como `leavePartsOnError` fica no default `false`, stream que morre no meio dispara o
+ * `AbortMultipartUpload`: sem isso as partes já enviadas ficariam no bucket, cobrando storage sem
+ * aparecer em listagem nenhuma.
+ */
+export const uploadStream = (
   bucket: string,
   key: string,
-  body: Buffer,
+  body: Readable,
   contentType: string,
 ) =>
-  r2().send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    }),
-  );
+  new Upload({
+    client: r2(),
+    params: { Bucket: bucket, Key: key, Body: body, ContentType: contentType },
+    queueSize: 1,
+    partSize: 5 * 1024 * 1024,
+  }).done();
 
 export const deleteFile = (bucket: string, key: string) =>
   r2().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));

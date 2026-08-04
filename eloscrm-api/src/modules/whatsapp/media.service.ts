@@ -1,8 +1,12 @@
+import { Readable } from "node:stream";
+import type { ReadableStream as StreamWebReadable } from "node:stream/web";
+
 import { WhatsappMediaStatus } from "../../generated/prisma/client.js";
 import { decryptToken } from "../../lib/crypto.js";
+import { formatBytes } from "../../lib/format.js";
 import { prisma } from "../../lib/prisma.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
-import { R2_PRIVATE_BUCKET, getDownloadUrl, uploadFile } from "../../lib/storage.js";
+import { R2_PRIVATE_BUCKET, getDownloadUrl, uploadStream } from "../../lib/storage.js";
 import { createUazapiClient } from "../../lib/uazapi/index.js";
 import { env } from "../../env.js";
 
@@ -11,10 +15,12 @@ export const MEDIA_QUEUE = "whatsapp-media";
 export type MediaJob = { messageId: string };
 
 /**
- * Teto de download. A figurinha observada tinha 233 KB — mais de 10× a foto JPEG — então um teto
- * apertado recusaria conteúdo trivial de conversa. 25 MB cobre vídeo do WhatsApp com folga.
+ * Teto de download. Com o upload em stream, o custo de um arquivo grande não é mais memória —
+ * é storage. Então o número aqui é política de retenção, não limite técnico: 100 MB passa longe
+ * de qualquer vídeo que o WhatsApp entregue na prática (um de 30 MB já batia no teto anterior,
+ * de 25 MB, que fora dimensionado supondo o limite antigo de 16 MB do WhatsApp).
  */
-const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
 
 /**
  * A uazapi guarda a mídia por ~2 dias. Guardamos uma validade menor de propósito: entregar ao front
@@ -43,22 +49,74 @@ const extensionFor = (mime: string | null, filename: string | null) => {
   return EXTENSION[base] ?? "bin";
 };
 
+/**
+ * Envolve a origem contando o que passa e cortando no teto.
+ *
+ * Existe porque, sem buffer, não há mais o que medir depois — e a `flag` é lida em vez do tipo do
+ * erro porque o que o SDK propaga do stream não é garantidamente o mesmo objeto lançado aqui.
+ * `bytes` também é a fonte do `mediaSize`, que antes vinha do tamanho do buffer.
+ */
+const measured = (source: Readable, limit: number) => {
+  const state = { bytes: 0, exceeded: false };
+  const stream = Readable.from(
+    (async function* () {
+      for await (const chunk of source) {
+        state.bytes += chunk.length;
+        if (state.bytes > limit) {
+          state.exceeded = true;
+          throw new Error(`arquivo acima do limite (${state.bytes} bytes)`);
+        }
+        yield chunk;
+      }
+    })(),
+  );
+  return {
+    stream,
+    get bytes() {
+      return state.bytes;
+    },
+    get exceeded() {
+      return state.exceeded;
+    },
+  };
+};
+
 const fail = (messageId: string, reason: string) =>
   prisma.whatsappMessage.update({
     where: { id: messageId },
     data: { mediaStatus: WhatsappMediaStatus.failed, mediaError: reason },
   });
 
-export const processMediaJob = async (job: MediaJob) => {
+// o texto vai direto para a bolha, então diz o tamanho e o teto — sem isso "acima do limite"
+// não informa se faltou pouco ou muito
+const tooLarge = (bytes: number | null, limit: number) =>
+  `arquivo de ${formatBytes(bytes)} acima do limite de ${formatBytes(limit)}`;
+
+/**
+ * Motivo genérico de propósito.
+ *
+ * Os caminhos conhecidos (teto, erro da uazapi, HTTP do download) já chamam `fail` com texto
+ * próprio; o que sobra para cá é exceção inesperada, e `error.message` cru vira mensagem para o
+ * corretor ler na bolha. Token corrompido, por exemplo, produziria erro de criptografia na tela.
+ */
+const UNEXPECTED_REASON = "não foi possível baixar o arquivo";
+
+/**
+ * Baixa a mídia e sobe ao R2. Erro aqui é tratado por `processMediaJob`, que envolve esta função.
+ *
+ * `maxBytes` só existe para o teste: exercitar o corte no meio do stream com o teto real exigiria
+ * mover 100 MB de verdade por download, contador e upload, e a suíte roda contra storage local.
+ */
+const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
   const message = await prisma.whatsappMessage.findUnique({
     where: { id: job.messageId },
     include: { conversation: { include: { instance: true } } },
   });
   if (!message || message.mediaStatus === WhatsappMediaStatus.ready) return;
 
-  if ((message.mediaSize ?? 0) > MAX_MEDIA_BYTES) {
+  if ((message.mediaSize ?? 0) > maxBytes) {
     // recusa antes de baixar, usando o fileLength que já veio no webhook
-    await fail(message.id, `arquivo acima do limite (${message.mediaSize} bytes)`);
+    await fail(message.id, tooLarge(message.mediaSize, maxBytes));
     return;
   }
 
@@ -98,24 +156,32 @@ export const processMediaJob = async (job: MediaJob) => {
   });
 
   const response = await fetch(fileURL);
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     await fail(message.id, `falha ao baixar: HTTP ${response.status}`);
-    return;
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > MAX_MEDIA_BYTES) {
-    await fail(message.id, `arquivo acima do limite (${buffer.byteLength} bytes)`);
     return;
   }
 
   const key = `org/${message.organizationId}/whatsapp/${message.conversationId}/${message.id}.${extensionFor(mime, message.mediaFilename)}`;
-  await uploadFile(R2_PRIVATE_BUCKET, key, buffer, mime);
+  // o `fileLength` do webhook já foi conferido lá em cima, mas ele é declaração do provedor: o
+  // tamanho de verdade só se conhece contando o que passa
+  const medida = measured(Readable.fromWeb(response.body as StreamWebReadable), maxBytes);
+
+  try {
+    await uploadStream(R2_PRIVATE_BUCKET, key, medida.stream, mime);
+  } catch (error) {
+    // o estouro chega aqui pelo stream, e o SDK já abortou o multipart antes de propagar
+    if (medida.exceeded) {
+      await fail(message.id, tooLarge(medida.bytes, maxBytes));
+      return;
+    }
+    throw error;
+  }
 
   await prisma.whatsappMessage.update({
     where: { id: message.id },
     data: {
       mediaKey: key,
-      mediaSize: buffer.byteLength,
+      mediaSize: medida.bytes,
       mediaStatus: WhatsappMediaStatus.ready,
       // a partir daqui quem manda é o R2; a temporária morreria em horas
       mediaTempUrl: null,
@@ -123,6 +189,26 @@ export const processMediaJob = async (job: MediaJob) => {
       mediaError: null,
     },
   });
+};
+
+/**
+ * Registra a falha na própria mensagem e relança.
+ *
+ * Relançar é o que mantém as retentativas do BullMQ (`attempts: 3` em `lib/queue.ts`); registrar é o
+ * que impede o estado mudo. Sem isto, uma queda de rede no meio do upload deixava a mídia em
+ * `pending` **para sempre** — as três tentativas se esgotavam em silêncio e a bolha nunca dizia
+ * por quê, porque só `ingest.service` enfileira e ninguém reprocessa.
+ *
+ * O erro gravado é transitório enquanto há tentativa pela frente: quando uma dá certo, o update
+ * final zera `mediaError` e o status volta para `ready`.
+ */
+export const processMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
+  try {
+    await runMediaJob(job, maxBytes);
+  } catch (error) {
+    await fail(job.messageId, UNEXPECTED_REASON);
+    throw error;
+  }
 };
 
 createWorker<MediaJob>(MEDIA_QUEUE, async (job) => processMediaJob(job.data));

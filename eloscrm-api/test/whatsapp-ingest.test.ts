@@ -119,8 +119,8 @@ describe("ingestão de mensagens", () => {
     expect(await prisma.whatsappMessage.count({ where: { organizationId: orgId } })).toBe(1);
   });
 
-  it("guarda metadados e thumbnail da imagem sem baixar nada", async () => {
-    await post(
+  it("guarda metadados e thumbnail da imagem direto do webhook", async () => {
+    const res = await post(
       evento({
         messageid: "M4",
         type: "media",
@@ -137,13 +137,20 @@ describe("ingestão de mensagens", () => {
         },
       }),
     );
+    // mídia que falha não pode virar 5xx: a uazapi reentregaria uma mensagem já gravada
+    expect(res.statusCode).toBe(200);
+
     const msg = await prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId } });
     expect(msg.type).toBe("image");
-    expect(msg.mediaStatus).toBe("pending");
     expect(msg.mediaMime).toBe("image/jpeg");
     expect(msg.mediaSize).toBe(18196);
     expect(msg.mediaThumb).toBe("/9j/4AAQSkZJRg==");
     expect(msg.text).toBe("legenda");
+    // tudo acima vem do próprio webhook e é o que a bolha mostra enquanto o arquivo não chega —
+    // aqui ele nunca chega: sem Redis o download roda inline e o client da uazapi é um mock vazio.
+    // O que importa é que a falha ficou registrada na mensagem, em vez de derrubar a ingestão.
+    expect(msg.mediaStatus).toBe("failed");
+    expect(msg.mediaError).toBeTruthy();
   });
 
   it("gif chega como VideoMessage mas é classificado por mediaType", async () => {

@@ -57,8 +57,15 @@ export const processMessageEvent = async (job: MessageJob) => {
   );
 
   // fila separada: a uazapi apaga a mídia em 2 dias, então o download é urgente — mas não pode
-  // atrasar nem derrubar o registro da mensagem, que já está salva
-  if (parsedMessage.hasMedia) await enqueueMediaJob({ messageId: message.id });
+  // atrasar nem derrubar o registro da mensagem, que já está salva.
+  //
+  // O catch é o que torna essa frase verdadeira **sem Redis**: ali o enqueue roda o download na
+  // hora, e um erro subiria até o webhook, que devolveria 5xx e faria a uazapi reentregar uma
+  // mensagem já gravada. O motivo da falha não se perde — `processMediaJob` grava na própria
+  // mensagem antes de relançar.
+  if (parsedMessage.hasMedia) {
+    await enqueueMediaJob({ messageId: message.id }).catch(() => undefined);
+  }
 
   return { messageId: message.id, conversationId: conversation.id };
 };
