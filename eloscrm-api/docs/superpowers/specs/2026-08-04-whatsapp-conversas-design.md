@@ -788,4 +788,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 07:52 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 09:27 (-03)
