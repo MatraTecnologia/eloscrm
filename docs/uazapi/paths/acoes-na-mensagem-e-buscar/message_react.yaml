@@ -1,0 +1,214 @@
+post:
+  description: |
+    Envia uma reação (emoji) a uma mensagem específica. Este endpoint permite:
+
+    1. Adicionar ou remover reações em mensagens
+
+    2. Usar qualquer emoji Unicode válido
+
+    3. Reagir a mensagens em chats individuais ou grupos
+
+    4. Remover reações existentes
+
+    5. Verificar o status da reação enviada
+
+
+    Tipos de reações suportados:
+
+    - Qualquer emoji Unicode válido (👍, ❤️, 😂, etc)
+
+    - String vazia para remover reação
+
+
+    Exemplo de requisição básica:
+
+    ```json
+
+    {
+      "number": "5511999999999@s.whatsapp.net",
+      "text": "👍",
+      "id": "3EB0538DA65A59F6D8A251"
+    }
+
+    ```
+
+
+    Exemplo de requisição para remover reação:
+
+    ```json
+
+    {
+      "number": "5511999999999@s.whatsapp.net",
+      "text": "",
+      "id": "3EB0538DA65A59F6D8A251"
+    }
+
+    ```
+
+
+    Exemplo de resposta:
+
+    ```json
+
+    {
+      "success": true,
+      "message": "Reaction sent",
+      "reaction": {
+        "id": "3EB0538DA65A59F6D8A251",
+        "emoji": "👍",
+        "timestamp": 1672531200000,
+        "status": "sent"
+      }
+    }
+
+    ```
+
+
+    Exemplo de resposta ao remover reação:
+
+    ```json
+
+    {
+      "success": true,
+      "message": "Reaction removed",
+      "reaction": {
+        "id": "3EB0538DA65A59F6D8A251",
+        "emoji": null,
+        "timestamp": 1672531200000,
+        "status": "removed"
+      }
+    }
+
+    ```
+
+
+    Parâmetros disponíveis:
+
+    - number: Número do chat no formato internacional (ex:
+    5511999999999@s.whatsapp.net)
+
+    - text: Emoji Unicode da reação (ou string vazia para remover reação)
+
+    - id: ID da mensagem que receberá a reação
+
+
+    Erros comuns:
+
+    - 401: Token inválido ou expirado
+
+    - 400: Número inválido ou emoji não suportado
+
+    - 404: Mensagem não encontrada
+
+    - 500: Erro ao enviar reação
+
+
+    Limitações:
+
+    - Só é possível reagir a mensagens enviadas por outros usuários
+
+    - Não é possível reagir a mensagens antigas (mais de 7 dias)
+
+    - O mesmo usuário só pode ter uma reação ativa por mensagem
+  operationId: reactToMessage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: ID da mensagem que receberá a reação
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            number:
+              description: Número do chat no formato internacional
+              example: 5511999999999@s.whatsapp.net
+              type: string
+            text:
+              description: Emoji Unicode da reação (ou string vazia para remover reação)
+              example: 👍
+              type: string
+          required:
+            - number
+            - text
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              content:
+                description: Detalhes da reação
+                type: object
+              id:
+                description: ID único da mensagem de reação
+                example: owner:generated_message_id
+                type: string
+              messageTimestamp:
+                description: Timestamp da mensagem em milissegundos
+                example: 1672531200000
+                type: number
+              messageType:
+                description: Tipo da mensagem
+                example: reaction
+                type: string
+              messageid:
+                description: ID gerado para a mensagem de reação
+                example: generated_message_id
+                type: string
+              owner:
+                description: Proprietário da instância
+                example: instance_owner
+                type: string
+              status:
+                description: Status atual da mensagem
+                example: Pending
+                type: string
+            type: object
+      description: Reação enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing Id in Payload
+                type: string
+            type: object
+      description: Erro nos dados da requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Não autorizado
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Message not found
+                type: string
+            type: object
+      description: Mensagem não encontrada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Error sending message
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar reação a uma mensagem
+  tags:
+    - Ações na mensagem e Buscar

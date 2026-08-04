@@ -1,0 +1,85 @@
+post:
+  description: |
+    Configura o intervalo de tempo entre mensagens diretas enviadas com `async=true`.
+
+    ### Detalhes
+    - Configuração aplicada apenas à fila interna de mensagens async
+    - Afeta mensagens enviadas pelos endpoints de envio com `async=true`
+    - Não afeta campanhas do sender (`/sender/*`)
+    - Delay mínimo (msg_delay_min): 0 ou mais segundos (0 = sem delay)
+    - Delay máximo (msg_delay_max): se menor que min, será ajustado para o mesmo valor de min
+    - Sistema ajusta automaticamente valores negativos para 0
+
+    ### Exemplo
+    ```json
+    {
+      "msg_delay_min": 0,
+      "msg_delay_max": 2
+    }
+    ```
+  operationId: updateDelaySettings
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            msg_delay_max:
+              description: Delay máximo em segundos
+              example: 2
+              format: int64
+              minimum: 0
+              type: integer
+            msg_delay_min:
+              description: Delay mínimo em segundos (0 = sem delay)
+              example: 0
+              format: int64
+              minimum: 0
+              type: integer
+          required:
+            - msg_delay_min
+            - msg_delay_max
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              instance:
+                $ref: ../../schemas/instance.yaml#/Instance
+            type: object
+      description: Sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid request payload
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to update delay settings
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Configurar delay entre mensagens async
+  tags:
+    - Mensagem Async

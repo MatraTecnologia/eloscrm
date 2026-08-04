@@ -1,0 +1,88 @@
+post:
+  description: |
+    Retorna o perfil comercial da conta do WhatsApp Business atualmente conectada.
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            jid:
+              description: JID do perfil comercial a consultar
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Dados do perfil comercial
+                properties:
+                  address:
+                    description: O endereço do perfil comercial.
+                    type: string
+                  categories:
+                    description: As categorias do perfil comercial.
+                    items:
+                      properties:
+                        id:
+                          type: string
+                        localized_display_name:
+                          type: string
+                      type: object
+                    type: array
+                  description:
+                    description: A descrição do perfil comercial.
+                    type: string
+                  email:
+                    description: O email do perfil comercial.
+                    type: string
+                  tag:
+                    description: A tag do perfil comercial.
+                    type: string
+                  websites:
+                    description: Os websites do perfil comercial.
+                    items:
+                      type: string
+                    type: array
+                type: object
+            type: object
+      description: Perfil comercial recuperado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de validação do payload ou do JID
+                example: invalid payload
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar o perfil comercial
+  summary: Obter o perfil comercial
+  tags:
+    - Business

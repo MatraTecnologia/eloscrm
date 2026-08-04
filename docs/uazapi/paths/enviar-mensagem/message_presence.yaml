@@ -1,0 +1,134 @@
+post:
+  description: |
+    Envia uma atualização de presença para um contato ou grupo de forma **assíncrona**.
+
+    ## 🔄 Comportamento Assíncrono:
+    - **Execução independente**: A presença é gerenciada em background, não bloqueia o retorno da API
+    - **Limite máximo**: 5 minutos de duração (300 segundos)
+    - **Tick de atualização**: Reenvia a presença a cada 10 segundos
+    - **Cancelamento automático**: Presença é cancelada automaticamente ao enviar uma mensagem para o mesmo chat
+
+    ## 📱 Tipos de presença suportados:
+    - **composing**: Indica que você está digitando uma mensagem
+    - **recording**: Indica que você está gravando um áudio
+    - **paused**: Remove/cancela a indicação de presença atual
+
+    ## ⏱️ Controle de duração:
+    - **Sem delay**: Usa limite padrão de 5 minutos
+    - **Com delay**: Usa o valor especificado (máximo 5 minutos)
+    - **Cancelamento**: Envio de mensagem cancela presença automaticamente
+
+    ## 📋 Exemplos de uso:
+
+    ### Digitar por 30 segundos:
+    ```json
+    {
+      "number": "5511999999999",
+      "presence": "composing",
+      "delay": 30000
+    }
+    ```
+
+    ### Gravar áudio por 1 minuto:
+    ```json
+    {
+      "number": "5511999999999",
+      "presence": "recording",
+      "delay": 60000
+    }
+    ```
+
+    ### Cancelar presença atual:
+    ```json
+    {
+      "number": "5511999999999",
+      "presence": "paused"
+    }
+    ```
+
+    ### Usar limite máximo (5 minutos):
+    ```json
+    {
+      "number": "5511999999999",
+      "presence": "composing"
+    }
+    ```
+  operationId: sendPresence
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            delay:
+              description: |
+                Duração em milissegundos que a presença ficará ativa (máximo 5 minutos = 300000ms).
+                Se não informado ou valor maior que 5 minutos, usa o limite padrão de 5 minutos.
+                A presença é reenviada a cada 10 segundos durante este período.
+              example: 30000
+              maximum: 300000
+              type: integer
+            number:
+              description: 'Número do destinatário no formato internacional (ex: 5511999999999)'
+              example: '5511999999999'
+              type: string
+            presence:
+              description: Tipo de presença a ser enviada
+              enum:
+                - composing
+                - recording
+                - paused
+              example: composing
+              type: string
+          required:
+            - number
+            - presence
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de confirmação
+                example: Chat presence sent successfully
+                type: string
+            type: object
+      description: Presença atualizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro
+                example: Número inválido ou tipo de presença inválido
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro de autenticação
+                example: Token inválido ou expirado
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro interno
+                example: Erro ao enviar presença
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar atualização de presença
+  tags:
+    - Enviar Mensagem

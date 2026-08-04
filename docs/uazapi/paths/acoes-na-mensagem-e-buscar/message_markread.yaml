@@ -1,0 +1,76 @@
+post:
+  description: "Marca uma ou mais mensagens como lidas. Este endpoint permite:\n1. Marcar múltiplas mensagens como lidas de\
+    \ uma vez\n2. Atualizar o status de leitura no WhatsApp\n3. Sincronizar o status de leitura entre dispositivos\n\nExemplo\
+    \ de requisição básica:\n```json\n{\n  \"id\": [\n    \"62AD1AD844E518180227BF68DA7ED710\",\n    \"ECB9DE48EB41F77BFA8491BFA8D6EF9B\"\
+    \  \n  ]\n}\n```\n\nExemplo de resposta:\n```json\n{\n  \"success\": true,\n  \"message\": \"Messages marked as read\"\
+    ,\n  \"markedMessages\": [\n    {\n      \"id\": \"62AD1AD844E518180227BF68DA7ED710\",\n      \"timestamp\": 1672531200000\n\
+    \    },\n    {\n      \"id\": \"ECB9DE48EB41F77BFA8491BFA8D6EF9B\",\n      \"timestamp\": 1672531300000\n    }\n  ]\n\
+    }\n```\n\nParâmetros disponíveis:\n- id: Lista de IDs das mensagens a serem marcadas como lidas\n\nErros comuns:\n- 401:\
+    \ Token inválido ou expirado\n- 400: Lista de IDs vazia ou inválida\n- 404: Uma ou mais mensagens não encontradas\n- 500:\
+    \ Erro ao marcar mensagens como lidas\n"
+  operationId: markMessageRead
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: Lista de IDs das mensagens a serem marcadas como lidas
+              example:
+                - 62AD1AD844E518180227BF68DA7ED710
+                - ECB9DE48EB41F77BFA8491BFA8D6EF9B
+              items:
+                type: string
+              type: array
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              results:
+                example:
+                  - message_id: 62AD1AD844E518180227BF68DA7ED710
+                    status: success
+                  - error: Message not found
+                    message_id: ECB9DE48EB41F77BFA8491BFA8D6EF9B
+                    status: error
+                items:
+                  properties:
+                    error:
+                      description: Error message if status is error
+                      type: string
+                    message_id:
+                      description: ID of the message that was processed
+                      type: string
+                    status:
+                      description: Status of the mark as read operation
+                      enum:
+                        - success
+                        - error
+                      type: string
+                  type: object
+                type: array
+            type: object
+      description: Messages successfully marked as read
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing Id in Payload
+                type: string
+            type: object
+      description: Invalid request payload or missing required fields
+    '401':
+      description: Unauthorized - invalid or missing token
+    '500':
+      description: Server error while processing the request
+  summary: Marcar mensagens como lidas
+  tags:
+    - Ações na mensagem e Buscar

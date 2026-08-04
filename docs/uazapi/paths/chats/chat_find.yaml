@@ -1,0 +1,106 @@
+post:
+  description: "Busca chats com diversos filtros e ordenação. Suporta filtros em todos os campos do chat, \npaginação e ordenação\
+    \ customizada.\n\nOperadores de filtro:\n- `~` : LIKE (contém)\n- `!~` : NOT LIKE (não contém)\n- `!=` : diferente\n-\
+    \ `>=` : maior ou igual\n- `>` : maior que\n- `<=` : menor ou igual\n- `<` : menor que\n- Sem operador: LIKE (contém)\n"
+  operationId: findChats
+  requestBody:
+    content:
+      application/json:
+        schema:
+          example:
+            lead_status: ~novo
+            limit: 50
+            offset: 0
+            operator: AND
+            sort: -wa_lastMsgTimestamp
+            wa_isGroup: true
+            wa_label: '10'
+            wa_notes: ~vip
+          properties:
+            lead_assignedAttendant_id:
+              type: string
+            lead_isTicketOpen:
+              type: boolean
+            lead_status:
+              type: string
+            lead_tags:
+              type: string
+            limit:
+              default: 20
+              description: Quantidade máxima de resultados a retornar
+              type: integer
+            name:
+              type: string
+            offset:
+              default: 0
+              description: Número de registros a pular (para paginação)
+              type: integer
+            operator:
+              default: AND
+              description: Operador lógico entre os filtros
+              enum:
+                - AND
+                - OR
+              type: string
+            sort:
+              description: Campo para ordenação (+/-campo). Ex -wa_lastMsgTimestamp
+              type: string
+            wa_archived:
+              type: boolean
+            wa_chatid:
+              type: string
+            wa_contactName:
+              type: string
+            wa_fastid:
+              type: string
+            wa_isBlocked:
+              type: boolean
+            wa_isGroup:
+              type: boolean
+            wa_isGroup_admin:
+              type: boolean
+            wa_isGroup_announce:
+              type: boolean
+            wa_isGroup_member:
+              type: boolean
+            wa_isPinned:
+              type: boolean
+            wa_label:
+              description: ID da label aplicada ao chat. Use o valor retornado por `/labels`, não o nome da etiqueta.
+              type: string
+            wa_name:
+              type: string
+            wa_notes:
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              chats:
+                items:
+                  $ref: ../../schemas/chat.yaml#/Chat
+                type: array
+              pagination:
+                properties:
+                  limit:
+                    description: Limite aplicado na busca
+                    type: integer
+                  offset:
+                    description: Offset usado para recuperar os resultados
+                    type: integer
+                  totalRecords:
+                    description: Total de registros encontrados
+                    type: integer
+                type: object
+              totalChatsStats:
+                description: Contadores totais de chats
+                type: object
+            type: object
+      description: Lista de chats encontrados
+  summary: Busca chats com filtros
+  tags:
+    - Chats

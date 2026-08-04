@@ -1,0 +1,60 @@
+post:
+  description: Remove/deleta um canal/newsletter.
+  operationId: deleteNewsletter
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Canal deletado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid newsletter id
+                type: string
+            type: object
+      description: ID/JID inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao deletar o canal
+  summary: Deletar canal
+  tags:
+    - Newsletters e Canais

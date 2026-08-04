@@ -1,0 +1,101 @@
+post:
+  description: |
+    Remove um contato da agenda do celular.
+
+    O endpoint realiza:
+    - Remove o contato da agenda usando o WhatsApp AppState
+    - Atualiza a lista de contatos sincronizada
+    - Retorna confirmação da remoção
+  operationId: removeContact
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            number:
+              description: "Número de telefone no formato internacional com código do país obrigatório. \nPara Brasil, deve\
+                \ começar com 55. Aceita variações com/sem símbolo +, \ncom/sem parênteses, com/sem hífen e com/sem espaços.\
+                \ Também aceita formato \nJID do WhatsApp (@s.whatsapp.net). Não aceita contatos comerciais (@lid) \nnem grupos\
+                \ (@g.us).\n"
+              examples:
+                - +55 (21) 99999-9999
+                - +55 21 99999-9999
+                - +55 21 999999999
+                - '+5521999999999'
+                - '5521999999999'
+                - 5521999999999@s.whatsapp.net
+              type: string
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              message:
+                example: Contato removido com sucesso
+                type: string
+              removed_contact:
+                properties:
+                  jid:
+                    description: 'ID único do contato no WhatsApp (formato: número@s.whatsapp.net)'
+                    example: 5511999999999@s.whatsapp.net
+                    type: string
+                  phone:
+                    description: Número de telefone removido
+                    example: '5511999999999'
+                    type: string
+                type: object
+              success:
+                example: true
+                type: boolean
+            type: object
+      description: Contato removido com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Número inválido
+                type: string
+            type: object
+      description: Dados inválidos na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Contato não encontrado na agenda
+                type: string
+            type: object
+      description: Contato não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Erro ao remover contato
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Remove um contato da agenda
+  tags:
+    - Contatos

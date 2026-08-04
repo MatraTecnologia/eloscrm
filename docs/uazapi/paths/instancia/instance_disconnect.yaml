@@ -1,0 +1,60 @@
+post:
+  description: |
+    Desconecta a conta do WhatsApp atualmente conectada, encerrando a sessão atual.
+    Esta operação:
+
+    - Encerra a conexão ativa
+
+    - Requer novo QR code para reconectar
+
+
+    Diferenças entre desconectar e hibernar:
+
+    - Desconectar: Encerra completamente a sessão, exigindo novo login
+
+    - Hibernar: Mantém a sessão ativa, apenas pausa a conexão
+
+
+    Use este endpoint para:
+
+    1. Encerrar completamente uma sessão
+
+    2. Forçar uma nova autenticação
+
+    3. Limpar credenciais da sessão atual
+
+    4. Reiniciar o processo de conexão
+
+
+    Estados possíveis após desconectar:
+
+    - `disconnected`: Desconectado do WhatsApp
+
+    - `connecting`: Em processo de reconexão (após usar /instance/connect)
+  operationId: disconnectInstance
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              info:
+                example: The device has been successfully disconnected from WhatsApp. A new QR code will be required for the
+                  next connection.
+                type: string
+              instance:
+                $ref: ../../schemas/instance.yaml#/Instance
+              response:
+                example: Disconnected
+                type: string
+            type: object
+      description: Sucesso
+    '401':
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  summary: Desconectar instância
+  tags:
+    - Instancia

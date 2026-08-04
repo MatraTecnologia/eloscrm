@@ -1,0 +1,90 @@
+post:
+  description: "Altera o nome de exibição do perfil da conta do WhatsApp atualmente conectada.\n\nO endpoint realiza:\n- Atualiza\
+    \ o nome do perfil usando o WhatsApp AppState\n- Sincroniza a mudança com o servidor do WhatsApp\n- Retorna confirmação\
+    \ da alteração\n\n**Importante**: \n- A conta do WhatsApp deve estar conectada\n- O nome será visível para todos os contatos\n\
+    - Pode haver um limite de alterações por período (conforme WhatsApp)\n"
+  operationId: updateProfileName
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            name:
+              description: Novo nome do perfil do WhatsApp
+              example: Minha Empresa - Atendimento
+              maxLength: 25
+              type: string
+          required:
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              message:
+                example: Nome do perfil alterado com sucesso
+                type: string
+              profile:
+                properties:
+                  name:
+                    description: Novo nome do perfil
+                    example: Minha Empresa - Atendimento
+                    type: string
+                  updated_at:
+                    description: Timestamp da alteração (Unix timestamp)
+                    example: 1704067200
+                    type: integer
+                type: object
+              success:
+                example: true
+                type: boolean
+            type: object
+      description: Nome do perfil alterado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Nome muito longo ou inválido
+                type: string
+            type: object
+      description: Dados inválidos na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Limite de alterações excedido ou conta com restrições
+                type: string
+            type: object
+      description: Ação não permitida
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Erro ao alterar nome do perfil
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Altera o nome do perfil do WhatsApp
+  tags:
+    - Perfil

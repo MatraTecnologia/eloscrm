@@ -1,0 +1,90 @@
+post:
+  description: "Permite controlar campanhas de envio de mensagens em massa através de diferentes ações:\n\n## Ações Disponíveis:\n\
+    \n**\U0001F6D1 stop** - Pausar campanha\n- Pausa uma campanha ativa ou agendada\n- Altera o status para \"paused\" \n\
+    - Use quando quiser interromper temporariamente o envio\n- Mensagens já enviadas não são afetadas\n\n**▶️ continue** -\
+    \ Continuar campanha  \n- Retoma uma campanha pausada\n- Altera o status para \"scheduled\"\n- Use para continuar o envio\
+    \ após pausar uma campanha\n- Não funciona em campanhas já concluídas (\"done\")\n\n**\U0001F5D1️ delete** - Deletar campanha\n\
+    - Remove completamente a campanha\n- Deleta apenas mensagens NÃO ENVIADAS (status \"scheduled\")\n- Mensagens já enviadas\
+    \ são preservadas no histórico\n- Operação é executada de forma assíncrona\n\n## Status de Campanhas:\n- **scheduled**:\
+    \ Agendada para envio\n- **sending**: Enviando mensagens  \n- **paused**: Pausada pelo usuário\n- **done**: Concluída\
+    \ (não pode ser alterada)\n- **deleting**: Sendo deletada (operação em andamento)\n"
+  operationId: editCampaign
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            action:
+              description: "Ação a ser executada na campanha:\n- **stop**: Pausa a campanha (muda para status \"paused\")\n\
+                - **continue**: Retoma campanha pausada (muda para status \"scheduled\") \n- **delete**: Remove campanha e\
+                \ mensagens não enviadas (assíncrono)\n"
+              enum:
+                - stop
+                - continue
+                - delete
+              example: stop
+              type: string
+            folder_id:
+              description: Identificador único da campanha de envio
+              example: folder_123
+              type: string
+          required:
+            - folder_id
+            - action
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - properties:
+                  status:
+                    description: Status da campanha após pausar
+                    enum:
+                      - paused
+                    example: paused
+                    type: string
+                title: Resposta para ação 'stop'
+                type: object
+              - properties:
+                  message:
+                    description: Mensagem de confirmação
+                    example: Folder resumed successfully
+                    type: string
+                  status:
+                    description: Status da campanha após retomar
+                    enum:
+                      - scheduled
+                    example: scheduled
+                    type: string
+                title: Resposta para ação 'continue'
+                type: object
+              - properties:
+                  message:
+                    description: Mensagem informando que a deleção é assíncrona
+                    example: Folder deletion has been initiated
+                    type: string
+                  status:
+                    description: Status indicando que a deleção foi iniciada
+                    enum:
+                      - deleting
+                    example: deleting
+                    type: string
+                title: Resposta para ação 'delete'
+                type: object
+      description: Ação realizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: folder_id is required
+                type: string
+            type: object
+      description: Requisição inválida
+  summary: Controlar campanha de envio em massa
+  tags:
+    - Mensagem em massa

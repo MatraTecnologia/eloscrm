@@ -1,0 +1,240 @@
+post:
+  description: |
+    Lista uma página de produtos do catálogo de um perfil comercial no WhatsApp.
+
+    Observações:
+    - envie apenas `jid` para buscar a primeira página
+    - a paginação pública usa o campo `after`
+    - copie exatamente o valor retornado em `response.Paging.After` e envie na próxima chamada
+    - o valor de `after` é um token opaco: não tente decodificar ou modificar
+    - a integração atual retorna até 10 produtos por chamada
+    - o retorno espelha as structs atuais da camada `whatsmeow`, então os campos de `response` usam nomes em maiúsculas (`Products`, `Paging`, etc.)
+  operationId: getCatalog
+  requestBody:
+    content:
+      application/json:
+        examples:
+          primeiraPagina:
+            summary: Buscar a primeira página do catálogo
+            value:
+              jid: 5511999999999@s.whatsapp.net
+          proximaPagina:
+            summary: Buscar a próxima página usando after
+            value:
+              after: Q1VSU09SX1BST1hJTUFfUEFHSU5B
+              jid: 5511999999999@s.whatsapp.net
+        schema:
+          properties:
+            after:
+              description: Token da próxima página. Use exatamente o valor retornado em `response.Paging.After`.
+              example: Q1VSU09SX1BST1hJTUFfUEFHSU5B
+              type: string
+            jid:
+              description: JID do catálogo a consultar
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          required:
+            - jid
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso:
+              value:
+                response:
+                  CartEnabled: false
+                  JID:
+                    Device: 0
+                    Integrator: 0
+                    RawAgent: 0
+                    Server: s.whatsapp.net
+                    User: '5511999999999'
+                  Paging:
+                    After: Q1VSU09SX1BST1hJTUFfUEFHSU5B
+                    Before: ''
+                  Products:
+                    - Availability: in stock
+                      Description: Descrição do produto
+                      ID: '1234567890'
+                      ImageFetchStatus: success
+                      Images:
+                        - ID: img-1
+                          OriginalDimensions:
+                            Height: 720
+                            Width: 720
+                          OriginalImageUrl: https://lookaside.whatsapp.net/...
+                          RequestImageUrl: https://mmg.whatsapp.net/v/t62.7118-24/...
+                      IsHidden: false
+                      MaxAvailable: 10
+                      Name: Produto Exemplo
+                      Price:
+                        Amount: '1990'
+                        Currency: BRL
+                      RetailerID: sku-123
+                      SalePrice: ''
+                      StatusInfo:
+                        CanAppeal: false
+                        Status: active
+                      Url: https://exemplo.com/produto
+                  Source: ''
+          schema:
+            properties:
+              response:
+                description: Página atual do catálogo retornada pelo WhatsApp.
+                properties:
+                  CartEnabled:
+                    description: Indica se o carrinho do catálogo está habilitado.
+                    example: false
+                    type: boolean
+                  JID:
+                    description: JID do catálogo consultado, serializado pela struct atual do backend.
+                    properties:
+                      Device:
+                        example: 0
+                        type: integer
+                      Integrator:
+                        example: 0
+                        type: integer
+                      RawAgent:
+                        example: 0
+                        type: integer
+                      Server:
+                        example: s.whatsapp.net
+                        type: string
+                      User:
+                        example: '5511999999999'
+                        type: string
+                    type: object
+                  Paging:
+                    description: Cursores de paginação retornados pelo WhatsApp.
+                    properties:
+                      After:
+                        example: Q1VSU09SX1BST1hJTUFfUEFHSU5B
+                        type: string
+                      Before:
+                        example: ''
+                        type: string
+                    type: object
+                  Products:
+                    description: Lista de produtos da página atual.
+                    items:
+                      properties:
+                        Availability:
+                          example: in stock
+                          type: string
+                        Description:
+                          example: Descrição do produto
+                          type: string
+                        ID:
+                          example: '1234567890'
+                          type: string
+                        ImageFetchStatus:
+                          example: success
+                          type: string
+                        Images:
+                          items:
+                            properties:
+                              ID:
+                                example: img-1
+                                type: string
+                              OriginalDimensions:
+                                properties:
+                                  Height:
+                                    example: 720
+                                    type: integer
+                                  Width:
+                                    example: 720
+                                    type: integer
+                                type: object
+                              OriginalImageUrl:
+                                example: https://lookaside.whatsapp.net/...
+                                type: string
+                              RequestImageUrl:
+                                example: https://mmg.whatsapp.net/v/t62.7118-24/...
+                                type: string
+                            type: object
+                          type: array
+                        IsHidden:
+                          example: false
+                          type: boolean
+                        MaxAvailable:
+                          example: 10
+                          type: integer
+                        Name:
+                          example: Produto Exemplo
+                          type: string
+                        Price:
+                          nullable: true
+                          properties:
+                            Amount:
+                              example: '1990'
+                              type: string
+                            Currency:
+                              example: BRL
+                              type: string
+                          type: object
+                        RetailerID:
+                          example: sku-123
+                          type: string
+                        SalePrice:
+                          example: ''
+                          type: string
+                        StatusInfo:
+                          properties:
+                            CanAppeal:
+                              example: false
+                              type: boolean
+                            Status:
+                              example: active
+                              type: string
+                          type: object
+                        Url:
+                          example: https://exemplo.com/produto
+                          type: string
+                      type: object
+                    type: array
+                  Source:
+                    description: Origem do catálogo retornada pelo WhatsApp.
+                    example: ''
+                    type: string
+                type: object
+            type: object
+      description: Produtos do catálogo recuperados com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de validação do payload ou JID
+                example: invalid payload
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar os produtos do catálogo
+  summary: Listar os produtos do catálogo
+  tags:
+    - Business

@@ -1,0 +1,61 @@
+post:
+  description: |
+    Define as permissões de envio de mensagens no grupo, permitindo restringir o envio apenas para administradores.
+
+    Quando ativado (announce=true):
+    - Apenas administradores podem enviar mensagens
+    - Outros participantes podem apenas ler
+    - Útil para anúncios importantes ou controle de spam
+
+    Quando desativado (announce=false):
+    - Todos os participantes podem enviar mensagens
+    - Configuração padrão para grupos normais
+
+    Requer que o usuário seja administrador do grupo para fazer alterações.
+  operationId: updateGroupAnnounce
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            announce:
+              description: Controla quem pode enviar mensagens no grupo
+              example: true
+              type: boolean
+            groupjid:
+              description: Identificador único do grupo no formato xxxx@g.us
+              example: 120363339858396166@g.us
+              type: string
+          required:
+            - groupjid
+            - announce
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group announce enabled successfully
+                type: string
+            type: object
+      description: Configuração atualizada com sucesso
+    '401':
+      description: Token de autenticação ausente ou inválido
+    '403':
+      description: Usuário não é administrador do grupo
+    '404':
+      description: Grupo não encontrado
+    '500':
+      description: Erro interno do servidor ou falha na API do WhatsApp
+  summary: Configurar permissões de envio de mensagens no grupo
+  tags:
+    - Grupos e Comunidades

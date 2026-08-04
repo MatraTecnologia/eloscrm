@@ -1,0 +1,74 @@
+post:
+  description: |
+    Retorna informações detalhadas de um grupo usando um código de convite ou URL completo do WhatsApp.
+
+    Esta rota permite:
+    - Recuperar informações básicas sobre um grupo antes de entrar
+    - Validar um link de convite
+    - Obter detalhes como nome do grupo, número de participantes e restrições de entrada
+  operationId: getGroupInviteInfo
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            invitecode:
+              description: |
+                Código de convite ou URL completo do grupo.
+                Pode ser um código curto ou a URL completa do WhatsApp.
+              examples:
+                - IYnl5Zg9bUcJD32rJrDzO7
+                - https://chat.whatsapp.com/IYnl5Zg9bUcJD32rJrDzO7
+              type: string
+          required:
+            - invitecode
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            IsAnnounce: false
+            IsLocked: false
+            JID: 120363153742561022@g.us
+            Name: uazapiGO Community
+            Participants:
+              - IsAdmin: true
+                JID: 5521987654321@s.whatsapp.net
+          schema:
+            $ref: ../../schemas/group.yaml#/Group
+      description: Informações do grupo obtidas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid invite code
+                type: string
+            type: object
+      description: Código de convite inválido ou mal formatado
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Group invite link is invalid or has expired
+                type: string
+            type: object
+      description: Grupo não encontrado ou link de convite expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to retrieve group information
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Obter informações de um grupo pelo código de convite
+  tags:
+    - Grupos e Comunidades

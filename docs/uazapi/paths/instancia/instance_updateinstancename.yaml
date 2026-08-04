@@ -1,0 +1,34 @@
+post:
+  description: |
+    Atualiza o nome de uma instância WhatsApp existente.
+    O nome não precisa ser único.
+  operationId: updateInstanceName
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            name:
+              description: Novo nome para a instância
+              example: Minha Nova Instância 2024!@#
+              type: string
+          required:
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/instance.yaml#/Instance
+      description: Sucesso
+    '401':
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  summary: Atualizar nome da instância
+  tags:
+    - Instancia

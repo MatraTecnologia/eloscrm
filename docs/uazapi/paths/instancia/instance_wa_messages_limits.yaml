@@ -1,0 +1,189 @@
+get:
+  description: |
+    Consulta o estado atual de limitação do WhatsApp para a conta atualmente conectada.
+
+    Este endpoint é útil para:
+    - diagnosticar erros de envio com `provider_code: 463`
+    - verificar se o WhatsApp indica que a conta atualmente conectada pode iniciar novas conversas
+    - exibir informações de suporte antes de campanhas ou envios de alto volume
+
+    A resposta consolida duas fontes internas do WhatsApp:
+    - `new_chat_message_capping`: limite de mensagens para iniciar novas conversas
+    - `reachout_timelock`: restrição temporária para iniciar novas conversas
+
+    Observações:
+    - este endpoint depende de sessão ativa e conectada
+    - se o WhatsApp não retornar os dados esperados, a resposta pode marcar os blocos como indisponíveis via `available: false` e `lookup_error`
+    - `message` descreve o estado atual da conta atualmente conectada
+    - `provider_message` detalha o motivo reportado pelo WhatsApp quando houver restrição ativa
+  operationId: getWAMessageLimits
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            restricted:
+              summary: Conta conectada com restrição ativa
+              value:
+                can_send_new_messages: false
+                diagnostics_endpoint: /instance/wa_messages_limits
+                error_key: WHATSAPP_REACHOUT_TIMELOCK
+                message: WhatsApp indicates that the currently connected account is under a temporary restriction for starting
+                  new conversations. This is not an internal API error.
+                message_ptbr: O WhatsApp indica que a conta atualmente conectada está sob uma restrição temporária para iniciar
+                  novas conversas. Isso não é um erro interno da API.
+                new_chat_message_capping:
+                  available: true
+                  cycle_end: '2026-04-30T23:59:59Z'
+                  mv_status: ACTIVE
+                  ote_status: EXHAUSTED
+                  status: CAPPED
+                  total_quota: 10
+                  used_quota: 10
+                provider: whatsapp
+                provider_message: WhatsApp reported that the currently connected account is under a temporary restriction
+                  for starting new conversations, usually related to sending volume or quality.
+                provider_message_ptbr: O WhatsApp informou que a conta atualmente conectada está sob uma restrição temporária
+                  para iniciar novas conversas, normalmente relacionada a volume ou qualidade de envios.
+                reachable: true
+                reachout_timelock:
+                  active: true
+                  available: true
+                  enforcement_type: BIZ_QUALITY
+                  until: '2026-04-07T12:00:00Z'
+            unrestricted:
+              summary: Conta conectada sem restrições
+              value:
+                can_send_new_messages: true
+                diagnostics_endpoint: /instance/wa_messages_limits
+                message: No WhatsApp restriction for starting new conversations was detected for the currently connected account.
+                message_ptbr: Nenhuma restrição de envio de novas conversas foi identificada no WhatsApp para a conta atualmente
+                  conectada.
+                new_chat_message_capping:
+                  available: true
+                  status: NONE
+                  total_quota: 10
+                  used_quota: 2
+                provider: whatsapp
+                reachable: true
+                reachout_timelock:
+                  active: false
+                  available: true
+          schema:
+            properties:
+              can_send_new_messages:
+                description: |
+                  Indica se o WhatsApp sinaliza que a conta atualmente conectada pode iniciar novas conversas.
+                  Pode ser `null` quando não foi possível concluir o diagnóstico.
+                example: false
+                type:
+                  - boolean
+                  - 'null'
+              diagnostics_endpoint:
+                example: /instance/wa_messages_limits
+                type: string
+              error_key:
+                description: Chave de erro derivada do diagnóstico atual
+                example: WHATSAPP_REACHOUT_TIMELOCK
+                type: string
+              message:
+                description: Mensagem técnica principal em inglês
+                example: WhatsApp indicates that the currently connected account is under a temporary restriction for starting
+                  new conversations. This is not an internal API error.
+                type: string
+              message_ptbr:
+                description: Mensagem principal traduzida para pt-BR
+                example: O WhatsApp indica que a conta atualmente conectada está sob uma restrição temporária para iniciar
+                  novas conversas. Isso não é um erro interno da API.
+                type: string
+              new_chat_message_capping:
+                properties:
+                  available:
+                    example: true
+                    type: boolean
+                  cycle_end:
+                    format: date-time
+                    type: string
+                  cycle_start:
+                    format: date-time
+                    type: string
+                  lookup_error:
+                    type: string
+                  mv_status:
+                    example: ACTIVE
+                    type: string
+                  ote_status:
+                    example: EXHAUSTED
+                    type: string
+                  server_sent_at:
+                    format: date-time
+                    type: string
+                  status:
+                    example: CAPPED
+                    type: string
+                  total_quota:
+                    example: 10
+                    type: integer
+                  used_quota:
+                    example: 10
+                    type: integer
+                type: object
+              provider:
+                example: whatsapp
+                type: string
+              provider_message:
+                description: Motivo detalhado reportado pelo WhatsApp em inglês
+                example: WhatsApp reported that the currently connected account is under a temporary restriction for starting
+                  new conversations, usually related to sending volume or quality.
+                type: string
+              provider_message_ptbr:
+                description: Motivo detalhado reportado pelo WhatsApp em pt-BR
+                example: O WhatsApp informou que a conta atualmente conectada está sob uma restrição temporária para iniciar
+                  novas conversas, normalmente relacionada a volume ou qualidade de envios.
+                type: string
+              reachable:
+                description: Indica se ao menos uma das consultas ao WhatsApp retornou dados úteis
+                example: true
+                type: boolean
+              reachout_timelock:
+                properties:
+                  active:
+                    example: true
+                    type: boolean
+                  available:
+                    example: true
+                    type: boolean
+                  enforcement_type:
+                    example: BIZ_QUALITY
+                    type: string
+                  lookup_error:
+                    type: string
+                  until:
+                    format: date-time
+                    type: string
+                type: object
+            type: object
+      description: Diagnóstico atual dos limites de novas conversas da conta atualmente conectada
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid token
+                type: string
+            type: object
+      description: Token inválido ou ausente
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Erro interno ao consultar os limites
+  summary: Consultar limites atuais de novas conversas no WhatsApp
+  tags:
+    - Instancia

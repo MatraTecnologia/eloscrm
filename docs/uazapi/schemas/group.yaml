@@ -1,0 +1,136 @@
+Group:
+  type: object
+  description: Representa um grupo/conversa coletiva
+  properties:
+    JID:
+      type: string
+      format: jid
+      description: Identificador único do grupo
+      example: jid8@g.us
+    OwnerJID:
+      type: string
+      format: jid
+      description: JID do proprietário do grupo
+      example: 1232@s.whatsapp.net
+    OwnerPN:
+      type: string
+      format: jid
+      description: Número/LID do proprietário (quando disponível)
+    Name:
+      type: string
+      description: Nome do grupo
+      example: Grupo de Suporte
+    NameSetAt:
+      type: string
+      format: date-time
+      description: Data da última alteração do nome
+    NameSetBy:
+      type: string
+      format: jid
+      description: JID do usuário que definiu o nome
+    NameSetByPN:
+      type: string
+      format: jid
+      description: LID/PN de quem definiu o nome
+    Topic:
+      type: string
+      description: Descrição do grupo
+    TopicID:
+      type: string
+      description: ID interno da descrição
+    TopicSetAt:
+      type: string
+      format: date-time
+      description: Data da última alteração da descrição
+    TopicSetBy:
+      type: string
+      format: jid
+      description: JID de quem alterou a descrição
+    TopicSetByPN:
+      type: string
+      format: jid
+      description: LID/PN de quem alterou a descrição
+    TopicDeleted:
+      type: boolean
+      description: Indica se a descrição foi apagada
+    IsLocked:
+      type: boolean
+      description: |
+        Indica se apenas administradores podem editar informações do grupo
+        - true = apenas admins podem editar
+        - false = todos podem editar
+      example: true
+    IsAnnounce:
+      type: boolean
+      description: Indica se apenas administradores podem enviar mensagens
+    AnnounceVersionID:
+      type: string
+      description: Versão da configuração de anúncios
+    IsEphemeral:
+      type: boolean
+      description: Indica se as mensagens são temporárias
+    DisappearingTimer:
+      type: integer
+      description: Tempo em segundos para desaparecimento de mensagens
+      minimum: 0
+    IsIncognito:
+      type: boolean
+      description: Indica se o grupo é incognito
+    IsParent:
+      type: boolean
+      description: Indica se é um grupo pai (comunidade)
+    IsJoinApprovalRequired:
+      type: boolean
+      description: Indica se requer aprovação para novos membros
+    LinkedParentJID:
+      type: string
+      format: jid
+      description: JID da comunidade vinculada
+    IsDefaultSubGroup:
+      type: boolean
+      description: Indica se é um subgrupo padrão da comunidade
+    DefaultMembershipApprovalMode:
+      type: string
+      description: Modo padrão de aprovação de membros (quando comunidade)
+    GroupCreated:
+      type: string
+      format: date-time
+      description: Data de criação do grupo
+    CreatorCountryCode:
+      type: string
+      description: Código do país do criador
+    ParticipantVersionID:
+      type: string
+      description: Versão da lista de participantes
+    Participants:
+      type: array
+      items:
+        $ref: ./group_participant.yaml#/GroupParticipant
+      description: Lista de participantes do grupo
+    MemberAddMode:
+      type: string
+      enum:
+        - admin_add
+        - all_member_add
+      description: Modo de adição de novos membros
+    AddressingMode:
+      type: string
+      enum:
+        - pn
+        - lid
+      description: Endereçamento preferido do grupo
+    OwnerCanSendMessage:
+      type: boolean
+      description: Verifica se é possível você enviar mensagens
+    OwnerIsAdmin:
+      type: boolean
+      description: Verifica se você adminstrador do grupo
+    DefaultSubGroupId:
+      type: string
+      description: Se o grupo atual for uma comunidade, nesse campo mostrará o ID do subgrupo de avisos
+    invite_link:
+      type: string
+      description: Link de convite para entrar no grupo
+    request_participants:
+      type: string
+      description: Lista de solicitações de entrada, separados por vírgula

@@ -1,0 +1,97 @@
+post:
+  description: |
+    Altera o nome de um grupo do WhatsApp. Apenas administradores do grupo podem realizar esta operação.
+    O nome do grupo deve seguir as diretrizes do WhatsApp e ter entre 1 e 25 caracteres.
+  operationId: updateGroupName
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            groupjid:
+              description: Identificador único do grupo no formato JID
+              example: 120363339858396166@g.us
+              type: string
+            name:
+              description: Novo nome para o grupo
+              example: Grupo de Suporte
+              maxLength: 25
+              minLength: 1
+              type: string
+          required:
+            - groupjid
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group name updated successfully
+                type: string
+            type: object
+      description: Nome do grupo atualizado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid payload
+                type: string
+            type: object
+      description: Erro de validação na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token de autenticação ausente ou inválido
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: User is not an admin of this group
+                type: string
+            type: object
+      description: Usuário não é administrador do grupo
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Group not found
+                type: string
+            type: object
+      description: Grupo não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to update group name
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Atualizar nome do grupo
+  tags:
+    - Grupos e Comunidades

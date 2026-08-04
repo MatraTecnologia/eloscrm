@@ -1,0 +1,303 @@
+post:
+  description: |
+    Envia uma mensagem de texto para um contato, grupo ou canal/newsletter.
+
+    ## Recursos Específicos
+
+    - **Preview de links** com suporte a personalização automática ou customizada
+    - **Formatação básica** do texto
+    - **Substituição automática de placeholders** dinâmicos
+
+    ## Envio para Newsletter
+
+    Para enviar texto para um canal, use o mesmo campo `number`, mas informe o JID completo do canal:
+    - Exemplo: `120363123456789012@newsletter`
+
+    ```json
+    {
+      "number": "120363123456789012@newsletter",
+      "text": "Post publicado no canal"
+    }
+    ```
+
+    ## Campos Comuns
+
+    Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+    `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders e envio para grupos.
+
+    ## Preview de Links
+
+    ### Preview Automático
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Confira: https://exemplo.com",
+      "linkPreview": true
+    }
+    ```
+
+    ### Preview Personalizado
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Confira nosso site! https://exemplo.com",
+      "linkPreview": true,
+      "linkPreviewTitle": "Título Personalizado",
+      "linkPreviewDescription": "Uma descrição personalizada do link",
+      "linkPreviewImage": "https://exemplo.com/imagem.jpg",
+      "linkPreviewLarge": true
+    }
+    ```
+  operationId: sendText
+  requestBody:
+    content:
+      application/json:
+        examples:
+          basic:
+            description: Exemplo mais simples possível
+            summary: Mensagem básica
+            value:
+              number: '5511999999999'
+              text: Olá! Como posso ajudar?
+          customLinkPreview:
+            description: Preview com título, descrição e imagem customizados
+            summary: Preview personalizado
+            value:
+              linkPreview: true
+              linkPreviewDescription: Uma descrição personalizada do link
+              linkPreviewImage: https://exemplo.com/imagem.jpg
+              linkPreviewLarge: true
+              linkPreviewTitle: Título Personalizado
+              number: '5511999999999'
+              text: Confira nosso site! https://exemplo.com
+          newsletter:
+            description: Publica uma mensagem de texto em um canal usando o JID completo `@newsletter`.
+            summary: Envio para newsletter
+            value:
+              number: 120363123456789012@newsletter
+              text: Post publicado no canal
+          withLinkPreview:
+            description: Preview automático de link no texto
+            summary: Com preview automático
+            value:
+              linkPreview: true
+              number: '5511999999999'
+              text: 'Confira: https://exemplo.com'
+          withPlaceholders:
+            description: Texto com variáveis dinâmicas
+            summary: Com placeholders
+            value:
+              number: '5511999999999'
+              text: Olá {{name}}! Sua empresa {{company}} está cadastrada.
+        schema:
+          properties:
+            async:
+              description: Se true, envia a mensagem de forma assíncrona via fila interna. Útil para alto volume de mensagens.
+              example: false
+              type: boolean
+            delay:
+              description: Atraso em milissegundos antes do envio, durante o atraso apacerá 'Digitando...'
+              example: 1000
+              type: integer
+            forward:
+              description: Marca a mensagem como encaminhada no WhatsApp
+              example: true
+              type: boolean
+            linkPreview:
+              description: |
+                Ativa/desativa preview de links. Se true, procura automaticamente um link no texto para gerar preview.
+
+                Comportamento:
+                - Se apenas linkPreview=true: gera preview automático do primeiro link encontrado no texto
+                - Se fornecidos campos personalizados (title, description, image): usa os valores fornecidos
+                - Se campos personalizados parciais: combina com dados automáticos do link como fallback
+              example: true
+              type: boolean
+            linkPreviewDescription:
+              description: Define uma descrição personalizada para o preview do link
+              example: Descrição personalizada do link
+              type: string
+            linkPreviewImage:
+              description: URL ou Base64 da imagem para usar no preview do link
+              example: https://exemplo.com/imagem.jpg
+              type: string
+            linkPreviewLarge:
+              description: Se true, gera um preview grande com upload da imagem. Se false, gera um preview pequeno sem upload
+              example: true
+              type: boolean
+            linkPreviewTitle:
+              description: Define um título personalizado para o preview do link
+              example: Título Personalizado
+              type: string
+            mentions:
+              description: Números para mencionar (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`) ou um ID de canal/newsletter
+                (`@newsletter`).
+              example: '5511999999999'
+              type: string
+            readchat:
+              description: Marca conversa como lida após envio
+              example: true
+              type: boolean
+            readmessages:
+              description: Marca últimas mensagens recebidas como lidas
+              example: true
+              type: boolean
+            replyid:
+              description: ID da mensagem para responder
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            text:
+              description: Texto da mensagem (aceita placeholders)
+              example: Olá {{name}}! Como posso ajudar?
+              type: string
+            track_id:
+              description: ID para rastreamento da mensagem (aceita valores duplicados)
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento da mensagem
+              example: chatwoot
+              type: string
+          required:
+            - number
+            - text
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Message sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Mensagem enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing number or text
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '429':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Rate limit exceeded
+                type: string
+            type: object
+      description: Limite de requisições excedido
+    '500':
+      content:
+        application/json:
+          examples:
+            generic:
+              summary: Erro interno genérico
+              value:
+                error: Failed to send message
+            whatsapp_463:
+              summary: Erro do WhatsApp ao iniciar novas conversas
+              value:
+                details:
+                  new_chat_message_capping:
+                    available: true
+                    status: CAPPED
+                    total_quota: 10
+                    used_quota: 10
+                  reachout_timelock:
+                    active: true
+                    available: true
+                    enforcement_type: BIZ_QUALITY
+                    until: '2026-04-07T12:00:00Z'
+                diagnostics_endpoint: /instance/wa_messages_limits
+                error: 'WhatsApp server error 463: WhatsApp reported that the currently connected account is under a temporary
+                  restriction for starting new conversations, usually related to sending volume or quality.'
+                error_key: WHATSAPP_REACHOUT_TIMELOCK
+                error_source: whatsapp_server
+                message: The WhatsApp server rejected this message. This was not an internal API error.
+                message_ptbr: O servidor do WhatsApp recusou esta mensagem. Isso não foi um erro interno da API.
+                provider: whatsapp
+                provider_code: 463
+                provider_message: WhatsApp reported that the currently connected account is under a temporary restriction
+                  for starting new conversations, usually related to sending volume or quality.
+                provider_message_ptbr: O WhatsApp informou que a conta atualmente conectada está sob uma restrição temporária
+                  para iniciar novas conversas, normalmente relacionada a volume ou qualidade de envios.
+          schema:
+            properties:
+              details:
+                properties:
+                  new_chat_message_capping:
+                    additionalProperties: true
+                    type: object
+                  reachout_timelock:
+                    additionalProperties: true
+                    type: object
+                type: object
+              diagnostics_endpoint:
+                example: /instance/wa_messages_limits
+                type: string
+              error:
+                example: 'WhatsApp server error 463: WhatsApp reported that the currently connected account is under a temporary
+                  restriction for starting new conversations, usually related to sending volume or quality.'
+                type: string
+              error_key:
+                example: WHATSAPP_REACHOUT_TIMELOCK
+                type: string
+              error_source:
+                example: whatsapp_server
+                type: string
+              message:
+                example: The WhatsApp server rejected this message. This was not an internal API error.
+                type: string
+              message_ptbr:
+                example: O servidor do WhatsApp recusou esta mensagem. Isso não foi um erro interno da API.
+                type: string
+              provider:
+                example: whatsapp
+                type: string
+              provider_code:
+                example: 463
+                type: integer
+              provider_message:
+                example: WhatsApp reported that the currently connected account is under a temporary restriction for starting
+                  new conversations, usually related to sending volume or quality.
+                type: string
+              provider_message_ptbr:
+                example: O WhatsApp informou que a conta atualmente conectada está sob uma restrição temporária para iniciar
+                  novas conversas, normalmente relacionada a volume ou qualidade de envios.
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar mensagem de texto
+  tags:
+    - Enviar Mensagem

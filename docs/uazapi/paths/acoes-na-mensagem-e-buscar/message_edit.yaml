@@ -1,0 +1,108 @@
+post:
+  description: "Edita o conteúdo de uma mensagem já enviada usando a funcionalidade nativa do WhatsApp.\n\nO endpoint realiza:\n\
+    - Busca a mensagem original no banco de dados usando o ID fornecido\n- Edita o conteúdo da mensagem para o novo texto\
+    \ no WhatsApp\n- Gera um novo ID para a mensagem editada\n- Retorna objeto de mensagem completo seguindo o padrão da API\n\
+    - Dispara eventos SSE/Webhook automaticamente\n\n**Importante**: \n- Só é possível editar mensagens enviadas pela própria\
+    \ instância\n- A mensagem deve existir no banco de dados\n- O ID pode ser fornecido no formato completo (owner:messageid)\
+    \ ou apenas messageid\n- A mensagem deve estar dentro do prazo permitido pelo WhatsApp para edição\n- Para newsletters/canais,\
+    \ use `POST /newsletter/messages/edit`\n"
+  operationId: editMessage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: ID único da mensagem que será editada (formato owner:messageid ou apenas messageid)
+              example: 3A12345678901234567890123456789012
+              type: string
+            text:
+              description: Novo conteúdo de texto da mensagem
+              example: Texto editado da mensagem
+              type: string
+          required:
+            - id
+            - text
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              content:
+                description: Conteúdo da mensagem editada
+                example: Texto editado da mensagem
+                type: string
+              id:
+                description: ID único da mensagem no formato owner:messageid
+                example: 5511999999999:3A12345678901234567890123456789012
+                type: string
+              messageTimestamp:
+                description: Timestamp da mensagem (Unix timestamp em milissegundos)
+                example: 1704067200000
+                type: integer
+              messageType:
+                description: Tipo da mensagem
+                example: text
+                type: string
+              messageid:
+                description: ID da mensagem no WhatsApp
+                example: 3A12345678901234567890123456789012
+                type: string
+              owner:
+                description: Proprietário da instância
+                example: '5511999999999'
+                type: string
+              status:
+                description: Status da mensagem
+                example: Pending
+                type: string
+            type: object
+      description: Mensagem editada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid payload
+                type: string
+            type: object
+      description: Dados inválidos na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Message not found
+                type: string
+            type: object
+      description: Mensagem não encontrada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Error fetching message from database
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Edita uma mensagem enviada
+  tags:
+    - Ações na mensagem e Buscar

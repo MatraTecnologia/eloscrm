@@ -1,0 +1,77 @@
+post:
+  description: |
+    Retorna as informações de um produto específico do catálogo.
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: O ID do produto.
+              type: string
+            jid:
+              description: JID do catálogo a consultar
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          required:
+            - jid
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Informações do produto
+                properties:
+                  currency:
+                    type: string
+                  description:
+                    type: string
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  price:
+                    type: string
+                type: object
+            type: object
+      description: Informações do produto recuperadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de validação do payload ou JID
+                example: invalid payload
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar as informações do produto
+  summary: Obter informações de um produto do catálogo
+  tags:
+    - Business

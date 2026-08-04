@@ -1,0 +1,132 @@
+post:
+  description: |
+    Inicia o processo de conexão de uma instância ao WhatsApp. Este endpoint:
+    1. Requer o token de autenticação da instância
+    2. Recebe o número de telefone associado à conta WhatsApp
+    3. Gera um QR code caso não passe o campo `phone`
+    4. Ou Gera código de pareamento se passar o o campo `phone`
+    5. Atualiza o status da instância para "connecting"
+
+    O processo de conexão permanece pendente até que:
+    - O QR code seja escaneado no WhatsApp do celular, ou
+    - O código de pareamento seja usado no WhatsApp
+    - Timeout de 2 minutos para QRCode seja atingido ou 5 minutos para o código de pareamento
+
+    Use o endpoint /instance/status para monitorar o progresso da conexão.
+
+    Estados possíveis da instância:
+    - `disconnected`: Desconectado do WhatsApp
+    - `connecting`: Em processo de conexão
+    - `connected`: Conectado e autenticado
+    - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
+
+    Sincronização e armazenamento de mensagens:
+    - Todas as mensagens recebidas da Meta durante a sincronização da conexão (leitura do QR code) são enviadas no evento `history` do webhook.
+    - As mensagens dos últimos 7 dias são armazenadas no banco de dados e ficam acessíveis pelos endpoints: `POST /message/find` e `POST /chat/find`.
+    - Depois que a instância conecta, todas as mensagens enviadas ou recebidas são armazenadas no banco de dados.
+    - Mensagens mais antigas do que 7 dias são excluídas durante a madrugada.
+
+    Proxy regional:
+    - No momento, o proxy regional público está disponível para Brasil (`br`).
+    - Use `GET /proxy-managed/cities?country=br` para listar cidades brasileiras.
+    - Envie `proxy_managed_city` com o `value` retornado pela cidade.
+    - Quando a cidade retornar `state`, envie também `proxy_managed_state` com esse valor.
+    - O backend valida a combinação de país, estado e cidade antes de salvar.
+  operationId: connectInstance
+  requestBody:
+    content:
+      application/json:
+        examples:
+          qr_code_brasil_com_proxy_regional:
+            summary: QR code com proxy regional em Campinas/SP
+            value:
+              browser: auto
+              proxy_managed_city: campinas
+              proxy_managed_country: br
+              proxy_managed_state: sp
+              systemName: Minha Empresa
+        schema:
+          properties:
+            browser:
+              default: auto
+              description: Browser usado no ciclo de autenticação/conexão. `auto` preserva um perfil válido já salvo ou escolhe
+                Safari, Firefox ou Edge para novas conexões.
+              enum:
+                - auto
+                - safari
+                - firefox
+                - edge
+                - chrome
+              example: auto
+              type: string
+            phone:
+              description: 'Número de telefone no formato internacional (ex: 5511999999999). Se informado, gera código de
+                pareamento. Se omitido, gera QR code.'
+              example: '5511999999999'
+              pattern: ^\d{10,15}$
+              type: string
+            proxy_managed_city:
+              description: Cidade escolhida para o proxy regional. Use sempre o campo `value` retornado por `GET /proxy-managed/cities`.
+              example: campinas
+              type: string
+            proxy_managed_country:
+              description: País desejado para o proxy regional, em ISO alpha-2 minúsculo. No momento, use `br`.
+              example: br
+              pattern: ^[a-z]{2}$
+              type: string
+            proxy_managed_state:
+              description: Estado/subdivisão da cidade escolhida. Quando o país/cidade exigir desambiguação, use o campo `state`
+                retornado por `GET /proxy-managed/cities?country=br`.
+              example: sp
+              type: string
+            systemName:
+              description: Sistema/nome exibido no celular em aparelhos conectados. Ajuda a identificar a instância no WhatsApp;
+                para maior estabilidade, recomendamos deixar em branco e usar o valor padrão do navegador escolhido.
+              example: Minha Empresa
+              type: string
+          type: object
+    required: false
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              connected:
+                description: Estado atual da conexão
+                example: false
+                type: boolean
+              instance:
+                $ref: ../../schemas/instance.yaml#/Instance
+                description: Detalhes completos da instância
+              jid:
+                description: ID do WhatsApp (quando logado)
+                example: null
+                type:
+                  - object
+                  - 'null'
+              loggedIn:
+                description: Estado do login
+                example: false
+                type: boolean
+            type: object
+      description: Sucesso
+    '401':
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '429':
+      description: Limite de conexões simultâneas atingido
+    '500':
+      description: Erro interno
+    '503':
+      description: Capacidade de conexão temporariamente indisponível
+      headers:
+        Retry-After:
+          description: Tempo recomendado, em segundos, para tentar novamente.
+          schema:
+            example: 5
+            type: integer
+  summary: Conectar instância ao WhatsApp
+  tags:
+    - Instancia

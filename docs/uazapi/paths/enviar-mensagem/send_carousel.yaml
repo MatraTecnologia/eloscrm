@@ -1,0 +1,291 @@
+post:
+  description: |
+    Este endpoint permite enviar um carrossel com imagens e botões interativos.
+    Funciona de maneira igual ao endpoint `/send/menu` com type: carousel, porém usando outro formato de payload.
+
+    ## Campos Comuns
+
+    Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+    `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders e envio para grupos.
+
+    ## Estrutura do Payload
+
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Texto principal",
+      "carousel": [
+        {
+          "text": "Texto do cartão",
+          "image": "URL da imagem",
+          "buttons": [
+            {
+              "id": "resposta1",
+              "text": "Texto do botão",
+              "type": "REPLY"
+            }
+          ]
+        }
+      ],
+      "delay": 1000,
+      "readchat": true
+    }
+    ```
+
+    ## Tipos de Botões
+
+    - `REPLY`: Botão de resposta rápida
+      - Quando clicado, envia o valor do id como resposta ao chat
+      - O id será o texto enviado como resposta
+
+    - `URL`: Botão com link
+      - Quando clicado, abre a URL especificada
+      - O id deve conter a URL completa (ex: https://exemplo.com)
+
+    - `COPY`: Botão para copiar texto
+      - Quando clicado, copia o texto para a área de transferência
+      - O id será o texto que será copiado
+
+    - `CALL`: Botão para realizar chamada
+      - Quando clicado, inicia uma chamada telefônica
+      - O id deve conter o número de telefone
+
+    ## Exemplo de Botões
+    ```json
+    {
+      "buttons": [
+        {
+          "id": "Sim, quero comprar!",
+          "text": "Confirmar Compra",
+          "type": "REPLY"
+        },
+        {
+          "id": "https://exemplo.com/produto",
+          "text": "Ver Produto",
+          "type": "URL"
+        },
+        {
+          "id": "CUPOM20",
+          "text": "Copiar Cupom",
+          "type": "COPY"
+        },
+        {
+          "id": "5511999999999",
+          "text": "Falar com Vendedor",
+          "type": "CALL"
+        }
+      ]
+    }
+    ```
+
+    ## Exemplo Completo de Carrossel
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Nossos Produtos em Destaque",
+      "carousel": [
+        {
+          "text": "Smartphone XYZ\nO mais avançado smartphone da linha",
+          "image": "https://exemplo.com/produto1.jpg",
+          "buttons": [
+            {
+              "id": "SIM_COMPRAR_XYZ",
+              "text": "Comprar Agora",
+              "type": "REPLY"
+            },
+            {
+              "id": "https://exemplo.com/xyz",
+              "text": "Ver Detalhes",
+              "type": "URL"
+            }
+          ]
+        },
+        {
+          "text": "Cupom de Desconto\nGanhe 20% OFF em qualquer produto",
+          "image": "https://exemplo.com/cupom.jpg",
+          "buttons": [
+            {
+              "id": "DESCONTO20",
+              "text": "Copiar Cupom",
+              "type": "COPY"
+            },
+            {
+              "id": "5511999999999",
+              "text": "Falar com Vendedor",
+              "type": "CALL"
+            }
+          ]
+        }
+      ],
+      "delay": 0,
+      "readchat": true
+    }
+    ```
+  operationId: sendCarousel
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            async:
+              description: Se true, envia a mensagem de forma assíncrona via fila interna
+              example: false
+              type: boolean
+            carousel:
+              description: Array de cartões do carrossel
+              items:
+                properties:
+                  buttons:
+                    description: Array de botões do cartão
+                    items:
+                      properties:
+                        id:
+                          description: ID do botão
+                          example: buy_xyz
+                          type: string
+                        text:
+                          description: Texto exibido no botão
+                          example: Comprar Agora
+                          type: string
+                        type:
+                          description: |
+                            Tipo do botão:
+                            * REPLY - O id será enviado como resposta ao chat
+                            * URL - O id deve ser a URL completa que será aberta
+                            * COPY - O id será o texto copiado para área de transferência
+                            * CALL - O id deve ser o número de telefone para a chamada
+                          enum:
+                            - REPLY
+                            - URL
+                            - CALL
+                            - COPY
+                          example: REPLY
+                          type: string
+                      type: object
+                    type: array
+                  document:
+                    description: URL do documento (alternativa à imagem)
+                    example: https://exemplo.com/catalogo.pdf
+                    type: string
+                  filename:
+                    description: Nome do arquivo para documentos
+                    example: Catalogo.pdf
+                    type: string
+                  image:
+                    description: URL da imagem (opcional)
+                    example: https://exemplo.com/produto1.jpg
+                    type: string
+                  text:
+                    description: Texto do cartão
+                    example: |-
+                      Smartphone XYZ
+                      O mais avançado smartphone da linha
+                    type: string
+                  video:
+                    description: URL do vídeo (alternativa à imagem)
+                    example: https://exemplo.com/produto1.mp4
+                    type: string
+                required:
+                  - text
+                  - buttons
+                type: object
+              type: array
+            delay:
+              description: Atraso em milissegundos antes do envio
+              example: 1000
+              type: integer
+            forward:
+              description: Marca a mensagem como encaminhada no WhatsApp
+              example: false
+              type: boolean
+            mentions:
+              description: Números para mencionar (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+              example: '5511999999999'
+              type: string
+            readchat:
+              description: Marca conversa como lida após envio
+              example: true
+              type: boolean
+            readmessages:
+              description: Marca últimas mensagens recebidas como lidas
+              example: true
+              type: boolean
+            replyid:
+              description: ID da mensagem para responder
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            text:
+              description: Texto principal da mensagem
+              example: Nossos Produtos em Destaque
+              type: string
+            track_id:
+              description: ID para rastreamento da mensagem (aceita valores duplicados)
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento da mensagem
+              example: chatwoot
+              type: string
+          required:
+            - number
+            - text
+            - carousel
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Carousel sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Carrossel enviado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing required fields or invalid card format
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to send carousel
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar carrossel de mídia com botões
+  tags:
+    - Enviar Mensagem

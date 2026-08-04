@@ -1,0 +1,83 @@
+post:
+  description: |
+    Adiciona ou remove grupos de uma comunidade do WhatsApp. Apenas administradores da comunidade podem executar estas operações.
+
+    ## Funcionalidades
+    - Adicionar múltiplos grupos simultaneamente a uma comunidade
+    - Remover grupos de uma comunidade existente
+    - Suporta operações em lote
+
+    ## Limitações
+    - Os grupos devem existir previamente
+    - A comunidade deve existir e o usuário deve ser administrador
+    - Grupos já vinculados não podem ser adicionados novamente
+    - Grupos não vinculados não podem ser removidos
+
+    ## Ações Disponíveis
+    - `add`: Adiciona os grupos especificados à comunidade
+    - `remove`: Remove os grupos especificados da comunidade
+  operationId: editCommunityGroups
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            action:
+              description: |
+                Tipo de operação a ser realizada:
+                * add - Adiciona grupos à comunidade
+                * remove - Remove grupos da comunidade
+              enum:
+                - add
+                - remove
+              type: string
+            community:
+              description: JID (identificador único) da comunidade
+              example: 120363153742561022@g.us
+              type: string
+            groupjids:
+              description: Lista de JIDs dos grupos para adicionar ou remover
+              example:
+                - 120363324255083289@g.us
+                - 120363308883996631@g.us
+              items:
+                pattern: ^[0-9]+@g.us$
+                type: string
+              minItems: 1
+              type: array
+          required:
+            - community
+            - action
+            - groupjids
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              failed:
+                description: Lista de JIDs dos grupos que falharam no processamento
+                items:
+                  type: string
+                type: array
+              message:
+                example: community updated
+                type: string
+              success:
+                description: Lista de JIDs dos grupos processados com sucesso
+                items:
+                  type: string
+                type: array
+            type: object
+      description: Operação realizada com sucesso
+    '400':
+      description: Requisição inválida
+    '401':
+      description: Não autorizado
+    '403':
+      description: Usuário não é administrador da comunidade
+  summary: Gerenciar grupos em uma comunidade
+  tags:
+    - Grupos e Comunidades

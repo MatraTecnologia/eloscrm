@@ -1,0 +1,49 @@
+delete:
+  description: |
+    Remove todas as mensagens da fila de envio em massa, incluindo mensagens pendentes e já enviadas.
+    Esta é uma operação irreversível.
+  operationId: clearAllCampaigns
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              folders_deleted:
+                description: Quantidade de pastas deletadas
+                example: 3
+                type: integer
+              messages_deleted:
+                description: Quantidade de mensagens deletadas
+                example: 150
+                type: integer
+              status:
+                description: Status da operação
+                example: processed
+                type: string
+            type: object
+      description: Fila de mensagens limpa com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro
+                example: Token inválido ou ausente
+                type: string
+            type: object
+      description: Não autorizado - token inválido ou ausente
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Detalhes do erro interno
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Limpar toda fila de mensagens
+  tags:
+    - Mensagem em massa

@@ -1,0 +1,146 @@
+post:
+  description: |
+    Atualiza os dados do perfil comercial da conta do WhatsApp Business atualmente conectada.
+    Todos os campos são opcionais; apenas os enviados serão atualizados.
+  requestBody:
+    content:
+      application/json:
+        examples:
+          apenas_descricao:
+            summary: Atualizar apenas a descrição
+            value:
+              description: Nova descrição da empresa
+          endereco_email:
+            summary: Atualizar endereço e email
+            value:
+              address: Av. Principal, 456
+              email: novo@email.com
+          todos_campos:
+            summary: Atualizar todos os campos
+            value:
+              address: Rua das Flores, 123 - Centro
+              description: Loja de eletrônicos e acessórios
+              email: contato@empresa.com
+        schema:
+          properties:
+            address:
+              description: Novo endereço do perfil comercial.
+              example: Rua das Flores, 123 - Centro
+              type: string
+            description:
+              description: Nova descrição do perfil comercial.
+              example: Loja de eletrônicos e acessórios
+              type: string
+            email:
+              description: Novo email do perfil comercial.
+              example: contato@empresa.com
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso_todos:
+              summary: Todos os campos atualizados
+              value:
+                failed: 0
+                response:
+                  address:
+                    status: updated
+                  description:
+                    status: updated
+                  email:
+                    status: updated
+                updated: 3
+          schema:
+            properties:
+              failed:
+                description: Total de campos que falharam
+                example: 0
+                type: integer
+              response:
+                description: Resultado por campo
+                type: object
+              updated:
+                description: Total de campos atualizados
+                example: 3
+                type: integer
+            type: object
+      description: Todos os campos enviados foram atualizados
+    '207':
+      content:
+        application/json:
+          examples:
+            parcial:
+              summary: Falha em um dos campos
+              value:
+                failed: 1
+                response:
+                  address:
+                    error: upstream unavailable
+                    status: error
+                  description:
+                    status: updated
+                updated: 1
+          schema:
+            properties:
+              failed:
+                example: 1
+                type: integer
+              response:
+                description: Resultado por campo
+                type: object
+              updated:
+                example: 1
+                type: integer
+            type: object
+      description: Sucesso parcial — ao menos um campo falhou
+    '400':
+      content:
+        application/json:
+          examples:
+            campo_obrigatorio:
+              value:
+                error: at least one field (description, address, email) is required
+            payload_invalido:
+              value:
+                error: invalid payload
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de validação
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              failed:
+                example: 3
+                type: integer
+              response:
+                description: Resultado por campo
+                type: object
+              updated:
+                example: 0
+                type: integer
+            type: object
+      description: Falha total — nenhum campo foi atualizado
+  summary: Atualizar o perfil comercial
+  tags:
+    - Business

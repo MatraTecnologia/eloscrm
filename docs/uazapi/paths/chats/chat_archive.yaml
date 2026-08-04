@@ -1,0 +1,61 @@
+post:
+  description: |
+    Altera o estado de arquivamento de um chat do WhatsApp.
+    - Quando arquivado, o chat é movido para a seção de arquivados no WhatsApp
+    - A ação é sincronizada entre todos os dispositivos conectados
+    - Não afeta as mensagens ou o conteúdo do chat
+  operationId: archiveChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            archive:
+              description: true para arquivar, false para desarquivar
+              example: true
+              type: boolean
+            number:
+              description: Número do telefone (formato E.164) ou ID do grupo
+              example: '5511999999999'
+              type: string
+          required:
+            - number
+            - archive
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: Chat updated successfully
+                type: string
+            type: object
+      description: Chat arquivado/desarquivado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid phone number format
+                type: string
+            type: object
+      description: Dados da requisição inválidos
+    '401':
+      description: Token de autenticação ausente ou inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Error archiving chat
+                type: string
+            type: object
+      description: Erro ao executar a operação
+  summary: Arquivar/desarquivar chat
+  tags:
+    - Chats

@@ -1,0 +1,45 @@
+get:
+  description: |
+    Retorna as categorias de negócios disponíveis.
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Lista de categorias de negócios
+                items:
+                  properties:
+                    id:
+                      type: string
+                    localized_display_name:
+                      type: string
+                  type: object
+                type: array
+            type: object
+      description: Categorias de negócios recuperadas com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar as categorias de negócios
+  summary: Obter as categorias de negócios
+  tags:
+    - Business

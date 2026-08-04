@@ -1,0 +1,40 @@
+GroupParticipant:
+  type: object
+  description: Participante de um grupo
+  properties:
+    JID:
+      type: string
+      format: jid
+      description: Identificador do participante
+    LID:
+      type: string
+      format: jid
+      description: Identificador local do participante
+    PhoneNumber:
+      type: string
+      format: jid
+      description: Número do participante (quando disponível)
+    IsAdmin:
+      type: boolean
+      description: Indica se é administrador
+    IsSuperAdmin:
+      type: boolean
+      description: Indica se é super administrador
+    DisplayName:
+      type: string
+      description: Nome exibido no grupo (para usuários anônimos)
+    Error:
+      type: integer
+      description: Código de erro ao adicionar participante
+      minimum: 0
+    AddRequest:
+      type: object
+      description: Informações da solicitação de entrada
+      properties:
+        Code:
+          type: string
+          description: Código da solicitação
+        Expiration:
+          type: string
+          format: date-time
+          description: Data de expiração da solicitação

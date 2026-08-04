@@ -1,0 +1,128 @@
+get:
+  description: |
+    Retorna a lista de cidades disponíveis para uso nos campos
+    `proxy_managed_country`, `proxy_managed_state` e `proxy_managed_city` do endpoint
+    `POST /instance/connect`.
+
+    O backend consulta o catálogo disponível e aplica um cache interno de 24 horas.
+    Se o catálogo de cidades não estiver disponível, o endpoint retorna erro.
+
+    - Autenticação: requer `token` válido de qualquer instância (ou admin token via instância).
+    - Query `country` (opcional): ISO alpha-2 minúsculo. Default `br`.
+    - Query `state` (opcional): UF/subdivisão minúscula, como `sp`.
+    - Query `search` (opcional): filtro parcial por nome/slug, insensível a acento/caixa.
+
+    Como escolher a cidade:
+    1. Use `br` em `proxy_managed_country`.
+    2. Chame `GET /proxy-managed/cities?country=br` para obter as cidades brasileiras.
+    3. Quando a cidade retornar `state`, envie também esse valor em `proxy_managed_state`.
+    4. Quando o usuário escolher uma cidade, envie em `/instance/connect`:
+       - `proxy_managed_country`: o país escolhido, ex. `br`
+       - `proxy_managed_state`: o `state` retornado pela cidade, ex. `sp`, quando disponível
+       - `proxy_managed_city`: sempre o `cities[].value`
+
+    Se `state` não vier na cidade selecionada, envie apenas `proxy_managed_country` e `proxy_managed_city`.
+    O backend valida a combinação e retorna erro se faltar algum dado necessário.
+
+    Exemplo de requisição:
+    ```
+    GET /proxy-managed/cities?country=br&state=sp&search=camp
+    ```
+  operationId: listRegionCities
+  parameters:
+    - description: ISO alpha-2 (minúsculo). Default `br`.
+      in: query
+      name: country
+      required: false
+      schema:
+        default: br
+        pattern: ^[a-z]{2}$
+        type: string
+    - description: Filtra por UF/subdivisão quando o catálogo traz `state`. Para Brasil, use valores como `sp`, `rj`, `mg`.
+      in: query
+      name: state
+      required: false
+      schema:
+        pattern: ^[a-z0-9-]{1,16}$
+        type: string
+    - description: Filtro parcial por nome/slug (insensível a acento/caixa).
+      in: query
+      name: search
+      required: false
+      schema:
+        type: string
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            brasil_enriquecido:
+              summary: Cidade brasileira enriquecida
+              value:
+                cities:
+                  - label: Campinas
+                    raw_city: campinas
+                    state: sp
+                    state_label: São Paulo
+                    value: campinas
+                  - label: São Paulo
+                    raw_city: sao_paulo
+                    state: sp
+                    state_label: São Paulo
+                    value: saopaulo
+                country: br
+                state: sp
+            pais_sem_enriquecimento:
+              summary: Cidade fora do Brasil
+              value:
+                cities:
+                  - label: Los Angeles
+                    value: losangeles
+                country: us
+          schema:
+            properties:
+              cities:
+                items:
+                  properties:
+                    label:
+                      description: Nome apresentável da cidade.
+                      example: São Paulo
+                      type: string
+                    raw_city:
+                      description: Campo técnico para diagnóstico. Não envie este campo no `/instance/connect`; use `value`.
+                      example: sao_paulo
+                      type: string
+                    state:
+                      description: Código ISO 3166-2 da subdivisão/estado quando disponível.
+                      example: sp
+                      type: string
+                    state_label:
+                      description: Nome apresentável do estado/subdivisão quando disponível.
+                      example: São Paulo
+                      type: string
+                    value:
+                      description: Slug aceito em `proxy_managed_city`.
+                      example: saopaulo
+                      type: string
+                  type: object
+                type: array
+              country:
+                example: br
+                type: string
+              state:
+                description: Retornado apenas quando a query `state` foi informada.
+                example: sp
+                type: string
+            type: object
+      description: Lista de cidades disponíveis
+    '400':
+      description: country inválido (não é ISO alpha-2)
+    '401':
+      description: Token inválido/ausente
+    '500':
+      description: Erro interno
+    '503':
+      description: Provider indisponível ou catálogo de cidades inacessível
+  summary: Proxy Interno - Listar cidades disponíveis
+  tags:
+    - Proxy

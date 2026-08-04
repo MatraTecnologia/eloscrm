@@ -1,0 +1,71 @@
+post:
+  description: "Permite entrar em um grupo do WhatsApp usando um código de convite ou URL completo. \n\nCaracterísticas:\n\
+    - Suporta código de convite ou URL completo\n- Valida o código antes de tentar entrar no grupo\n- Retorna informações\
+    \ básicas do grupo após entrada bem-sucedida\n- Trata possíveis erros como convite inválido ou expirado\n"
+  operationId: joinGroup
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            invitecode:
+              description: "Código de convite ou URL completo do grupo. \nFormatos aceitos:\n- Código completo: \"IYnl5Zg9bUcJD32rJrDzO7\"\
+                \n- URL completa: \"https://chat.whatsapp.com/IYnl5Zg9bUcJD32rJrDzO7\"\n"
+              example: https://chat.whatsapp.com/IYnl5Zg9bUcJD32rJrDzO7
+              maxLength: 50
+              minLength: 10
+              type: string
+          required:
+            - invitecode
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group join successful
+                type: string
+            type: object
+      description: Entrada no grupo realizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid invite code
+                type: string
+            type: object
+      description: Código de convite inválido
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unable to join group
+                type: string
+            type: object
+      description: Usuário já está no grupo ou não tem permissão para entrar
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Error processing group invite
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Entrar em um grupo usando código de convite
+  tags:
+    - Grupos e Comunidades

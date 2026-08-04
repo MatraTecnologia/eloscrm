@@ -1,0 +1,78 @@
+post:
+  description: "Cria um novo grupo no WhatsApp com participantes iniciais.\n\n### Detalhes\n- Requer autenticação via token\
+    \ da instância\n- Os números devem ser fornecidos sem formatação (apenas dígitos)\n\n### Limitações\n- Mínimo de 1 participante\
+    \ além do criador\n  \n### Comportamento\n- Retorna informações detalhadas do grupo criado\n- Inclui lista de participantes\
+    \ adicionados com sucesso/falha\n"
+  operationId: createGroup
+  requestBody:
+    content:
+      application/json:
+        examples:
+          default:
+            value:
+              name: Meu Novo Grupo
+              participants:
+                - '5521987905995'
+          multiple_participants:
+            value:
+              name: Equipe de Projeto
+              participants:
+                - '5521987905995'
+                - '5511912345678'
+                - '5519987654321'
+        schema:
+          properties:
+            name:
+              description: Nome do grupo
+              example: uazapiGO grupo
+              maxLength: 100
+              minLength: 1
+              type: string
+            participants:
+              description: Lista de números de telefone dos participantes iniciais
+              example:
+                - '5521987905995'
+                - '5511912345678'
+              items:
+                description: Número de telefone sem formatação
+                type: string
+              maxItems: 50
+              minItems: 1
+              type: array
+          required:
+            - name
+            - participants
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/group.yaml#/Group
+      description: Grupo criado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Could not parse phone
+                type: string
+            type: object
+      description: Erro de payload inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to create group
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Criar um novo grupo
+  tags:
+    - Grupos e Comunidades

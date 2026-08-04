@@ -1,0 +1,53 @@
+delete:
+  description: |
+    Remove a instância do sistema.
+  operationId: deleteInstance
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              info:
+                example: O dispositivo foi desconectado com sucesso e a instância foi removida do banco de dados.
+                type: string
+              response:
+                example: Instance Deleted
+                type: string
+            type: object
+      description: Instância deletada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Não autorizado - Token inválido ou ausente
+                type: string
+            type: object
+      description: Falha na autenticação
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Instância não encontrada
+                type: string
+            type: object
+      description: Instância não encontrada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Falha ao deletar instância
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Deletar instância
+  tags:
+    - Instancia

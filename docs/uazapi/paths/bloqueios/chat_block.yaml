@@ -1,0 +1,51 @@
+post:
+  description: "Bloqueia ou desbloqueia um contato do WhatsApp. Contatos bloqueados não podem enviar mensagens \npara a instância\
+    \ e a instância não pode enviar mensagens para eles.\n"
+  operationId: blockChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            block:
+              description: True para bloquear, False para desbloquear
+              example: true
+              type: boolean
+            number:
+              description: Número do WhatsApp no formato internacional (ex. 5511999999999)
+              example: '5511999999999'
+              type: string
+          required:
+            - number
+            - block
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              blockList:
+                description: Lista atualizada de contatos bloqueados
+                example:
+                  - 5511999999999@s.whatsapp.net
+                  - 5511888888888@s.whatsapp.net
+                items:
+                  type: string
+                type: array
+              response:
+                description: Mensagem de confirmação
+                example: Blocked successfully
+                type: string
+            type: object
+      description: Operação realizada com sucesso
+    '401':
+      description: Não autorizado - token inválido
+    '404':
+      description: Contato não encontrado
+    '500':
+      description: Erro do servidor ao processar a requisição
+  summary: Bloqueia ou desbloqueia contato do WhatsApp
+  tags:
+    - Bloqueios

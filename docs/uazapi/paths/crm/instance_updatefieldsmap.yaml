@@ -1,0 +1,128 @@
+post:
+  description: "Atualiza os campos personalizados (custom fields) de uma instância. \nPermite configurar até 20 campos personalizados\
+    \ para armazenamento de \ninformações adicionais sobre leads.\n\nCada campo pode armazenar até 255 caracteres e aceita\
+    \ qualquer tipo de dado.\n\nCampos disponíveis:\n- lead_field01 a lead_field20\n\nExemplo de uso:\n1. Armazenar informações\
+    \ adicionais sobre leads\n2. Criar campos personalizados para integração com outros sistemas\n3. Armazenar tags ou categorias\
+    \ personalizadas\n4. Manter histórico de interações com o lead\n\nExemplo de requisição:\n```json\n{\n  \"lead_field01\"\
+    : \"nome\",\n  \"lead_field02\": \"email\",\n  \"lead_field03\": \"telefone\",\n  \"lead_field04\": \"cidade\",\n  \"\
+    lead_field05\": \"estado\",\n  \"lead_field06\": \"idade\",\n  \"lead_field07\": \"interesses\",\n  \"lead_field08\":\
+    \ \"origem\",\n  \"lead_field09\": \"status\",\n  \"lead_field10\": \"valor\",\n  \"lead_field11\": \"observacoes\",\n\
+    \  \"lead_field12\": \"ultima_interacao\",\n  \"lead_field13\": \"proximo_contato\",\n  \"lead_field14\": \"vendedor\"\
+    ,\n  \"lead_field15\": \"produto_interesse\",\n  \"lead_field16\": \"fonte_captacao\",\n  \"lead_field17\": \"score\"\
+    ,\n  \"lead_field18\": \"tags\",\n  \"lead_field19\": \"historico\",\n  \"lead_field20\": \"custom\"\n}\n```\n\nExemplo\
+    \ de resposta:\n```json\n{\n  \"success\": true,\n  \"message\": \"Custom fields updated successfully\",\n  \"instance\"\
+    : {\n    \"id\": \"r183e2ef9597845\",\n    \"name\": \"minha-instancia\",\n    \"fieldsMap\": {\n      \"lead_field01\"\
+    : \"nome\",\n      \"lead_field02\": \"email\",\n      \"lead_field03\": \"telefone\",\n      \"lead_field04\": \"cidade\"\
+    ,\n      \"lead_field05\": \"estado\",\n      \"lead_field06\": \"idade\",\n      \"lead_field07\": \"interesses\",\n\
+    \      \"lead_field08\": \"origem\",\n      \"lead_field09\": \"status\",\n      \"lead_field10\": \"valor\",\n      \"\
+    lead_field11\": \"observacoes\",\n      \"lead_field12\": \"ultima_interacao\",\n      \"lead_field13\": \"proximo_contato\"\
+    ,\n      \"lead_field14\": \"vendedor\",\n      \"lead_field15\": \"produto_interesse\",\n      \"lead_field16\": \"fonte_captacao\"\
+    ,\n      \"lead_field17\": \"score\",\n      \"lead_field18\": \"tags\",\n      \"lead_field19\": \"historico\",\n   \
+    \   \"lead_field20\": \"custom\"\n    }\n  }\n}\n```\n\nErros comuns:\n- 400: Campos inválidos ou payload mal formatado\n\
+    - 401: Token inválido ou expirado\n- 404: Instância não encontrada\n- 500: Erro ao atualizar campos no banco de dados\n\
+    \nRestrições:\n- Cada campo pode ter no máximo 255 caracteres\n- Campos vazios serão mantidos com seus valores atuais\n\
+    - Apenas os campos enviados serão atualizados\n"
+  operationId: updateFieldsMap
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            lead_field01:
+              description: Campo personalizado 01
+              maxLength: 255
+              type: string
+            lead_field02:
+              description: Campo personalizado 02
+              maxLength: 255
+              type: string
+            lead_field03:
+              description: Campo personalizado 03
+              maxLength: 255
+              type: string
+            lead_field04:
+              description: Campo personalizado 04
+              maxLength: 255
+              type: string
+            lead_field05:
+              description: Campo personalizado 05
+              maxLength: 255
+              type: string
+            lead_field06:
+              description: Campo personalizado 06
+              maxLength: 255
+              type: string
+            lead_field07:
+              description: Campo personalizado 07
+              maxLength: 255
+              type: string
+            lead_field08:
+              description: Campo personalizado 08
+              maxLength: 255
+              type: string
+            lead_field09:
+              description: Campo personalizado 09
+              maxLength: 255
+              type: string
+            lead_field10:
+              description: Campo personalizado 10
+              maxLength: 255
+              type: string
+            lead_field11:
+              description: Campo personalizado 11
+              maxLength: 255
+              type: string
+            lead_field12:
+              description: Campo personalizado 12
+              maxLength: 255
+              type: string
+            lead_field13:
+              description: Campo personalizado 13
+              maxLength: 255
+              type: string
+            lead_field14:
+              description: Campo personalizado 14
+              maxLength: 255
+              type: string
+            lead_field15:
+              description: Campo personalizado 15
+              maxLength: 255
+              type: string
+            lead_field16:
+              description: Campo personalizado 16
+              maxLength: 255
+              type: string
+            lead_field17:
+              description: Campo personalizado 17
+              maxLength: 255
+              type: string
+            lead_field18:
+              description: Campo personalizado 18
+              maxLength: 255
+              type: string
+            lead_field19:
+              description: Campo personalizado 19
+              maxLength: 255
+              type: string
+            lead_field20:
+              description: Campo personalizado 20
+              maxLength: 255
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/instance.yaml#/Instance
+      description: Sucesso
+    '401':
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  summary: Atualizar campos personalizados de leads
+  tags:
+    - CRM

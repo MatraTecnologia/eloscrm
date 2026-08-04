@@ -1,0 +1,196 @@
+post:
+  description: |
+    Fixa ou desafixa uma mensagem específica usando a funcionalidade nativa do WhatsApp.
+
+    O endpoint realiza:
+    - Busca a mensagem original no banco de dados usando o ID fornecido
+    - Envia a ação de fixar ou desafixar a mensagem no WhatsApp
+    - Funciona em conversas individuais e grupos
+    - Gera um novo ID para o evento de pin/unpin
+    - Retorna objeto de mensagem completo seguindo o padrão da API
+    - Dispara eventos SSE/Webhook automaticamente
+
+    **Importante**:
+    - O ID pode ser fornecido no formato completo (`owner:messageid`) ou apenas `messageid`
+    - Em conversas `1:1`, a ação é suportada normalmente
+    - Em grupos, a permissão depende da configuração do WhatsApp do grupo (`apenas admins` ou `qualquer membro`)
+    - O backend não valida localmente se a instância é admin do grupo; a decisão final é do WhatsApp
+    - Newsletters/canais não são suportados neste endpoint
+    - Se `pin` não for enviado, o valor padrão é `true`
+    - Ao fixar mensagem, `duration` aceita dias (`1`, `7` ou `30`)
+    - Se `duration` não for enviado ou vier com qualquer outro valor, o backend usa `30` dias
+    - Ao desafixar (`pin: false`), `duration` é ignorado
+  operationId: pinMessage
+  requestBody:
+    content:
+      application/json:
+        examples:
+          pinMessage:
+            summary: Fixar mensagem
+            value:
+              duration: 7
+              id: 3A12345678901234567890123456789012
+              pin: true
+          pinMessageFallback30Days:
+            summary: Fixar mensagem com fallback para 30 dias
+            value:
+              duration: 99
+              id: 3A12345678901234567890123456789012
+              pin: true
+          unpinMessage:
+            summary: Desafixar mensagem
+            value:
+              id: 3A12345678901234567890123456789012
+              pin: false
+        schema:
+          properties:
+            duration:
+              default: 30
+              description: 'Duração do pin em dias. Valores aceitos: `1`, `7` ou `30`. Qualquer outro valor cai para `30`.'
+              example: 7
+              type: integer
+            id:
+              description: ID único da mensagem alvo (formato `owner:messageid` ou apenas `messageid`)
+              example: 3A12345678901234567890123456789012
+              type: string
+            pin:
+              default: true
+              description: Define se a mensagem deve ser fixada (`true`) ou desafixada (`false`)
+              example: true
+              type: boolean
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              chatid:
+                description: Chat onde a ação ocorreu
+                example: 120363123456789012@g.us
+                type: string
+              content:
+                description: Payload interno de `PinInChatMessage`
+                type: object
+              convertOptions:
+                description: Opções convertidas para mensagens interativas, quando aplicável
+                example: ''
+                type: string
+              edited:
+                description: ID da mensagem editada, quando aplicável
+                example: ''
+                type: string
+              fromMe:
+                description: Indica se a ação foi enviada pela própria instância
+                example: true
+                type: boolean
+              id:
+                description: ID único da mensagem gerada para o evento de pin/unpin
+                example: 5511999999999:3A12345678901234567890123456789012
+                type: string
+              isGroup:
+                description: Indica se o chat é um grupo
+                example: true
+                type: boolean
+              messageTimestamp:
+                description: Timestamp da mensagem em milissegundos
+                example: 1704067200000
+                type: integer
+              messageType:
+                description: Tipo da mensagem retornada
+                example: PinInChatMessage
+                type: string
+              messageid:
+                description: ID da mensagem do evento no WhatsApp
+                example: 3A12345678901234567890123456789012
+                type: string
+              owner:
+                description: Proprietário da instância
+                example: '5511999999999'
+                type: string
+              pinned:
+                description: Estado final solicitado para a mensagem alvo
+                example: true
+                type: boolean
+              quoted:
+                description: ID da mensagem citada, quando aplicável
+                example: ''
+                type: string
+              reaction:
+                description: Emoji de reação, quando aplicável
+                example: ''
+                type: string
+              sender:
+                description: JID do remetente da ação
+                example: 5511999999999@s.whatsapp.net
+                type: string
+              senderName:
+                description: Nome do perfil da instância
+                example: Minha Instância
+                type: string
+              source:
+                description: Origem estimada da mensagem
+                example: web
+                type: string
+              status:
+                description: Status atual da ação
+                example: Pending
+                type: string
+              targetMessageID:
+                description: ID da mensagem alvo que foi fixada ou desafixada
+                example: 3EB0538DA65A59F6D8A251
+                type: string
+              text:
+                description: Texto amigável derivado da ação
+                example: Mensagem fixada
+                type: string
+            type: object
+      description: Ação de fixar/desafixar mensagem enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: message pinning is not supported for newsletters
+                type: string
+            type: object
+      description: Dados inválidos na requisição ou operação não suportada
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa ou token inválido
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Message not found
+                type: string
+            type: object
+      description: Mensagem não encontrada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'error pinning message: ...'
+                type: string
+            type: object
+      description: Erro interno do servidor ou erro retornado pelo WhatsApp
+  security:
+    - token: []
+  summary: Fixa ou desafixa uma mensagem
+  tags:
+    - Ações na mensagem e Buscar

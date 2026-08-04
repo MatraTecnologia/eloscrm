@@ -1,0 +1,270 @@
+get:
+  description: |
+    Retorna a configuração atual do webhook global, incluindo:
+    - URL configurada
+    - Eventos ativos
+    - Filtros aplicados
+    - Configurações adicionais
+
+    Exemplo de resposta:
+    ```json
+    {
+      "enabled": true,
+      "url": "https://example.com/webhook",
+      "events": ["messages", "messages_update"],
+      "excludeMessages": ["wasSentByApi", "isGroupNo"],
+      "addUrlEvents": true,
+      "addUrlTypesMessages": true
+    }
+    ```
+  operationId: getGlobalWebhook
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/webhook.yaml#/Webhook
+      description: Configuração atual do webhook global
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token de administrador não fornecido
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: This is a public demo server. This endpoint has been disabled.
+                type: string
+            type: object
+      description: Token de administrador inválido ou servidor demo
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Global webhook not found
+                type: string
+            type: object
+      description: Webhook global não encontrado
+  security:
+    - admintoken: []
+  summary: Ver Webhook Global
+  tags:
+    - Admininstração
+post:
+  description: |
+    Configura um webhook global que receberá eventos de todas as instâncias.
+
+    ### 🚀 Configuração Simples (Recomendada)
+
+    **Para a maioria dos casos de uso**:
+    - Configure apenas URL e eventos desejados
+    - Modo simples por padrão (sem complexidade)
+    - **Recomendado**: Sempre use `"excludeMessages": ["wasSentByApi"]` para evitar loops
+    - **Exemplo**: `{"url": "https://webhook.cool/global", "events": ["messages", "connection"], "excludeMessages": ["wasSentByApi"]}`
+
+    ### 🧪 Sites para Testes (ordenados por qualidade)
+
+    **Para testar webhooks durante desenvolvimento**:
+    1. **https://webhook.cool/** - ⭐ Melhor opção (sem rate limit, interface limpa)
+    2. **https://rbaskets.in/** - ⭐ Boa alternativa (confiável, baixo rate limit)
+    3. **https://webhook.site/** - ⚠️ Evitar se possível (rate limit agressivo)
+
+    ### Funcionalidades Principais:
+    - Configuração de URL para recebimento de eventos
+    - Seleção granular de tipos de eventos
+    - Filtragem avançada de mensagens
+    - Parâmetros adicionais na URL
+
+    **Eventos Disponíveis**:
+    - `connection`: Alterações no estado da conexão
+    - `history`: Recebimento de histórico de mensagens
+    - `messages`: Novas mensagens recebidas
+    - `messages_update`: Atualizações em mensagens existentes
+    - `call`: Eventos de chamadas VoIP
+    - `contacts`: Atualizações na agenda de contatos
+    - `presence`: Alterações no status de presença
+    - `groups`: Modificações em grupos
+    - `labels`: Gerenciamento de etiquetas
+    - `chats`: Eventos de conversas
+    - `chat_labels`: Alterações em etiquetas de conversas
+    - `blocks`: Bloqueios/desbloqueios
+    - `sender`: Atualizações de campanhas, quando inicia, e quando completa
+
+    **Remover mensagens com base nos filtros**:
+    - `wasSentByApi`: Mensagens originadas pela API ⚠️ **IMPORTANTE:** Use sempre este filtro para evitar loops em automações
+    - `wasNotSentByApi`: Mensagens não originadas pela API
+    - `fromMeYes`: Mensagens enviadas pelo usuário
+    - `fromMeNo`: Mensagens recebidas de terceiros
+    - `isGroupYes`: Mensagens em grupos
+    - `isGroupNo`: Mensagens em conversas individuais
+
+    💡 **Prevenção de Loops Globais**: O webhook global recebe eventos de TODAS as instâncias. Se você tem automações que enviam mensagens via API, sempre inclua `"excludeMessages": ["wasSentByApi"]`. Caso prefira receber esses eventos, certifique-se de que sua automação detecta mensagens enviadas pela própria API para não criar loops infinitos em múltiplas instâncias.
+
+    **Parâmetros de URL**:
+    - `addUrlEvents` (boolean): Quando ativo, adiciona o tipo do evento como path parameter na URL.
+      Exemplo: `https://api.example.com/webhook/{evento}`
+    - `addUrlTypesMessages` (boolean): Quando ativo, adiciona o tipo da mensagem como path parameter na URL.
+      Exemplo: `https://api.example.com/webhook/{tipo_mensagem}`
+
+    **Combinações de Parâmetros**:
+    - Ambos ativos: `https://api.example.com/webhook/{evento}/{tipo_mensagem}`
+      Exemplo real: `https://api.example.com/webhook/message/conversation`
+    - Apenas eventos: `https://api.example.com/webhook/message`
+    - Apenas tipos: `https://api.example.com/webhook/conversation`
+
+    **Notas Técnicas**:
+    1. Os parâmetros são adicionados na ordem: evento → tipo mensagem
+    2. A URL deve ser configurada para aceitar esses parâmetros dinâmicos
+    3. Funciona com qualquer combinação de eventos/mensagens
+  operationId: updateGlobalWebhook
+  requestBody:
+    content:
+      application/json:
+        examples:
+          configuracao_completa:
+            description: Exemplo com todos os recursos
+            summary: Configuração Completa
+            value:
+              addUrlEvents: true
+              events:
+                - messages
+                - connection
+                - groups
+                - chats
+              excludeMessages:
+                - wasSentByApi
+                - isGroupNo
+              url: https://webhook.cool/api
+          configuracao_simples:
+            description: Configuração básica sem complexidade
+            summary: Configuração Simples (Recomendada)
+            value:
+              events:
+                - messages
+                - connection
+              excludeMessages:
+                - wasSentByApi
+              url: https://webhook.cool/global
+        schema:
+          properties:
+            addUrlEvents:
+              default: false
+              description: |
+                Adiciona o tipo do evento como parâmetro na URL.
+                - `false` (padrão): URL normal
+                - `true`: Adiciona evento na URL (ex: `/webhook/message`)
+              type: boolean
+            addUrlTypesMessages:
+              default: false
+              description: "Adiciona o tipo da mensagem como parâmetro na URL.\n- `false` (padrão): URL normal  \n- `true`:\
+                \ Adiciona tipo da mensagem (ex: `/webhook/conversation`)\n"
+              type: boolean
+            events:
+              description: Lista de eventos monitorados
+              example:
+                - messages
+                - connection
+              items:
+                enum:
+                  - connection
+                  - history
+                  - messages
+                  - messages_update
+                  - newsletter_messages
+                  - call
+                  - contacts
+                  - presence
+                  - groups
+                  - labels
+                  - chats
+                  - chat_labels
+                  - blocks
+                  - sender
+                type: string
+              type: array
+            excludeMessages:
+              description: Filtros para excluir tipos de mensagens
+              example:
+                - wasSentByApi
+              items:
+                enum:
+                  - wasSentByApi
+                  - wasNotSentByApi
+                  - fromMeYes
+                  - fromMeNo
+                  - isGroupYes
+                  - isGroupNo
+                type: string
+              type: array
+            url:
+              description: URL para receber os eventos
+              example: https://webhook.cool/global
+              format: uri
+              type: string
+          required:
+            - url
+            - events
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/webhook.yaml#/Webhook
+      description: Webhook global configurado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid payload
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token de administrador não fornecido
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: This is a public demo server. This endpoint has been disabled.
+                type: string
+            type: object
+      description: Token de administrador inválido ou servidor demo
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to save global webhook to database
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - admintoken: []
+  summary: Configurar Webhook Global
+  tags:
+    - Admininstração

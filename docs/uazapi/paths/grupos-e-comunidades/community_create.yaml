@@ -1,0 +1,57 @@
+post:
+  description: "Cria uma nova comunidade no WhatsApp. Uma comunidade é uma estrutura que permite agrupar múltiplos grupos\
+    \ relacionados sob uma única administração. \n\nA comunidade criada inicialmente terá apenas o grupo principal (announcements),\
+    \ e grupos adicionais podem ser vinculados posteriormente usando o endpoint `/community/updategroups`.\n\n**Observações\
+    \ importantes:**\n- O número que cria a comunidade torna-se automaticamente o administrador\n- A comunidade terá um grupo\
+    \ principal de anúncios criado automaticamente\n"
+  operationId: createCommunity
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            name:
+              description: Nome da comunidade
+              example: Comunidade do Bairro
+              type: string
+          required:
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              failed:
+                description: Lista de JIDs que falharam ao serem adicionados
+                items:
+                  format: jid
+                  type: string
+                type: array
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+            type: object
+      description: Comunidade criada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Erro na requisição
+    '401':
+      description: Token inválido ou não fornecido
+    '403':
+      description: Sem permissão para criar comunidades
+    '429':
+      description: Limite de criação de comunidades atingido
+    '500':
+      description: Erro interno do servidor
+  summary: Criar uma comunidade
+  tags:
+    - Grupos e Comunidades

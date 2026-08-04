@@ -1,0 +1,162 @@
+post:
+  description: |
+    Envia um cartão de contato (vCard) para um contato ou grupo.
+
+    ## Recursos Específicos
+
+    - **vCard completo** com nome, telefones, organização, email e URL
+    - **Múltiplos números de telefone** (separados por vírgula)
+    - **Cartão clicável** no WhatsApp para salvar na agenda
+    - **Informações profissionais** (organização/empresa)
+
+    ## Campos Comuns
+
+    Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+    `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders e envio para grupos.
+
+    ## Exemplo Básico
+    ```json
+    {
+      "number": "5511999999999",
+      "fullName": "João Silva",
+      "phoneNumber": "5511999999999,5511888888888",
+      "organization": "Empresa XYZ",
+      "email": "joao.silva@empresa.com",
+      "url": "https://empresa.com/joao"
+    }
+    ```
+  operationId: sendContact
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            async:
+              description: Se true, envia a mensagem de forma assíncrona via fila interna
+              example: false
+              type: boolean
+            delay:
+              description: Atraso em milissegundos antes do envio, durante o atraso apacerá 'Digitando...'
+              example: 1000
+              type: integer
+            email:
+              description: Endereço de email
+              example: joao@empresa.com
+              type: string
+            forward:
+              description: Marca a mensagem como encaminhada no WhatsApp
+              example: true
+              type: boolean
+            fullName:
+              description: Nome completo do contato
+              example: João Silva
+              type: string
+            mentions:
+              description: Números para mencionar (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+              example: '5511999999999'
+              type: string
+            organization:
+              description: Nome da organização/empresa
+              example: Empresa XYZ
+              type: string
+            phoneNumber:
+              description: Números de telefone (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            readchat:
+              description: Marca conversa como lida após envio
+              example: true
+              type: boolean
+            readmessages:
+              description: Marca últimas mensagens recebidas como lidas
+              example: true
+              type: boolean
+            replyid:
+              description: ID da mensagem para responder
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            track_id:
+              description: ID para rastreamento da mensagem (aceita valores duplicados)
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento da mensagem
+              example: chatwoot
+              type: string
+            url:
+              description: URL pessoal ou da empresa
+              example: https://empresa.com/joao
+              type: string
+          required:
+            - number
+            - fullName
+            - phoneNumber
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Contact card sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Cartão de contato enviado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing required fields
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '429':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Rate limit exceeded
+                type: string
+            type: object
+      description: Limite de requisições excedido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to send contact card
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar cartão de contato (vCard)
+  tags:
+    - Enviar Mensagem

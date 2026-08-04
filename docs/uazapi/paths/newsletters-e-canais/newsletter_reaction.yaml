@@ -1,0 +1,76 @@
+post:
+  description: |
+    Envia, altera ou remove uma reação de um post do canal.
+
+    Observações:
+    - `serverid` identifica o post alvo
+    - `reaction` define o emoji
+    - envie `reaction` vazio para remover a reação
+    - `reactionmessageid` é opcional; se omitido, o WhatsApp gera o ID da reação
+  operationId: reactNewsletterMessage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+            reaction:
+              example: 🔥
+              type: string
+            reactionmessageid:
+              example: 3EB0AABBCCDD
+              type: string
+            serverid:
+              example: 12345
+              type: integer
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Reação aplicada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: serverid is required
+                type: string
+            type: object
+      description: Payload inválido ou faltando `serverid`
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao reagir ao post
+  summary: Reagir a um post do canal
+  tags:
+    - Newsletters e Canais

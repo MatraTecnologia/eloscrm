@@ -1,0 +1,173 @@
+post:
+  description: "Atualiza as informações de lead associadas a um chat. Permite modificar status do ticket, \natribuição de\
+    \ atendente, posição no kanban, tags e outros campos customizados.\n\nAs alterações são refletidas imediatamente no banco\
+    \ de dados e disparam eventos webhook/SSE\npara manter a aplicação sincronizada.\n"
+  operationId: editLead
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            chatbot_disableUntil:
+              description: |
+                Timestamp UTC até quando o chatbot deve ficar desativado para este chat.
+                Use 0 para reativar imediatamente.
+              example: 1735686000
+              format: int64
+              type: integer
+            id:
+              description: |
+                Identificador do chat. Pode ser:
+                - wa_chatid (ex: "5511999999999@s.whatsapp.net")
+                - wa_fastid (ex: "5511888888888:5511999999999")
+              example: 5511999999999@s.whatsapp.net
+              type: string
+            lead_assignedAttendant_id:
+              description: |
+                ID do atendente atribuído ao lead.
+                Use string vazia ("") para remover a atribuição.
+              example: att_123456
+              type: string
+            lead_email:
+              description: Email do lead
+              example: joao@exemplo.com
+              format: email
+              type: string
+            lead_field01:
+              description: Campo personalizado 1
+              type: string
+            lead_field02:
+              description: Campo personalizado 2
+              type: string
+            lead_field03:
+              description: Campo personalizado 3
+              type: string
+            lead_field04:
+              description: Campo personalizado 4
+              type: string
+            lead_field05:
+              description: Campo personalizado 5
+              type: string
+            lead_field06:
+              description: Campo personalizado 6
+              type: string
+            lead_field07:
+              description: Campo personalizado 7
+              type: string
+            lead_field08:
+              description: Campo personalizado 8
+              type: string
+            lead_field09:
+              description: Campo personalizado 9
+              type: string
+            lead_field10:
+              description: Campo personalizado 10
+              type: string
+            lead_field11:
+              description: Campo personalizado 11
+              type: string
+            lead_field12:
+              description: Campo personalizado 12
+              type: string
+            lead_field13:
+              description: Campo personalizado 13
+              type: string
+            lead_field14:
+              description: Campo personalizado 14
+              type: string
+            lead_field15:
+              description: Campo personalizado 15
+              type: string
+            lead_field16:
+              description: Campo personalizado 16
+              type: string
+            lead_field17:
+              description: Campo personalizado 17
+              type: string
+            lead_field18:
+              description: Campo personalizado 18
+              type: string
+            lead_field19:
+              description: Campo personalizado 19
+              type: string
+            lead_field20:
+              description: Campo personalizado 20
+              type: string
+            lead_fullName:
+              description: Nome completo do lead
+              example: João Silva Pereira
+              type: string
+            lead_isTicketOpen:
+              description: |
+                Status do ticket associado ao lead.
+                - true: Ticket está aberto/em atendimento
+                - false: Ticket está fechado/resolvido
+              example: true
+              type: boolean
+            lead_kanbanOrder:
+              description: |
+                Posição do card no quadro kanban.
+                Valores maiores aparecem primeiro.
+              example: 1000
+              format: int64
+              type: integer
+            lead_name:
+              description: Nome principal do lead
+              example: João Silva
+              type: string
+            lead_notes:
+              description: Anotações sobre o lead
+              example: Cliente interessado em plano premium
+              type: string
+            lead_personalid:
+              description: |
+                Documento de identificação (CPF/CNPJ)
+                Apenas números ou formatado
+              example: 123.456.789-00
+              type: string
+            lead_status:
+              description: Status do lead no funil de vendas
+              example: qualificado
+              type: string
+            lead_tags:
+              description: |
+                Lista de tags associadas ao lead.
+                Tags inexistentes são criadas automaticamente.
+                Envie array vazio ([]) para remover todas as tags.
+              example:
+                - vip
+                - suporte
+                - prioridade-alta
+              items:
+                type: string
+              type: array
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            lead_assignedAttendant_id: att_123456
+            lead_isTicketOpen: true
+            lead_name: João Silva
+            lead_status: qualificado
+            lead_tags:
+              - vip
+              - suporte
+            wa_chatid: 5511999999999@s.whatsapp.net
+            wa_fastid: 5511888888888:5511999999999
+          schema:
+            $ref: ../../schemas/chat.yaml#/Chat
+      description: Lead atualizado com sucesso
+    '400':
+      description: Payload inválido
+    '404':
+      description: Chat não encontrado
+    '500':
+      description: Erro interno do servidor
+  summary: Edita informações de lead
+  tags:
+    - CRM

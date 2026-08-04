@@ -1,0 +1,65 @@
+post:
+  description: Remove um administrador do canal usando o telefone dele.
+  operationId: removeNewsletterAdmin
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+            phone:
+              example: '5511999999999'
+              type: string
+          required:
+            - phone
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Admin removido com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: phone is required
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao remover admin
+  summary: Remover admin do canal
+  tags:
+    - Newsletters e Canais

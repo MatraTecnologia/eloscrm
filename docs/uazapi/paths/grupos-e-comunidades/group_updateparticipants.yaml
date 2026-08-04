@@ -1,0 +1,88 @@
+post:
+  description: |
+    Gerencia participantes do grupo através de diferentes ações:
+    - Adicionar ou remover participantes
+    - Promover ou rebaixar administradores
+    - Aprovar ou rejeitar solicitações pendentes
+
+    Requer que o usuário seja administrador do grupo para executar as ações.
+  operationId: updateGroupParticipants
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            action:
+              description: |
+                Ação a ser executada:
+                - add: Adicionar participantes ao grupo
+                - remove: Remover participantes do grupo
+                - promote: Promover participantes a administradores
+                - demote: Remover privilégios de administrador
+                - approve: Aprovar solicitações pendentes de entrada
+                - reject: Rejeitar solicitações pendentes de entrada
+              enum:
+                - add
+                - remove
+                - promote
+                - demote
+                - approve
+                - reject
+              example: promote
+              type: string
+            groupjid:
+              description: JID (identificador) do grupo
+              example: 120363308883996631@g.us
+              type: string
+            participants:
+              description: |
+                Lista de números de telefone ou JIDs dos participantes.
+                Para números de telefone, use formato internacional sem '+' ou espaços.
+              example:
+                - '5521987654321'
+                - '5511999887766'
+              items:
+                type: string
+              type: array
+          required:
+            - groupjid
+            - action
+            - participants
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+                description: Informações atualizadas do grupo
+              groupUpdated:
+                description: Status da operação para cada participante
+                items:
+                  properties:
+                    Error:
+                      description: Código de erro (0 para sucesso)
+                      type: integer
+                    JID:
+                      description: JID do participante
+                      type: string
+                  type: object
+                type: array
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+            type: object
+      description: Sucesso na operação
+    '400':
+      description: Erro nos parâmetros da requisição
+    '403':
+      description: Usuário não é administrador do grupo
+    '500':
+      description: Erro interno do servidor
+  summary: Gerenciar participantes do grupo
+  tags:
+    - Grupos e Comunidades

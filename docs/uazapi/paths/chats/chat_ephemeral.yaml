@@ -1,0 +1,110 @@
+post:
+  description: |
+    Define o temporizador de mensagens temporárias (disappearing messages) de um chat privado.
+
+    Valores aceitos para a duração:
+    - `0` ou `off` para desativar
+    - `1d`
+    - `7d`
+    - `90d`
+
+    Observações:
+    - este endpoint é apenas para chats privados
+    - se o identificador informado for de grupo, a API retorna erro orientando usar `/group/ephemeral`
+    - a resposta também atualiza o `wa_ephemeralExpiration` do chat no cache local
+  operationId: updateChatEphemeral
+  requestBody:
+    content:
+      application/json:
+        examples:
+          ativar_7_dias:
+            summary: Ativar por 7 dias
+            value:
+              duration: 7d
+              number: 5511999999999@s.whatsapp.net
+          desativar:
+            summary: Desativar mensagens temporárias
+            value:
+              duration: 'off'
+              number: 5511999999999@s.whatsapp.net
+        schema:
+          properties:
+            duration:
+              description: Duração desejada para mensagens temporárias
+              example: 7d
+              oneOf:
+                - type: string
+                - type: integer
+            number:
+              description: Identificador do chat privado
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          required:
+            - number
+            - duration
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso:
+              summary: Timer atualizado
+              value:
+                chat:
+                  wa_chatid: 5511999999999@s.whatsapp.net
+                  wa_ephemeralExpiration: 604800
+                  wa_isGroup: false
+                ephemeral:
+                  enabled: true
+                  label: 7d
+                  seconds: 604800
+                response: Ephemeral timer updated successfully
+          schema:
+            properties:
+              chat:
+                $ref: ../../schemas/chat.yaml#/Chat
+              ephemeral:
+                properties:
+                  enabled:
+                    example: true
+                    type: boolean
+                  label:
+                    example: 7d
+                    type: string
+                  seconds:
+                    example: 604800
+                    format: int64
+                    type: integer
+                type: object
+              response:
+                example: Ephemeral timer updated successfully
+                type: string
+            type: object
+      description: Temporizador atualizado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'invalid duration. Allowed values: 0, off, 1d, 7d, 90d'
+                type: string
+            type: object
+      description: Payload inválido, chat inválido ou duração não suportada
+    '401':
+      description: Token inválido ou ausente
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'Error updating chat ephemeral timer: connection closed'
+                type: string
+            type: object
+      description: Erro interno ao atualizar o temporizador
+  summary: Configurar mensagens temporárias em chat privado
+  tags:
+    - Chats

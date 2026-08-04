@@ -1,0 +1,98 @@
+post:
+  description: |
+    Deleta ou limpa um chat e/ou suas mensagens do WhatsApp e/ou banco de dados.
+    Você pode escolher:
+    - Deletar o chat do WhatsApp
+    - Limpar a conversa no WhatsApp
+    - Deletar o chat do banco de dados
+    - Deletar apenas as mensagens do banco de dados
+    - Qualquer combinação das opções acima
+    Observação:
+    - Se clearChatWhatsApp e deleteChatWhatsApp forem true, o clear tem prioridade.
+  operationId: deleteChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            clearChatWhatsApp:
+              default: false
+              description: |
+                Se true, limpa a conversa do chat no WhatsApp (sem sair do chat).
+                Funciona para grupos e conversas individuais.
+              example: true
+              type: boolean
+            deleteChatDB:
+              default: false
+              description: Se true, deleta o chat do banco de dados
+              example: true
+              type: boolean
+            deleteChatWhatsApp:
+              default: false
+              description: |
+                Se true, deleta o chat do WhatsApp.
+                Para grupos, esta operação não é permitida e o chat será apenas limpo.
+              example: true
+              type: boolean
+            deleteMessagesDB:
+              default: false
+              description: Se true, deleta todas as mensagens do chat do banco de dados
+              example: true
+              type: boolean
+            number:
+              description: |
+                Número do chat no formato internacional.
+                Para grupos use o ID completo do grupo.
+              example: '5511999999999'
+              type: string
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              actions:
+                description: Lista de ações realizadas
+                example:
+                  - Chat deleted from WhatsApp
+                  - Chat deleted from database
+                  - 'Messages associated with chat deleted from database: 42'
+                items:
+                  type: string
+                type: array
+              errors:
+                description: Lista de erros ocorridos, se houver
+                example:
+                  - 'Error deleting chat from WhatsApp: connection timeout'
+                items:
+                  type: string
+                type: array
+              response:
+                description: Mensagem de sucesso
+                example: Chat deletion process completed
+                type: string
+            type: object
+      description: Operação realizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing number in payload
+                type: string
+            type: object
+      description: Erro nos parâmetros da requisição
+    '401':
+      description: Token inválido ou não fornecido
+    '404':
+      description: Chat não encontrado
+    '500':
+      description: Erro interno do servidor
+  summary: Deleta chat
+  tags:
+    - Chats

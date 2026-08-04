@@ -1,0 +1,118 @@
+post:
+  description: |
+    Cria, edita ou deleta uma etiqueta da instância.
+
+    Regras de uso:
+    - Para editar uma etiqueta existente, envie o `labelid` real da etiqueta.
+    - Para criar uma nova etiqueta, envie `labelid: "new"` com `delete: false`.
+      O backend irá gerar o próximo `labelid` numérico disponível para a instância.
+    - Para deletar uma etiqueta existente, envie o `labelid` real com `delete: true`.
+
+    Observações:
+    - A resposta de sucesso retorna `"Label created"` para criação e `"Label edited"` para edição.
+    - Para descobrir o `labelid` final criado, consulte `GET /labels` após a operação
+      ou consuma o webhook/evento de labels da instância.
+  operationId: editLabel
+  requestBody:
+    content:
+      application/json:
+        examples:
+          criar_label:
+            description: |
+              Cria uma nova etiqueta usando o placeholder `labelid: "new"`.
+            summary: Criar nova etiqueta
+            value:
+              color: 2
+              delete: false
+              labelid: new
+              name: responder editado
+          deletar_label:
+            description: Remove uma etiqueta já existente
+            summary: Deletar etiqueta existente
+            value:
+              color: 0
+              delete: true
+              labelid: '25'
+              name: ''
+          editar_label:
+            description: Edita nome e cor de uma etiqueta já existente
+            summary: Editar etiqueta existente
+            value:
+              color: 2
+              delete: false
+              labelid: '25'
+              name: responder editado
+        schema:
+          properties:
+            color:
+              description: Código numérico da nova cor (0-19)
+              example: 2
+              maximum: 19
+              minimum: 0
+              type: integer
+            delete:
+              description: Indica se a etiqueta deve ser deletada
+              example: false
+              type: boolean
+            labelid:
+              description: |
+                ID da etiqueta.
+
+                Use o ID real para editar/deletar uma etiqueta existente.
+                Use `"new"` para criar uma nova etiqueta quando `delete` for `false`.
+              example: '25'
+              type: string
+            name:
+              description: Novo nome da etiqueta
+              example: responder editado
+              type: string
+          required:
+            - labelid
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            created:
+              summary: Resposta ao criar uma etiqueta
+              value:
+                response: Label created
+            edited:
+              summary: Resposta ao editar uma etiqueta
+              value:
+                response: Label edited
+          schema:
+            properties:
+              response:
+                enum:
+                  - Label created
+                  - Label edited
+                example: Label edited
+                type: string
+            type: object
+      description: Operação concluída com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Payload inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: error editing label
+                type: string
+            type: object
+      description: Erro interno do servidor ou sessão inválida
+  summary: Criar, editar ou deletar etiqueta
+  tags:
+    - Etiquetas

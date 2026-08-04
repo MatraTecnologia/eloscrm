@@ -1,0 +1,28 @@
+get:
+  description: |
+    Retorna a lista completa de contatos que foram bloqueados pela instância.
+    Esta lista é atualizada em tempo real conforme contatos são bloqueados/desbloqueados.
+  operationId: getBlocklist
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              blockList:
+                example:
+                  - 5511999999999@s.whatsapp.net
+                  - 5511888888888@s.whatsapp.net
+                items:
+                  description: JIDs dos contatos bloqueados no formato "número@s.whatsapp.net"
+                  type: string
+                type: array
+            type: object
+      description: Lista de contatos bloqueados recuperada com sucesso
+    '401':
+      description: Token inválido ou não fornecido
+    '500':
+      description: Erro interno do servidor ou instância não conectada
+  summary: Lista contatos bloqueados
+  tags:
+    - Bloqueios

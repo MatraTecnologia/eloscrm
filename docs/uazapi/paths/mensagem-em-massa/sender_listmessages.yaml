@@ -1,0 +1,79 @@
+post:
+  description: Retorna a lista de mensagens de uma campanha específica, com opções de filtro por status e paginação
+  operationId: listCampaignMessages
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            folder_id:
+              description: ID da campanha a ser consultada
+              type: string
+            limit:
+              default: 1000
+              description: Quantidade maxima de itens por pagina
+              maximum: 1000
+              minimum: 1
+              type: integer
+            messageStatus:
+              description: Status das mensagens para filtrar
+              enum:
+                - Scheduled
+                - Sent
+                - Failed
+              type: string
+            offset:
+              default: 0
+              description: Deslocamento base zero para paginacao
+              minimum: 0
+              type: integer
+          required:
+            - folder_id
+          type: object
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              messages:
+                items:
+                  $ref: ../../schemas/message.yaml#/Message
+                type: array
+              pagination:
+                properties:
+                  limit:
+                    description: Limite aplicado na pagina atual
+                    type: integer
+                  offset:
+                    description: Offset efetivamente usado na pagina atual
+                    type: integer
+                  totalRecords:
+                    description: Total de mensagens encontradas
+                    type: integer
+                type: object
+            type: object
+      description: Lista de mensagens retornada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: folder_id is required
+                type: string
+            type: object
+      description: Requisição inválida
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to fetch messages
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Listar mensagens de uma campanha
+  tags:
+    - Mensagem em massa

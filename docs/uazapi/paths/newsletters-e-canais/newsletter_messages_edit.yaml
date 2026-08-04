@@ -1,0 +1,142 @@
+post:
+  description: |
+    Edita o conteúdo de um post recente de newsletter diretamente no WhatsApp.
+
+    Esta rota:
+    - nao depende de mensagens salvas localmente
+    - busca a mensagem recente do canal via WhatsApp/whatsmeow
+    - localiza o post por `messageid` ou `serverid`
+    - edita apenas tipos suportados (`text`, `image`, `video`, `document`)
+
+    Observações:
+    - use `jid` ou `id` para identificar o canal
+    - envie ao menos um entre `messageid` e `serverid`
+    - envie `text` com o novo conteúdo/legenda
+    - `count` e `maxpages` controlam a janela de busca no canal
+  operationId: editNewsletterMessage
+  requestBody:
+    content:
+      application/json:
+        examples:
+          por_message_id:
+            summary: Editar usando o ID lógico da mensagem
+            value:
+              jid: 120363123456789012@newsletter
+              messageid: 3EB0B4302B3A8A52F7A1
+              text: Post atualizado
+          por_server_id:
+            summary: Editar usando o server id do post
+            value:
+              id: '120363123456789012'
+              serverid: 12345
+              text: Nova legenda do post
+        schema:
+          properties:
+            count:
+              description: Quantidade de mensagens buscadas por página ao localizar o post.
+              example: 100
+              minimum: 1
+              type: integer
+            id:
+              description: ID numérico do canal. Se informado sem domínio, será convertido para `@newsletter`.
+              example: '120363123456789012'
+              type: string
+            jid:
+              description: JID completo do canal.
+              example: 120363123456789012@newsletter
+              type: string
+            maxpages:
+              description: Quantidade máxima de páginas buscadas ao localizar o post.
+              example: 5
+              minimum: 1
+              type: integer
+            messageid:
+              description: ID lógico da mensagem no canal.
+              example: 3EB0B4302B3A8A52F7A1
+              type: string
+            serverid:
+              description: Identificador sequencial do post no canal.
+              example: 12345
+              minimum: 1
+              type: integer
+            text:
+              description: Novo texto ou nova legenda do post.
+              example: Post atualizado
+              type: string
+          required:
+            - text
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                properties:
+                  jid:
+                    example: 120363123456789012@newsletter
+                    type: string
+                  messageid:
+                    description: ID da operação de edição enviada ao WhatsApp.
+                    example: 3EB01234567890ABCDEF
+                    type: string
+                  serverid:
+                    description: Server id retornado pela operação de edição.
+                    example: 12346
+                    type: integer
+                  targetmessageid:
+                    description: ID lógico do post editado.
+                    example: 3EB0B4302B3A8A52F7A1
+                    type: string
+                  targetserverid:
+                    description: Identificador sequencial do post editado.
+                    example: 12345
+                    type: integer
+                type: object
+            type: object
+      description: Mensagem do canal editada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: text is required
+                type: string
+            type: object
+      description: Payload inválido, mensagem não editável, mensagem alvo não identificada ou canal inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: newsletter message not found in recent history
+                type: string
+            type: object
+      description: Mensagem do canal não encontrada na janela recente consultada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao consultar ou editar a mensagem do canal
+  summary: Editar mensagem recente de um canal
+  tags:
+    - Newsletters e Canais

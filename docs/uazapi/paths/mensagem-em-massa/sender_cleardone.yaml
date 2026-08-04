@@ -1,0 +1,30 @@
+post:
+  description: Inicia processo de limpeza de mensagens antigas em lote que já foram enviadas com sucesso. Por padrão, remove
+    mensagens mais antigas que 7 dias.
+  operationId: clearDoneCampaigns
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            hours:
+              default: 168
+              description: Quantidade de horas para manter mensagens. Mensagens mais antigas que esse valor serão removidas.
+              example: 168
+              type: integer
+          type: object
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              status:
+                description: Status da operação
+                example: cleanup started
+                type: string
+            type: object
+      description: Limpeza iniciada com sucesso
+  summary: Limpar mensagens enviadas
+  tags:
+    - Mensagem em massa

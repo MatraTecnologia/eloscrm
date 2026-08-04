@@ -1,0 +1,368 @@
+get:
+  description: |
+    Busca as configurações de privacidade atuais da conta do WhatsApp atualmente conectada.
+
+    **Importante - Diferença entre Status e Broadcast:**
+
+    - **Status**: Refere-se ao recado personalizado que aparece embaixo do nome do usuário (ex: "Disponível", "Ocupado", texto personalizado)
+    - **Broadcast**: Refere-se ao envio de "stories/reels" (fotos/vídeos temporários)
+
+    **Limitação**: As configurações de privacidade do broadcast (stories/reels) não estão disponíveis para alteração via API.
+
+    Retorna todas as configurações de privacidade como quem pode:
+    - Adicionar aos grupos
+    - Ver visto por último
+    - Ver status (recado embaixo do nome)
+    - Ver foto de perfil
+    - Receber confirmação de leitura
+    - Ver status online
+    - Fazer chamadas
+  operationId: getInstancePrivacy
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            success:
+              summary: Configurações de privacidade obtidas
+              value:
+                calladd: all
+                groupadd: contacts
+                last: contacts
+                online: all
+                profile: contacts
+                readreceipts: all
+                status: contacts
+          schema:
+            properties:
+              calladd:
+                description: Quem pode fazer chamadas. Valores - all, known
+                enum:
+                  - all
+                  - known
+                example: all
+                type: string
+              groupadd:
+                description: Quem pode adicionar aos grupos. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                example: contacts
+                type: string
+              last:
+                description: Quem pode ver visto por último. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                example: contacts
+                type: string
+              online:
+                description: Quem pode ver status online. Valores - all, match_last_seen
+                enum:
+                  - all
+                  - match_last_seen
+                example: all
+                type: string
+              profile:
+                description: Quem pode ver foto de perfil. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                example: contacts
+                type: string
+              readreceipts:
+                description: Confirmação de leitura. Valores - all, none
+                enum:
+                  - all
+                  - none
+                example: all
+                type: string
+              status:
+                description: Quem pode ver status (recado embaixo do nome). Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                example: contacts
+                type: string
+            type: object
+      description: Configurações de privacidade obtidas com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Token de autenticação inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Buscar configurações de privacidade
+  tags:
+    - Instancia
+post:
+  description: |
+    Altera uma ou múltiplas configurações de privacidade da conta do WhatsApp atualmente conectada de forma otimizada.
+
+    **Importante - Diferença entre Status e Broadcast:**
+
+    - **Status**: Refere-se ao recado personalizado que aparece embaixo do nome do usuário (ex: "Disponível", "Ocupado", texto personalizado)
+    - **Broadcast**: Refere-se ao envio de "stories/reels" (fotos/vídeos temporários)
+
+    **Limitação**: As configurações de privacidade do broadcast (stories/reels) não estão disponíveis para alteração via API.
+
+    **Características:**
+    - ✅ **Eficiência**: Altera apenas configurações que realmente mudaram
+    - ✅ **Flexibilidade**: Pode alterar uma ou múltiplas configurações na mesma requisição
+    - ✅ **Feedback completo**: Retorna todas as configurações atualizadas
+
+    **Formato de entrada:**
+    ```json
+    {
+      "groupadd": "contacts",
+      "last": "none",
+      "status": "contacts"
+    }
+    ```
+
+    **Tipos de privacidade disponíveis:**
+    - `groupadd`: Quem pode adicionar aos grupos
+    - `last`: Quem pode ver visto por último
+    - `status`: Quem pode ver status (recado embaixo do nome)
+    - `profile`: Quem pode ver foto de perfil
+    - `readreceipts`: Confirmação de leitura
+    - `online`: Quem pode ver status online
+    - `calladd`: Quem pode fazer chamadas
+
+    **Valores possíveis:**
+    - `all`: Todos
+    - `contacts`: Apenas contatos
+    - `contact_blacklist`: Contatos exceto bloqueados
+    - `none`: Ninguém
+    - `match_last_seen`: Corresponder ao visto por último (apenas para online)
+    - `known`: Números conhecidos (apenas para calladd)
+  operationId: setPrivacySetting
+  requestBody:
+    content:
+      application/json:
+        examples:
+          multiple_settings:
+            summary: Alterar múltiplas configurações
+            value:
+              groupadd: contacts
+              last: none
+              profile: contacts
+              status: contacts
+          privacy_strict:
+            summary: Configuração mais restritiva
+            value:
+              groupadd: none
+              last: none
+              profile: contacts
+              readreceipts: none
+              status: contacts
+          single_setting:
+            summary: Alterar uma configuração
+            value:
+              groupadd: contacts
+        schema:
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            calladd:
+              description: Quem pode fazer chamadas. Valores - all, known
+              enum:
+                - all
+                - known
+              type: string
+            groupadd:
+              description: Quem pode adicionar aos grupos. Valores - all, contacts, contact_blacklist, none
+              enum:
+                - all
+                - contacts
+                - contact_blacklist
+                - none
+              type: string
+            last:
+              description: Quem pode ver visto por último. Valores - all, contacts, contact_blacklist, none
+              enum:
+                - all
+                - contacts
+                - contact_blacklist
+                - none
+              type: string
+            online:
+              description: Quem pode ver status online. Valores - all, match_last_seen
+              enum:
+                - all
+                - match_last_seen
+              type: string
+            profile:
+              description: Quem pode ver foto de perfil. Valores - all, contacts, contact_blacklist, none
+              enum:
+                - all
+                - contacts
+                - contact_blacklist
+                - none
+              type: string
+            readreceipts:
+              description: Confirmação de leitura. Valores - all, none
+              enum:
+                - all
+                - none
+              type: string
+            status:
+              description: Quem pode ver status (recado embaixo do nome). Valores - all, contacts, contact_blacklist, none
+              enum:
+                - all
+                - contacts
+                - contact_blacklist
+                - none
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            success:
+              summary: Configurações atualizadas após alteração
+              value:
+                calladd: all
+                groupadd: contacts
+                last: contacts
+                online: all
+                profile: contacts
+                readreceipts: all
+                status: contacts
+          schema:
+            properties:
+              calladd:
+                description: Quem pode fazer chamadas. Valores - all, known
+                enum:
+                  - all
+                  - known
+                type: string
+              groupadd:
+                description: Quem pode adicionar aos grupos. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                type: string
+              last:
+                description: Quem pode ver visto por último. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                type: string
+              online:
+                description: Quem pode ver status online. Valores - all, match_last_seen
+                enum:
+                  - all
+                  - match_last_seen
+                type: string
+              profile:
+                description: Quem pode ver foto de perfil. Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                type: string
+              readreceipts:
+                description: Confirmação de leitura. Valores - all, none
+                enum:
+                  - all
+                  - none
+                type: string
+              status:
+                description: Quem pode ver status (recado embaixo do nome). Valores - all, contacts, contact_blacklist, none
+                enum:
+                  - all
+                  - contacts
+                  - contact_blacklist
+                  - none
+                type: string
+            type: object
+      description: Configuração de privacidade alterada com sucesso
+    '400':
+      content:
+        application/json:
+          examples:
+            invalid_privacy_type:
+              summary: Tipo de privacidade inválido
+              value:
+                error: 'invalid privacy type: invalidtype. Valid types: groupadd, last, status, profile, readreceipts, online,
+                  calladd'
+            invalid_privacy_value:
+              summary: Valor de privacidade inválido
+              value:
+                error: 'invalid privacy value: invalidvalue. Valid values: all, contacts, contact_blacklist, none, match_last_seen,
+                  known'
+            invalid_value_type:
+              summary: Valor deve ser string
+              value:
+                error: Value for groupadd must be a non-empty string
+            no_valid_settings:
+              summary: Nenhuma configuração válida encontrada
+              value:
+                error: 'No valid privacy settings found. Use format: {"groupadd": "contacts", "last": "none"}'
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      description: Dados de entrada inválidos
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Token de autenticação inválido
+    '500':
+      content:
+        application/json:
+          examples:
+            no_session:
+              summary: Sem sessão ativa
+              value:
+                error: No session
+            whatsapp_error:
+              summary: Erro do WhatsApp
+              value:
+                error: 'Failed to set privacy setting: context deadline exceeded'
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Alterar configurações de privacidade
+  tags:
+    - Instancia

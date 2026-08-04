@@ -1,0 +1,134 @@
+post:
+  description: "Baixa o arquivo associado a uma mensagem de mídia (imagem, vídeo, áudio, documento ou sticker).\n\n## Parâmetros\n\
+    \n- **id** (string, obrigatório): ID da mensagem\n- **return_base64** (boolean, default: false): Retorna arquivo em base64\n\
+    - **generate_mp3** (boolean, default: true): Para áudios, define formato de retorno\n  - `true`: Retorna MP3\n  - `false`:\
+    \ Retorna OGG\n- **return_link** (boolean, default: true): Retorna URL pública do arquivo\n- **transcribe** (boolean,\
+    \ default: false): Transcreve áudios para texto\n- **openai_apikey** (string, opcional): Chave OpenAI para transcrição\n\
+    \  - Se não informada, usa a chave salva na instância\n  - Se informada, atualiza e salva na instância para próximas chamadas\n\
+    - **download_quoted** (boolean, default: false): Baixa mídia da mensagem citada\n  - Útil para baixar conteúdo original\
+    \ de status do WhatsApp\n  - Quando uma mensagem é resposta a um status, permite baixar a mídia do status original\n \
+    \ - **Contextualização**: Ao baixar a mídia citada, você identifica o contexto da conversa\n    - Exemplo: Se alguém responde\
+    \ a uma promoção, baixando a mídia você saberá que a pergunta é sobre aquela promoção específica\n\n## Exemplos\n\n###\
+    \ Baixar áudio como MP3:\n```json\n{\n  \"id\": \"7EB0F01D7244B421048F0706368376E0\",\n  \"generate_mp3\": true\n}\n```\n\
+    \n### Transcrever áudio:\n```json\n{\n  \"id\": \"7EB0F01D7244B421048F0706368376E0\",\n  \"transcribe\": true\n}\n```\n\
+    \n### Apenas base64 (sem salvar):\n```json\n{\n  \"id\": \"7EB0F01D7244B421048F0706368376E0\",\n  \"return_base64\": true,\n\
+    \  \"return_link\": false\n}\n```\n\n### Baixar mídia de status (mensagem citada):\n```json\n{\n  \"id\": \"7EB0F01D7244B421048F0706368376E0\"\
+    ,\n  \"download_quoted\": true\n}\n```\n*Útil quando o cliente responde a uma promoção/status - você baixa a mídia original\
+    \ para entender sobre qual produto/oferta ele está perguntando.*\n\n## Resposta\n\n```json\n{\n  \"fileURL\": \"https://api.exemplo.com/files/arquivo.mp3\"\
+    ,\n  \"mimetype\": \"audio/mpeg\",\n  \"base64Data\": \"UklGRkj...\",\n  \"transcription\": \"Texto transcrito\"\n}\n\
+    ```\n\n**Nota**: \n- Por padrão, se não definido o contrário:\n  1. áudios são retornados como MP3. \n  2. E todos os\
+    \ pedidos de download são retornados com URL pública.\n- Transcrição requer chave OpenAI válida. A chave pode ser configurada\
+    \ uma vez na instância e será reutilizada automaticamente.\n- Retenção de mídia: mantemos as mídias no nosso storage por\
+    \ 2 dias. Após 2 dias, elas são removidas na limpeza automática e o link retornado deixa de ficar disponível. Para voltar\
+    \ a disponibilizar a mídia, é necessário refazer o download pelo endpoint. Se o cliente solicitar novamente, a mídia será\
+    \ baixada do CDN da Meta, o que pode aumentar o tempo de resposta. Enquanto estiver no nosso storage, a resposta tende\
+    \ a ser mais rápida.\n"
+  operationId: downloadMessage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            download_quoted:
+              default: false
+              description: Se verdadeiro, baixa mídia da mensagem citada ao invés da mensagem principal
+              type: boolean
+            generate_mp3:
+              default: true
+              description: Para áudios, define formato de retorno (true=MP3, false=OGG)
+              type: boolean
+            id:
+              description: ID da mensagem contendo o arquivo
+              example: 7EB0F01D7244B421048F0706368376E0
+              type: string
+            openai_apikey:
+              description: Chave da API OpenAI para transcrição (opcional)
+              example: sk-...
+              type: string
+            return_base64:
+              default: false
+              description: Se verdadeiro, retorna o conteúdo em base64
+              type: boolean
+            return_link:
+              default: true
+              description: Salva e retorna URL pública do arquivo
+              type: boolean
+            transcribe:
+              default: false
+              description: Se verdadeiro, transcreve áudios para texto
+              type: boolean
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              base64Data:
+                description: Conteúdo do arquivo em base64 (se return_base64=true)
+                example: UklGRkj...
+                type: string
+              fileURL:
+                description: URL pública para acessar o arquivo (se return_link=true)
+                example: https://api.exemplo.com/files/arquivo.mp3
+                type: string
+              mimetype:
+                description: Tipo MIME do arquivo
+                example: audio/mpeg
+                type: string
+              transcription:
+                description: Texto transcrito do áudio (se transcribe=true)
+                example: Texto transcrito
+                type: string
+            required:
+              - mimetype
+            type: object
+      description: Successful file download
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unsupported media type or no media found in message
+                type: string
+            type: object
+      description: Bad Request
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Unauthorized
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                examples:
+                  - Message not found
+                  - No quoted message found in this message
+                type: string
+            type: object
+      description: Not Found
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to download media
+                type: string
+            type: object
+      description: Internal Server Error
+  summary: Baixar arquivo de uma mensagem
+  tags:
+    - Ações na mensagem e Buscar

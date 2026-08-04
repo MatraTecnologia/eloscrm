@@ -1,0 +1,52 @@
+post:
+  description: "Silencia notificações de um chat por um período específico. \nAs opções de silenciamento são:\n* 0 - Remove\
+    \ o silenciamento\n* 8 - Silencia por 8 horas\n* 168 - Silencia por 1 semana (168 horas)\n* -1 - Silencia permanentemente\n"
+  operationId: muteChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            muteEndTime:
+              description: |
+                Duração do silenciamento:
+                * 0 = Remove silenciamento
+                * 8 = Silencia por 8 horas
+                * 168 = Silencia por 1 semana
+                * -1 = Silencia permanentemente
+              enum:
+                - 0
+                - 8
+                - 168
+                - -1
+              example: 8
+              type: integer
+            number:
+              description: ID do chat no formato 123456789@s.whatsapp.net ou 123456789-123456@g.us
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          required:
+            - number
+            - muteEndTime
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: Chat mute settings updated successfully
+                type: string
+            type: object
+      description: Chat silenciado com sucesso
+    '400':
+      description: Duração inválida ou formato de número incorreto
+    '401':
+      description: Token inválido ou ausente
+    '404':
+      description: Chat não encontrado
+  summary: Silenciar chat
+  tags:
+    - Chats

@@ -1,0 +1,55 @@
+post:
+  description: |
+    Atualiza o status de leitura de um chat no WhatsApp.
+
+    Quando um chat é marcado como lido:
+    - O contador de mensagens não lidas é zerado
+    - O indicador visual de mensagens não lidas é removido
+    - O remetente recebe confirmação de leitura (se ativado)
+
+    Quando marcado como não lido:
+    - O chat aparece como pendente de leitura
+    - Não afeta as confirmações de leitura já enviadas
+  operationId: markChatRead
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            number:
+              description: |
+                Identificador do chat no formato:
+                - Para usuários: [número]@s.whatsapp.net (ex: 5511999999999@s.whatsapp.net)
+                - Para grupos: [id-grupo]@g.us (ex: 123456789-987654321@g.us)
+              example: 5511999999999@s.whatsapp.net
+              type: string
+            read:
+              description: |
+                - true: marca o chat como lido
+                - false: marca o chat como não lido
+              type: boolean
+          required:
+            - number
+            - read
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: Chat read status updated successfully
+                type: string
+            type: object
+      description: Status de leitura atualizado com sucesso
+    '401':
+      description: Token de autenticação ausente ou inválido
+    '404':
+      description: Chat não encontrado
+    '500':
+      description: Erro ao atualizar status de leitura
+  summary: Marcar chat como lido/não lido
+  tags:
+    - Chats

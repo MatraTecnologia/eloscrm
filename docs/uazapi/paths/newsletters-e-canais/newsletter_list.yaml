@@ -1,0 +1,40 @@
+get:
+  description: |
+    Retorna os canais/newsletters já inscritos pela conta do WhatsApp atualmente conectada.
+  operationId: listNewsletters
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+            type: object
+      description: Lista de canais recuperada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao listar canais
+  summary: Listar canais inscritos
+  tags:
+    - Newsletters e Canais

@@ -1,0 +1,100 @@
+get:
+  description: |
+    Retorna em memória os últimos 20 erros de entrega do webhook global.
+
+    Cada item inclui data/hora (`created`), URL de destino, evento, tipo do webhook
+    (`global`), payload tentado, número de tentativas, status HTTP final quando existir e a mensagem de erro.
+
+    Observações:
+    - O histórico fica apenas em memória e é perdido quando o processo reinicia.
+    - O endpoint exige `admintoken`.
+    - Útil para diagnosticar falhas do webhook global sem expor esses dados aos tokens das instâncias.
+    - O header `X-Webhook-Error-Capture-Started-At` informa desde quando a captura atual está valendo.
+
+    Exemplo de consulta:
+    ```bash
+    curl -X GET "$BASE_URL/globalwebhook/errors" \
+      -H "admintoken: SEU_ADMIN_TOKEN"
+    ```
+  operationId: getGlobalWebhookErrors
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            - attempts: 3
+              created: '2026-03-23T15:08:00Z'
+              error: 'webhook returned non-success status: 502 Bad Gateway'
+              event: messages
+              message_type: text
+              payload:
+                EventType: messages
+                token: instance-token
+              status_code: 502
+              type: global
+              url: https://example.com/global/messages
+          schema:
+            items:
+              properties:
+                attempts:
+                  example: 3
+                  type: integer
+                created:
+                  example: '2026-03-23T15:04:05Z'
+                  format: date-time
+                  type: string
+                error:
+                  example: 'webhook returned non-success status: 502 Bad Gateway'
+                  type: string
+                event:
+                  example: messages
+                  type: string
+                message_type:
+                  example: text
+                  type: string
+                payload:
+                  type: object
+                status_code:
+                  example: 502
+                  type: integer
+                type:
+                  example: global
+                  type: string
+                url:
+                  example: https://example.com/webhook/messages
+                  type: string
+              type: object
+            type: array
+      description: Histórico global retornado com sucesso
+      headers:
+        X-Webhook-Error-Capture-Started-At:
+          description: Data/hora em que a captura atual de erros globais começou
+          schema:
+            example: '2026-03-23T14:50:00Z'
+            format: date-time
+            type: string
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token de administrador não fornecido
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: This is a public demo server. This endpoint has been disabled.
+                type: string
+            type: object
+      description: Token de administrador inválido ou servidor demo
+  security:
+    - admintoken: []
+  summary: Ver últimos erros do webhook global
+  tags:
+    - Admininstração

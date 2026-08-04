@@ -1,0 +1,94 @@
+post:
+  description: |
+    Rejeita uma chamada recebida do WhatsApp.
+
+    O body pode ser enviado vazio `{}`. Os campos `number` e `id` são opcionais e podem ser usados para especificar uma chamada específica.
+
+    Exemplo de requisição (recomendado):
+    ```json
+    {}
+    ```
+
+    Exemplo de requisição com campos opcionais:
+    ```json
+    {
+      "number": "5511999999999",
+      "id": "ABEiGmo8oqkAcAKrBYQAAAAA_1"
+    }
+    ```
+
+    Exemplo de resposta:
+    ```json
+    {
+      "response": "Call rejected"
+    }
+    ```
+
+    Erros comuns:
+    - 401: Token inválido ou expirado
+    - 400: Número inválido
+    - 500: Erro ao rejeitar chamada
+  operationId: rejectCall
+  requestBody:
+    content:
+      application/json:
+        schema:
+          example: {}
+          properties:
+            id:
+              description: (Opcional) ID único da chamada a ser rejeitada
+              type: string
+            number:
+              description: '(Opcional) Número do contato no formato internacional (ex: 5511999999999)'
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de confirmação
+                example: Call rejected
+                type: string
+            type: object
+      description: Chamada rejeitada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro
+                examples:
+                  - invalid number
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro interno
+                example: 'error rejecting call: timeout'
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Rejeitar chamada recebida
+  tags:
+    - Chamadas

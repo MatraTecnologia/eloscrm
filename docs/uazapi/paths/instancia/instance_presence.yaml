@@ -1,0 +1,81 @@
+post:
+  description: "Atualiza o status de presença global da conta do WhatsApp atualmente conectada. Este endpoint permite:\n1.\
+    \ Definir se a conta aparece como disponível (\"online\") ou indisponível\n2. Controlar o status de presença para todos\
+    \ os contatos\n3. Salvar o estado atual da presença para a conta conectada\n\nTipos de presença suportados:\n- available:\
+    \ Marca a conta como disponível/online\n- unavailable: Marca a conta como indisponível/offline\n\n**Atenção**:\n- O status\
+    \ de presença pode ser temporariamente alterado para \"available\" (online) em algumas situações internas da API, e com\
+    \ isso o visto por último também pode ser atualizado.\n- Caso isso for um problema, considere alterar suas configurações\
+    \ de privacidade no WhatsApp para não mostrar o visto por último e/ou quem pode ver seu status \"online\".\n\n**⚠️ Importante\
+    \ - Limitação do Presence \"unavailable\"**:\n- **Quando a API é o único dispositivo ativo**: Confirmações de entrega/leitura\
+    \ (ticks cinzas/azuis) não são enviadas nem recebidas\n- **Impacto**: Eventos `message_update` com status de entrega podem\
+    \ não ser recebidos\n- **Solução**: Se precisar das confirmações, mantenha WhatsApp Web ou aplicativo móvel ativo ou use\
+    \ presence \"available\" \n\nExemplo de requisição:\n```json\n{\n  \"presence\": \"available\"\n}\n```\n\nExemplo de resposta:\n\
+    ```json\n{\n  \"response\": \"Presence updated successfully\"\n}\n```\n\nErros comuns:\n- 401: Token inválido ou expirado\n\
+    - 400: Valor de presença inválido\n- 500: Erro ao atualizar presença\n"
+  operationId: updateInstancePresence
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            presence:
+              description: Status de presença da conta atualmente conectada
+              enum:
+                - available
+                - unavailable
+              example: available
+              type: string
+          required:
+            - presence
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de confirmação
+                example: Presence updated successfully
+                type: string
+            type: object
+      description: Presença atualizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro
+                examples:
+                  - Invalid payload
+                  - Invalid presence value, use available or unavailable
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro interno
+                example: No session
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Atualizar status de presença da instância
+  tags:
+    - Instancia

@@ -1,0 +1,87 @@
+post:
+  description: "Inicia uma chamada de voz para um contato específico. Este endpoint permite:\n1. Iniciar chamadas de voz para\
+    \ contatos\n2. Funciona apenas com números válidos do WhatsApp\n3. O contato receberá uma chamada de voz\n\n**Nota**:\
+    \ O telefone do contato tocará normalmente, mas ao contato atender, ele não ouvirá nada, e você também não ouvirá nada.\
+    \ \nEste endpoint apenas inicia a chamada, não estabelece uma comunicação de voz real.\n\n**Opcional**: Use `call_duration`\
+    \ para definir por quantos segundos a chamada deve tocar.\nApós esse período a chamada é encerrada automaticamente, sem\
+    \ precisar chamar `/call/reject`.\n\nExemplo de requisição:\n```json\n{\n  \"number\": \"5511999999999\",\n  \"call_duration\"\
+    : 15\n}\n```\n\nExemplo de resposta:\n```json\n{\n  \"response\": \"Call successful\"\n}\n```\n\nErros comuns:\n- 401:\
+    \ Token inválido ou expirado\n- 400: Número inválido ou ausente\n- 500: Erro ao iniciar chamada\n"
+  operationId: makeCall
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            call_duration:
+              description: Duração da chamada em segundos (opcional). Após esse tempo a chamada é encerrada automaticamente.
+              example: 15
+              type: integer
+            number:
+              description: 'Número do contato no formato internacional (ex: 5511999999999)'
+              example: '5511999999999'
+              type: string
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de confirmação
+                example: Call successful
+                type: string
+            type: object
+      description: Chamada iniciada com sucesso
+    '400':
+      content:
+        application/json:
+          examples:
+            invalid_duration:
+              summary: Duracao invalida
+              value:
+                error: invalid call_duration
+            invalid_number:
+              summary: Numero invalido
+              value:
+                error: invalid number JID
+            missing_number:
+              summary: Numero nao informado
+              value:
+                error: missing number in payload
+          schema:
+            properties:
+              error:
+                description: Descrição do erro
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro interno
+                example: 'error making call: network timeout'
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Iniciar chamada de voz
+  tags:
+    - Chamadas

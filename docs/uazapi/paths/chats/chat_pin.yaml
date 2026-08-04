@@ -1,0 +1,61 @@
+post:
+  description: "Fixa ou desafixa um chat no topo da lista de conversas. Chats fixados permanecem \nno topo mesmo quando novas\
+    \ mensagens são recebidas em outros chats.\n"
+  operationId: pinChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            number:
+              description: "Número do chat no formato internacional completo (ex: \"5511999999999\") \nou ID do grupo (ex:\
+                \ \"123456789-123456@g.us\")\n"
+              example: '5511999999999'
+              type: string
+            pin:
+              description: |
+                Define se o chat deve ser fixado (true) ou desafixado (false)
+              example: true
+              type: boolean
+          required:
+            - number
+            - pin
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de confirmação
+                example: Chat pinned
+                type: string
+            type: object
+      description: Chat fixado/desafixado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Descrição do erro
+                example: Could not parse phone
+                type: string
+            type: object
+      description: Erro na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+  summary: Fixar/desafixar chat
+  tags:
+    - Chats

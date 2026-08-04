@@ -1,0 +1,87 @@
+post:
+  description: |
+    Pesquisa canais/newsletters públicos no diretório do WhatsApp.
+
+    Observações:
+    - use `after` para buscar a próxima página
+    - `countryCodes` filtra por países
+    - `view` e `searchText` são opcionais
+  operationId: searchNewsletterDirectory
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            after:
+              example: YXJyYXljb25uZWN0aW9uOjE5
+              type: string
+            countryCodes:
+              example:
+                - BR
+              items:
+                type: string
+              type: array
+            limit:
+              example: 20
+              type: integer
+            searchText:
+              example: promo
+              type: string
+            view:
+              example: RECOMMENDED
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                properties:
+                  after:
+                    example: YXJyYXljb25uZWN0aW9uOjIw
+                    nullable: true
+                    type: string
+                  data:
+                    items:
+                      additionalProperties: true
+                      type: object
+                    type: array
+                type: object
+            type: object
+      description: Pesquisa executada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao pesquisar canais
+  summary: Pesquisar canais públicos
+  tags:
+    - Newsletters e Canais

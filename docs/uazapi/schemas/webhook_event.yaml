@@ -1,0 +1,26 @@
+WebhookEvent:
+  type: object
+  required:
+    - event
+    - instance
+    - data
+  properties:
+    event:
+      type: string
+      enum:
+        - message
+        - status
+        - presence
+        - group
+        - connection
+      description: Tipo do evento recebido
+    instance:
+      type: string
+      description: ID da instância que gerou o evento
+    data:
+      type: object
+      description: |
+        Payload do evento enviado pelo webhook. O formato varia conforme o tipo do evento
+        (messages, messages_update, connection, presence, etc) e segue o que o backend envia
+        em `callHook` (map[string]interface{}). Consulte os exemplos de cada evento específico.
+      additionalProperties: true

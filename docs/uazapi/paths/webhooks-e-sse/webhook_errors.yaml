@@ -1,0 +1,89 @@
+get:
+  description: |
+    Retorna em memória os últimos 20 erros de envio dos webhooks locais da instância autenticada.
+
+    Cada item inclui data/hora (`created`), URL de destino, evento, tipo do webhook
+    (`local`), payload tentado, número de tentativas, status HTTP final quando existir e a mensagem de erro.
+
+    Observações:
+    - O histórico fica apenas em memória e é perdido quando o processo reinicia.
+    - O endpoint usa o mesmo `token` da instância.
+    - Retorna apenas falhas dos webhooks locais da própria instância.
+    - Falhas do webhook global ficam disponíveis separadamente em `/globalwebhook/errors` com `admintoken`.
+    - O header `X-Webhook-Error-Capture-Started-At` informa desde quando a captura atual está valendo.
+
+    Exemplo de consulta:
+    ```bash
+    curl -X GET "$BASE_URL/webhook/errors" \
+      -H "token: SUA_INSTANCIA_TOKEN"
+    ```
+  operationId: getWebhookErrors
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            - attempts: 3
+              created: '2026-03-23T15:04:05Z'
+              error: 'webhook returned non-success status: 502 Bad Gateway'
+              event: messages
+              message_type: text
+              payload:
+                EventType: messages
+                token: instance-token
+              status_code: 502
+              type: local
+              url: https://example.com/webhook/messages
+          schema:
+            items:
+              properties:
+                attempts:
+                  example: 3
+                  type: integer
+                created:
+                  example: '2026-03-23T15:04:05Z'
+                  format: date-time
+                  type: string
+                error:
+                  example: 'webhook returned non-success status: 502 Bad Gateway'
+                  type: string
+                event:
+                  example: messages
+                  type: string
+                message_type:
+                  example: text
+                  type: string
+                payload:
+                  type: object
+                status_code:
+                  example: 502
+                  type: integer
+                type:
+                  example: local
+                  type: string
+                url:
+                  example: https://example.com/webhook/messages
+                  type: string
+              type: object
+            type: array
+      description: Histórico retornado com sucesso
+      headers:
+        X-Webhook-Error-Capture-Started-At:
+          description: Data/hora em que a captura atual de erros começou para a instância
+          schema:
+            example: '2026-03-23T14:50:00Z'
+            format: date-time
+            type: string
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: missing token
+                type: string
+            type: object
+      description: Token inválido ou não fornecido
+  summary: Ver últimos erros do webhook local
+  tags:
+    - Webhooks e SSE

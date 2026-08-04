@@ -1,0 +1,135 @@
+post:
+  description: |
+    Gera um novo `admintoken`. Use o token atual no header e guarde o token retornado.
+
+    Só é permitida uma rotação a cada 24 horas.
+  operationId: rotateAdminToken
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              admin_token:
+                description: Novo admin token.
+                example: AbC123Def456GhI789JkL012MnO345PqR678StU901VwX234Yz
+                maxLength: 50
+                minLength: 50
+                pattern: ^[A-Za-z0-9]{50}$
+                type: string
+              license_sync_triggered:
+                example: true
+                type: boolean
+              license_synced:
+                example: true
+                type: boolean
+              message:
+                example: Admin token rotated successfully
+                type: string
+              success:
+                example: true
+                type: boolean
+              timestamp:
+                description: Timestamp Unix em milissegundos.
+                example: 1776892800000
+                format: int64
+                type: integer
+            required:
+              - success
+              - message
+              - admin_token
+              - license_sync_triggered
+              - license_synced
+              - timestamp
+            type: object
+      description: Admin token rotacionado com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: admintoken inválido ou ausente
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Admin token rotation is disabled for free containers
+                type: string
+            type: object
+      description: Rotação bloqueada para container gratuito/demo
+    '429':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Admin token rotation cooldown active
+                type: string
+              last_rotated_at:
+                description: Timestamp Unix em milissegundos da última rotação concluída.
+                example: 1776892800000
+                format: int64
+                type: integer
+              next_rotation_at:
+                description: Timestamp Unix em milissegundos de quando uma nova rotação será permitida.
+                example: 1776979200000
+                format: int64
+                type: integer
+              retry_after_ms:
+                description: Tempo restante em milissegundos para liberar nova rotação.
+                example: 86400000
+                format: int64
+                type: integer
+            required:
+              - error
+              - last_rotated_at
+              - next_rotation_at
+              - retry_after_ms
+            type: object
+      description: Rotação bloqueada por cooldown de 24 horas
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to persist admin token
+                type: string
+            type: object
+      description: Erro interno ao rotacionar o token
+    '502':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to sync rotated admin token with license server
+                type: string
+              license_synced:
+                example: false
+                type: boolean
+              success:
+                example: false
+                type: boolean
+              timestamp:
+                example: 1776892800000
+                format: int64
+                type: integer
+            required:
+              - success
+              - error
+              - license_synced
+              - timestamp
+            type: object
+      description: Falha ao confirmar a rotação
+  security:
+    - admintoken: []
+  summary: Rotacionar admin token
+  tags:
+    - Admininstração

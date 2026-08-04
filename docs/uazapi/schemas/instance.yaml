@@ -1,0 +1,124 @@
+Instance:
+  type: object
+  description: Representa uma instância do WhatsApp
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único gerado automaticamente
+    token:
+      type: string
+      description: Token de autenticação da instância
+    status:
+      type: string
+      description: Status atual da conexão
+      enum:
+        - disconnected
+        - connecting
+        - connected
+        - hibernated
+    paircode:
+      type: string
+      description: Código de pareamento
+    qrcode:
+      type: string
+      description: QR Code em base64 para autenticação
+    name:
+      type: string
+      description: Nome da instância
+    profileName:
+      type: string
+      description: Nome do perfil WhatsApp
+    profilePicUrl:
+      type: string
+      format: uri
+      description: URL da foto do perfil
+    isBusiness:
+      type: boolean
+      description: Indica se é uma conta business
+    plataform:
+      type: string
+      description: Plataforma de origem (iOS/Android/Web)
+    systemName:
+      type: string
+      description: Nome do sistema operacional
+    owner:
+      type: string
+      description: Proprietário da instância
+    current_presence:
+      type: string
+      description: Status atual de presença da instância (campo não persistido)
+      enum:
+        - available
+        - unavailable
+      example: available
+    lastDisconnect:
+      type: string
+      format: date-time
+      description: Data/hora da última desconexão
+    lastDisconnectReason:
+      type: string
+      description: Motivo da última desconexão
+    adminField01:
+      type: string
+      description: Campo administrativo 01
+    adminField02:
+      type: string
+      description: Campo administrativo 02
+    openai_apikey:
+      type: string
+      description: Chave da API OpenAI
+    chatbot_enabled:
+      type: boolean
+      description: Habilitar chatbot automático
+    chatbot_ignoreGroups:
+      type: boolean
+      description: Ignorar mensagens de grupos
+    chatbot_stopConversation:
+      type: string
+      description: Palavra-chave para parar conversa
+    chatbot_stopMinutes:
+      type: integer
+      description: Por quanto tempo ficará pausado o chatbot ao usar stop conversation
+    chatbot_stopWhenYouSendMsg:
+      type: integer
+      description: Por quanto tempo ficará pausada a conversa quando você enviar mensagem manualmente
+    fieldsMap:
+      type: object
+      description: Mapa de campos customizados da instância (quando presente)
+      additionalProperties: true
+    currentTime:
+      type: string
+      description: Horário atual retornado pelo backend
+    created:
+      type: string
+      format: date-time
+      description: Data de criação da instância
+    updated:
+      type: string
+      format: date-time
+      description: Data da última atualização
+  example:
+    id: i91011ijkl
+    token: abc123xyz
+    status: connected
+    paircode: 1234-5678
+    qrcode: data:image/png;base64,iVBORw0KGg...
+    name: Instância Principal
+    profileName: Loja ABC
+    profilePicUrl: https://example.com/profile.jpg
+    isBusiness: true
+    plataform: Android
+    systemName: uazapi
+    owner: user@example.com
+    lastDisconnect: '2025-01-24T14:00:00Z'
+    lastDisconnectReason: Network error
+    adminField01: custom_data
+    openai_apikey: sk-...xyz
+    chatbot_enabled: true
+    chatbot_ignoreGroups: true
+    chatbot_stopConversation: parar
+    chatbot_stopMinutes: 60
+    created: '2025-01-24T14:00:00Z'
+    updated: '2025-01-24T14:30:00Z'
+    currentPresence: available

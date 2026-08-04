@@ -1,0 +1,86 @@
+post:
+  description: |
+    Apaga uma mensagem para todos os participantes da conversa.
+
+    ### Funcionalidades:
+    - Apaga mensagens em conversas individuais ou grupos
+    - Funciona com mensagens enviadas pelo usuário ou recebidas
+    - Atualiza o status no banco de dados
+    - Envia webhook de atualização
+
+    **Notas Técnicas**:
+    1. O ID da mensagem pode ser fornecido em dois formatos:
+       - ID completo (contém ":"): usado diretamente
+       - ID curto: concatenado com o owner para busca
+    2. Gera evento webhook do tipo "messages_update"
+    3. Atualiza o status da mensagem para "Deleted"
+    4. Para newsletters/canais, use `POST /newsletter/messages/delete`
+  operationId: deleteMessage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: ID da mensagem a ser apagada
+              type: string
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              id:
+                type: string
+              timestamp:
+                format: date-time
+                type: string
+            type: object
+      description: Mensagem apagada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Payload inválido ou ID de chat/sender inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token não fornecido
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: message not found
+                type: string
+            type: object
+      description: Mensagem não encontrada
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Erro interno do servidor ou sessão não iniciada
+  summary: Apagar Mensagem Para Todos
+  tags:
+    - Ações na mensagem e Buscar

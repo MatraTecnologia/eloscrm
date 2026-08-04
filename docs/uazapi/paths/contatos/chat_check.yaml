@@ -1,0 +1,100 @@
+post:
+  description: |
+    Verifica se números fornecidos estão registrados no WhatsApp e retorna informações detalhadas.
+
+    ### Funcionalidades:
+    - Verifica múltiplos números simultaneamente
+    - Suporta números individuais e IDs de grupo
+    - Retorna nome verificado quando disponível
+    - Identifica grupos e comunidades
+    - Verifica subgrupos de comunidades
+
+    **Comportamento específico**:
+    - Para números individuais:
+      - Verifica registro no WhatsApp
+      - Retorna nome verificado se disponível
+      - Normaliza formato do número
+    - Para grupos:
+      - Verifica existência
+      - Retorna nome do grupo
+      - Retorna id do grupo de anúncios se buscado por id de comunidade
+  operationId: checkChat
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            numbers:
+              description: Lista de números ou IDs de grupo para verificar
+              example:
+                - '5511999999999'
+                - 123456789@g.us
+              items:
+                type: string
+              type: array
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              properties:
+                error:
+                  description: Mensagem de erro se houver
+                  type: string
+                groupName:
+                  description: Nome do grupo se aplicável
+                  type: string
+                isInWhatsapp:
+                  description: Indica se está no WhatsApp
+                  type: boolean
+                jid:
+                  description: JID do WhatsApp
+                  type: string
+                lid:
+                  description: LID do WhatsApp
+                  type: string
+                query:
+                  description: Número/ID original consultado
+                  type: string
+                verifiedName:
+                  description: Nome verificado se disponível
+                  type: string
+              type: object
+            type: array
+      description: Resultado da verificação
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing numbers in payload
+                type: string
+            type: object
+      description: Payload inválido ou sem números
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No active session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: WhatsApp client is not connected
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Verificar Números no WhatsApp
+  tags:
+    - Contatos

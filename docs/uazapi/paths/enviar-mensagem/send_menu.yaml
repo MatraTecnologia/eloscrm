@@ -1,0 +1,209 @@
+post:
+  description: "Este endpoint oferece uma interface unificada para envio de quatro tipos principais de mensagens interativas:\n\
+    - Botões: Para ações rápidas e diretas\n- Carrosel de Botões: Para uma lista horizontal de botões com imagens\n- Listas:\
+    \ Para menus organizados em seções\n- Enquetes: Para coleta de opiniões e votações\n\n**Suporte a campos de rastreamento**:\
+    \ Este endpoint também suporta `track_source` e `track_id` documentados na tag **\"Enviar Mensagem\"**.\n\n## Estrutura\
+    \ Base do Payload\n\nTodas as requisições seguem esta estrutura base:\n\n```json\n{\n  \"number\": \"5511999999999\",\n\
+    \  \"type\": \"button|list|poll|carousel\",\n  \"text\": \"Texto principal da mensagem\",\n  \"choices\": [\"opções baseadas\
+    \ no tipo escolhido\"],\n  \"footerText\": \"Texto do rodapé (opcional para botões e listas)\",\n  \"listButton\": \"\
+    Texto do botão (para listas)\",\n  \"selectableCount\": \"Número de opções selecionáveis (apenas para enquetes)\"\n}\n\
+    ```\n\n## Tipos de Mensagens Interativas\n\n### 1. Botões (type: \"button\")\n\nCria botões interativos com diferentes\
+    \ funcionalidades de ação.\n\n#### Campos Específicos\n- `footerText`: Texto opcional exibido abaixo da mensagem principal\n\
+    - `choices`: Array de opções que serão convertidas em botões\n\n#### Formatos de Botões\nCada botão pode ser configurado\
+    \ usando `|` (pipe) ou `\\n` (quebra de linha) como separadores:\n\n- **Botão de Resposta**: \n  - `\"texto|id\"` ou \n\
+    \  - `\"texto\\nid\"` ou \n  - `\"texto\"` (ID será igual ao texto)\n\n- **Botão de Cópia**: \n  - `\"texto|copy:código\"\
+    ` ou \n  - `\"texto\\ncopy:código\"`\n\n- **Botão de Chamada**: \n  - `\"texto|call:+5511999999999\"` ou \n  - `\"texto\\\
+    ncall:+5511999999999\"`\n\n- **Botão de URL**: \n  - `\"texto|https://exemplo.com\"` ou \n  - `\"texto|url:https://exemplo.com\"\
+    `\n\n#### Botões com Imagem\nPara adicionar uma imagem aos botões, use o campo `imageButton` no payload:\n\n#### Exemplo\
+    \ com Imagem\n```json\n{\n  \"number\": \"5511999999999\",\n  \"type\": \"button\",\n  \"text\": \"Escolha um produto:\"\
+    ,\n  \"imageButton\": \"https://exemplo.com/produto1.jpg\",\n  \"choices\": [\n    \"Produto A|prod_a\",\n    \"Mais Info|https://exemplo.com/produto-a\"\
+    ,\n    \"Produto B|prod_b\",\n    \"Ligar|call:+5511999999999\"\n  ],\n  \"footerText\": \"Produtos em destaque\"\n}\n\
+    ```\n\n> **Suporte**: O campo `imageButton` aceita URLs ou imagens em base64.\n\n#### Exemplo Completo\n```json\n{\n \
+    \ \"number\": \"5511999999999\",\n  \"type\": \"button\",\n  \"text\": \"Como podemos ajudar?\",\n  \"choices\": [\n \
+    \   \"Suporte Técnico|suporte\",\n    \"Fazer Pedido|pedido\",\n    \"Nosso Site|https://exemplo.com\",\n    \"Falar Conosco|call:+5511999999999\"\
+    \n  ],\n  \"footerText\": \"Escolha uma das opções abaixo\"\n}\n```\n\n#### Limitações e Compatibilidade\n> **Importante**:\
+    \ Ao combinar botões de resposta com outros tipos (call, url, copy) na mesma mensagem, será exibido o aviso: \"Não é possível\
+    \ exibir esta mensagem no WhatsApp Web. Abra o WhatsApp no seu celular para visualizá-la.\"\n\n### 2. Listas (type: \"\
+    list\")\n\nCria menus organizados em seções com itens selecionáveis.\n\n#### Campos Específicos\n- `listButton`: Texto\
+    \ do botão que abre a lista\n- `footerText`: Texto opcional do rodapé\n- `choices`: Array com seções e itens da lista\n\
+    \n#### Formato das Choices\n- `\"[Título da Seção]\"`: Inicia uma nova seção\n- `\"texto|id|descrição\"`: Item da lista\
+    \ com:\n  - texto: Label do item\n  - id: Identificador único, opcional\n  - descrição: Texto descritivo adicional e opcional\n\
+    \n#### Exemplo Completo\n```json\n{\n  \"number\": \"5511999999999\",\n  \"type\": \"list\",\n  \"text\": \"Catálogo de\
+    \ Produtos\",\n  \"choices\": [\n    \"[Eletrônicos]\",\n    \"Smartphones|phones|Últimos lançamentos\",\n    \"Notebooks|notes|Modelos\
+    \ 2024\",\n    \"[Acessórios]\",\n    \"Fones|fones|Bluetooth e com fio\",\n    \"Capas|cases|Proteção para seu device\"\
+    \n  ],\n  \"listButton\": \"Ver Catálogo\",\n  \"footerText\": \"Preços sujeitos a alteração\"\n}\n```\n\n### 3. Enquetes\
+    \ (type: \"poll\")\n\nCria enquetes interativas para votação.\n\n#### Campos Específicos\n- `selectableCount`: Número\
+    \ de opções que podem ser selecionadas (padrão: 1)\n- `choices`: Array simples com as opções de voto\n\n#### Exemplo Completo\n\
+    ```json\n{\n  \"number\": \"5511999999999\",\n  \"type\": \"poll\",\n  \"text\": \"Qual horário prefere para atendimento?\"\
+    ,\n  \"choices\": [\n    \"Manhã (8h-12h)\",\n    \"Tarde (13h-17h)\",\n    \"Noite (18h-22h)\"\n  ],\n  \"selectableCount\"\
+    : 1\n}\n```\n\n### 4. Carousel (type: \"carousel\")\n\nCria um carrossel de cartões com imagens e botões interativos.\n\
+    \n#### Campos Específicos\n- `choices`: Array com elementos do carrossel na seguinte ordem:\n  - `[Texto do cartão]`:\
+    \ Texto do cartão entre colchetes\n  - `{URL ou base64 da imagem}`: Imagem entre chaves\n  - Botões do cartão (um por\
+    \ linha):\n    - `\"texto|copy:código\"` para botão de copiar\n    - `\"texto|https://url\"` para botão de link\n    -\
+    \ `\"texto|call:+número\"` para botão de ligação\n\n#### Exemplo Completo\n```json\n{\n  \"number\": \"5511999999999\"\
+    ,\n  \"type\": \"carousel\",\n  \"text\": \"Conheça nossos produtos\",\n  \"choices\": [\n    \"[Smartphone XYZ\\nO mais\
+    \ avançado smartphone da linha]\",\n    \"{https://exemplo.com/produto1.jpg}\",\n    \"Copiar Código|copy:PROD123\",\n\
+    \    \"Ver no Site|https://exemplo.com/xyz\",\n    \"Fale Conosco|call:+5511999999999\",\n    \"[Notebook ABC\\nO notebook\
+    \ ideal para profissionais]\",\n    \"{https://exemplo.com/produto2.jpg}\",\n    \"Copiar Código|copy:NOTE456\",\n   \
+    \ \"Comprar Online|https://exemplo.com/abc\",\n    \"Suporte|call:+5511988888888\"\n  ]\n}\n```\n\n> **Nota**: Criamos\
+    \ outro endpoint para carrossel: `/send/carousel`, funciona da mesma forma, mas com outro formato de payload. Veja o que\
+    \ é mais fácil para você.\n\n## Termos de uso\n\nOs recursos de botões interativos e listas podem ser descontinuados a\
+    \ qualquer momento sem aviso prévio. Não nos responsabilizamos por quaisquer alterações ou indisponibilidade destes recursos.\n\
+    \n### Alternativas e Compatibilidade\n\nConsiderando a natureza dinâmica destes recursos, nosso endpoint foi projetado\
+    \ para facilitar a migração entre diferentes tipos de mensagens (botões, listas e enquetes). \n\nRecomendamos criar seus\
+    \ fluxos de forma flexível, preparados para alternar entre os diferentes tipos.\n\nEm caso de descontinuidade de algum\
+    \ recurso, você poderá facilmente migrar para outro tipo de mensagem apenas alterando o campo \"type\" no payload, mantendo\
+    \ a mesma estrutura de choices.\n"
+  operationId: sendMenu
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            async:
+              description: Se true, envia a mensagem de forma assíncrona via fila interna
+              example: false
+              type: boolean
+            choices:
+              description: Lista de opções. Use [Título] para seções em listas
+              example:
+                - '[Eletrônicos]'
+                - Smartphones|phones|Últimos lançamentos
+                - Notebooks|notes|Modelos 2024
+                - '[Acessórios]'
+                - Fones|fones|Bluetooth e com fio
+                - Capas|cases|Proteção para seu device
+              items:
+                type: string
+              type: array
+            delay:
+              description: Atraso em milissegundos antes do envio, durante o atraso apacerá 'Digitando...'
+              example: 1000
+              type: integer
+            footerText:
+              description: Texto do rodapé (opcional)
+              example: Menu de serviços
+              type: string
+            imageButton:
+              description: 'URL da imagem para botões (recomendado para type: button)'
+              example: https://exemplo.com/imagem-botao.jpg
+              type: string
+            listButton:
+              description: Texto do botão principal
+              example: Ver opções
+              type: string
+            mentions:
+              description: Números para mencionar (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+              example: '5511999999999'
+              type: string
+            readchat:
+              description: Marca conversa como lida após envio
+              example: true
+              type: boolean
+            readmessages:
+              description: Marca últimas mensagens recebidas como lidas
+              example: true
+              type: boolean
+            replyid:
+              description: ID da mensagem para responder
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            selectableCount:
+              description: Número máximo de opções selecionáveis (para enquetes)
+              example: 1
+              type: integer
+            text:
+              description: Texto principal (aceita placeholders)
+              example: 'Escolha uma opção:'
+              type: string
+            track_id:
+              description: ID para rastreamento da mensagem (aceita valores duplicados)
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento da mensagem
+              example: chatwoot
+              type: string
+            type:
+              description: Tipo do menu (button, list, poll, carousel)
+              enum:
+                - button
+                - list
+                - poll
+                - carousel
+              example: list
+              type: string
+          required:
+            - number
+            - type
+            - text
+            - choices
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Menu sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Menu enviado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing required fields or invalid menu type
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '429':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Rate limit exceeded
+                type: string
+            type: object
+      description: Limite de requisições excedido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to send menu
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar menu interativo (botões, carrosel, lista ou enquete)
+  tags:
+    - Enviar Mensagem

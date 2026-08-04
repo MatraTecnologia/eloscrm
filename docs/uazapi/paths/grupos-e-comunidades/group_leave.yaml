@@ -1,0 +1,63 @@
+post:
+  description: |
+    Remove o usuário atual de um grupo específico do WhatsApp.
+
+    Requisitos:
+    - O usuário deve estar conectado a uma instância válida
+    - O usuário deve ser um membro do grupo
+
+    Comportamentos:
+    - Se o usuário for o último administrador, o grupo será dissolvido
+    - Se o usuário for um membro comum, será removido do grupo
+  operationId: leaveGroup
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            groupjid:
+              description: |
+                Identificador único do grupo (JID)
+                - Formato: número@g.us
+                - Exemplo válido: 120363324255083289@g.us
+              example: 120363324255083289@g.us
+              pattern: ^\d+@g\.us$
+              type: string
+          required:
+            - groupjid
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: Group leave successful
+                type: string
+            type: object
+      description: Saída do grupo realizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Erro de payload inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: error leaving group
+                type: string
+            type: object
+      description: Erro interno do servidor ou falha na conexão
+  summary: Sair de um grupo
+  tags:
+    - Grupos e Comunidades

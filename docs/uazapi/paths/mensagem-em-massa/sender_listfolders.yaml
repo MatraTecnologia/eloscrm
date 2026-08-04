@@ -1,0 +1,40 @@
+get:
+  description: |
+    Retorna as campanhas de envio em massa da instância atual, ordenadas das mais recentes
+    para as mais antigas.
+
+    Se a instância não possuir owner associado, a API retorna uma lista vazia.
+  operationId: listCampaignFolders
+  parameters:
+    - description: |
+        Filtro de status desejado. O backend atual retorna todas as pastas do owner e
+        pode ignorar esse parâmetro dependendo da implementação da fila.
+      in: query
+      name: status
+      schema:
+        enum:
+          - Active
+          - Archived
+        type: string
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              $ref: ../../schemas/message_queue_folder.yaml#/MessageQueueFolder
+            type: array
+      description: Lista de campanhas retornada com sucesso
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'Failed to fetch batches: database error'
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Listar campanhas de envio
+  tags:
+    - Mensagem em massa

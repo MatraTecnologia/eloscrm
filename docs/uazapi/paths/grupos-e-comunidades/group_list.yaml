@@ -1,0 +1,132 @@
+get:
+  description: |
+    Retorna uma lista com todos os grupos disponíveis para a conta do WhatsApp atualmente conectada.
+
+    Recursos adicionais:
+    - Suporta atualização forçada do cache de grupos
+    - Recupera informações detalhadas de grupos conectados
+  operationId: listGroups
+  parameters:
+    - description: |
+        Se definido como `true`, força a atualização do cache de grupos.
+        Útil para garantir que as informações mais recentes sejam recuperadas.
+
+        Comportamentos:
+        - `false` (padrão): Usa informações em cache
+        - `true`: Busca dados atualizados diretamente do WhatsApp
+      in: query
+      name: force
+      schema:
+        default: false
+        type: boolean
+    - description: |
+        Se definido como `true`, retorna a lista de grupos sem incluir os participantes.
+        Útil para otimizar a resposta quando não há necessidade dos dados dos participantes.
+
+        Comportamentos:
+        - `false` (padrão): Retorna grupos com lista completa de participantes
+        - `true`: Retorna grupos sem incluir os participantes
+      in: query
+      name: noparticipants
+      schema:
+        default: false
+        type: boolean
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              groups:
+                description: Lista detalhada de grupos
+                items:
+                  $ref: ../../schemas/group.yaml#/Group
+                type: array
+            type: object
+      description: Lista de grupos recuperada com sucesso
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar grupos
+  summary: Listar todos os grupos
+  tags:
+    - Grupos e Comunidades
+post:
+  description: |
+    Retorna uma lista com todos os grupos disponiveis para a conta do WhatsApp atualmente conectada, com opcoes de filtros e paginacao via corpo (POST).
+    A rota GET continua para quem prefere a listagem direta sem paginacao.
+  operationId: refreshGroups
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            force:
+              default: false
+              description: |
+                Se definido como `true`, forca a atualizacao do cache de grupos.
+                Util para garantir que as informacoes mais recentes sejam recuperadas.
+              type: boolean
+            limit:
+              default: 50
+              description: Quantidade maxima de resultados por pagina (padrao 50, maximo 1000)
+              type: integer
+            noParticipants:
+              default: false
+              description: |
+                Se definido como `true`, retorna a lista de grupos sem incluir os participantes.
+                Util para otimizar a resposta quando nao ha necessidade dos dados dos participantes.
+              type: boolean
+            offset:
+              default: 0
+              description: Deslocamento base zero
+              type: integer
+            search:
+              description: Texto para filtrar grupos por nome/JID
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              groups:
+                description: Lista detalhada de grupos
+                items:
+                  $ref: ../../schemas/group.yaml#/Group
+                type: array
+              pagination:
+                properties:
+                  limit:
+                    description: Limite aplicado na pagina atual
+                    type: integer
+                  offset:
+                    description: Offset efetivamente usado na pagina atual
+                    type: integer
+                  totalRecords:
+                    description: Total de grupos encontrados
+                    type: integer
+                type: object
+            type: object
+      description: Lista de grupos recuperada com sucesso
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar grupos
+  summary: Listar todos os grupos com filtros e paginacao
+  tags:
+    - Grupos e Comunidades

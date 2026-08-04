@@ -1,0 +1,51 @@
+post:
+  description: "Define se apenas administradores podem editar as informações do grupo. \nQuando bloqueado (locked=true), apenas\
+    \ administradores podem alterar nome, descrição, \nimagem e outras configurações do grupo. Quando desbloqueado (locked=false),\
+    \ \nqualquer participante pode editar as informações.\n\nImportante:\n- Requer que o usuário seja administrador do grupo\n\
+    - Afeta edições de nome, descrição, imagem e outras informações do grupo\n- Não controla permissões de adição de membros\n"
+  operationId: updateGroupLocked
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            groupjid:
+              description: Identificador único do grupo (JID)
+              example: 120363308883996631@g.us
+              type: string
+            locked:
+              description: |
+                Define permissões de edição:
+                - true = apenas admins podem editar infos do grupo
+                - false = qualquer participante pode editar infos do grupo
+              example: true
+              type: boolean
+          required:
+            - groupjid
+            - locked
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group lock status changed successfully
+                type: string
+            type: object
+      description: Operação realizada com sucesso
+    '403':
+      description: Usuário não é administrador do grupo
+    '404':
+      description: Grupo não encontrado
+  summary: Configurar permissão de edição do grupo
+  tags:
+    - Grupos e Comunidades

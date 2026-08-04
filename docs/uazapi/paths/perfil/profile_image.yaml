@@ -1,0 +1,114 @@
+post:
+  description: "Altera a imagem de perfil da conta do WhatsApp atualmente conectada.\n\nO endpoint realiza:\n- Atualiza a\
+    \ imagem do perfil usando \n- Processa a imagem (URL, base64 ou comando de remoção)\n- Sincroniza a mudança com o servidor\
+    \ do WhatsApp\n- Retorna confirmação da alteração\n\n**Importante**: \n- A conta do WhatsApp deve estar conectada\n- A\
+    \ imagem será visível para todos os contatos\n- A imagem deve estar em formato JPEG e tamanho 640x640 pixels\n"
+  operationId: updateProfileImage
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            image:
+              description: |
+                Imagem do perfil. Pode ser:
+                - URL da imagem (http/https)
+                - String base64 da imagem
+                - "remove" ou "delete" para remover a imagem atual
+              example: https://picsum.photos/640/640.jpg
+              oneOf:
+                - description: URL da imagem
+                  example: https://picsum.photos/640/640.jpg
+                - description: Imagem em base64
+                  example: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=
+                - description: Comando para remover imagem
+                  example: remove
+              type: string
+          required:
+            - image
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              message:
+                example: Imagem do perfil alterada com sucesso
+                type: string
+              profile:
+                properties:
+                  image_removed:
+                    description: Indica se a imagem foi removida
+                    example: false
+                    type: boolean
+                  image_updated:
+                    description: Indica se a imagem foi atualizada
+                    example: true
+                    type: boolean
+                  updated_at:
+                    description: Timestamp da alteração (Unix timestamp)
+                    example: 1704067200
+                    type: integer
+                type: object
+              success:
+                example: true
+                type: boolean
+            type: object
+      description: Imagem do perfil alterada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Formato de imagem inválido ou URL inacessível
+                type: string
+            type: object
+      description: Dados inválidos na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Limite de alterações excedido ou conta com restrições
+                type: string
+            type: object
+      description: Ação não permitida
+    '413':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Imagem muito grande, tamanho máximo permitido excedido
+                type: string
+            type: object
+      description: Imagem muito grande
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Erro ao alterar imagem do perfil
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Altera a imagem do perfil do WhatsApp
+  tags:
+    - Perfil

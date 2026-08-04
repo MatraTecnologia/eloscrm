@@ -1,0 +1,90 @@
+post:
+  description: |
+    Retorna `wa_notes` de um chat usando apenas os dados já persistidos localmente.
+
+    Casos de uso:
+    - ler a anotação local já persistida no chat
+    - consultar notas mesmo durante reconexão da sessão do WhatsApp
+
+    Regras:
+    - envie `number`
+    - para recarregar do WhatsApp, use `/chat/notes/refresh`
+  operationId: getChatNotes
+  requestBody:
+    content:
+      application/json:
+        examples:
+          por_number:
+            summary: Consultar nota por number
+            value:
+              number: 5511999999999@s.whatsapp.net
+        schema:
+          properties:
+            number:
+              description: JID completo do chat
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso_local:
+              value:
+                chat:
+                  wa_chatid: 5511999999999@s.whatsapp.net
+                  wa_fastid: admin:5511999999999
+                  wa_notes: Cliente prefere contato no período da tarde
+                source: local
+                wa_notes: Cliente prefere contato no período da tarde
+          schema:
+            properties:
+              chat:
+                $ref: ../../schemas/chat.yaml#/Chat
+              source:
+                description: Origem usada para compor a resposta
+                enum:
+                  - local
+                example: local
+                type: string
+              wa_notes:
+                description: Conteúdo atual da nota do chat
+                example: Cliente prefere contato no período da tarde
+                type: string
+            type: object
+      description: Nota do chat retornada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: number is required
+                type: string
+            type: object
+      description: Payload inválido
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: chat not found
+                type: string
+            type: object
+      description: Chat não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: failed to load chat notes from local database
+                type: string
+            type: object
+      description: Erro interno ao consultar a nota local
+  summary: Consultar notas internas do chat
+  tags:
+    - Chats

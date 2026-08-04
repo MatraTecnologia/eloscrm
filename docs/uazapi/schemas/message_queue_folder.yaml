@@ -1,0 +1,61 @@
+MessageQueueFolder:
+  type: object
+  description: Pasta para organização de campanhas de mensagens em massa
+  properties:
+    id:
+      type: string
+      description: Identificador único
+    info:
+      type: string
+      description: Informações adicionais sobre a pasta
+    status:
+      type: string
+      description: Status atual da pasta
+      example: ativo
+    scheduled_for:
+      type: integer
+      format: int64
+      description: Timestamp Unix para execução agendada
+    delayMax:
+      type: integer
+      format: int64
+      description: Atraso máximo entre mensagens em milissegundos
+    delayMin:
+      type: integer
+      format: int64
+      description: Atraso mínimo entre mensagens em milissegundos
+    log_delivered:
+      type: integer
+      format: int64
+      description: Contagem de mensagens entregues
+    log_failed:
+      type: integer
+      format: int64
+      description: Contagem de mensagens com falha
+    log_played:
+      type: integer
+      format: int64
+      description: Contagem de mensagens reproduzidas (para áudio/vídeo)
+    log_read:
+      type: integer
+      format: int64
+      description: Contagem de mensagens lidas
+    log_sucess:
+      type: integer
+      format: int64
+      description: Contagem de mensagens enviadas com sucesso
+    log_total:
+      type: integer
+      format: int64
+      description: Contagem total de mensagens
+    owner:
+      type: string
+      description: Identificador do proprietário da instância
+    created:
+      type: string
+      format: date-time
+      description: Data e hora de criação
+    updated:
+      type: string
+      format: date-time
+      description: Data e hora da última atualização

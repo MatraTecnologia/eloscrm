@@ -1,0 +1,106 @@
+post:
+  description: |
+    Gerencia templates de respostas rápidas para agilizar o atendimento. Por padrão, cria respostas rápidas locais.
+    Para criar/sincronizar uma resposta rápida no WhatsApp Business, envie `onWhatsApp: true`.
+
+    - Para criar: não inclua o campo `id`
+    - Para atualizar: inclua o `id` existente
+    - Para excluir: defina `delete: true` e inclua o `id`
+
+    Observação: respostas rápidas sincronizadas com o WhatsApp suportam apenas `type: text`.
+    Não é possível converter uma resposta rápida local existente em resposta do WhatsApp; para criar no WhatsApp, envie `onWhatsApp: true` sem `id`.
+  operationId: editQuickReply
+  requestBody:
+    content:
+      application/json:
+        examples:
+          criar_apenas_api:
+            summary: Criar apenas na API
+            value:
+              shortCut: saudacao
+              text: Olá! Como posso ajudar?
+              type: text
+          criar_api_whatsapp:
+            summary: Criar na API e no WhatsApp Business
+            value:
+              onWhatsApp: true
+              shortCut: saudacao
+              text: Olá! Como posso ajudar?
+              type: text
+          editar_existente:
+            summary: Editar resposta rápida existente
+            value:
+              id: rb9da9c03637452
+              shortCut: saudacao
+              text: Olá! Como posso ajudar hoje?
+              type: text
+        schema:
+          properties:
+            delete:
+              default: false
+              description: Definir como true para excluir o template
+              type: boolean
+            docName:
+              description: Nome do arquivo opcional para tipo documento
+              example: apresentacao.pdf
+              type: string
+            file:
+              description: URL ou Base64 para tipos de mídia
+              example: https://exemplo.com/arquivo.pdf
+              type: string
+            id:
+              description: Necessário para atualizações/exclusões, omitir para criação
+              example: rb9da9c03637452
+              type: string
+            onWhatsApp:
+              default: false
+              description: Quando true, cria/sincroniza a resposta rápida no WhatsApp Business via app state. Disponível apenas para type=text.
+              type: boolean
+            shortCut:
+              description: Atalho para acesso rápido ao template
+              example: saudacao1
+              type: string
+            text:
+              description: Obrigatório para mensagens do tipo texto
+              example: Olá! Como posso ajudar hoje?
+              type: string
+            type:
+              description: Tipo da mensagem
+              enum:
+                - text
+                - audio
+                - myaudio
+                - ptt
+                - document
+                - video
+                - image
+              type: string
+          required:
+            - shortCut
+            - type
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              message:
+                example: Operação concluída com sucesso
+                type: string
+              quickReplies:
+                items:
+                  $ref: ../../schemas/quick_reply.yaml#/QuickReply
+                type: array
+            type: object
+      description: Operação concluída com sucesso
+    '400':
+      description: Requisição inválida (erro de validação)
+    '404':
+      description: Template não encontrado
+    '500':
+      description: Erro no servidor ou falha ao sincronizar com WhatsApp
+  summary: Criar, atualizar ou excluir resposta rápida
+  tags:
+    - Respostas Rápidas

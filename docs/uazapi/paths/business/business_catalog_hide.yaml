@@ -1,0 +1,62 @@
+post:
+  description: |
+    Oculta um produto específico do catálogo.
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: O ID do produto.
+              type: string
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                description: Mensagem de sucesso.
+                example: Product hidden
+                type: string
+            type: object
+      description: Produto ocultado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de validação do payload
+                example: invalid payload
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem de erro de autenticação
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao ocultar o produto
+  summary: Ocultar um produto do catálogo
+  tags:
+    - Business

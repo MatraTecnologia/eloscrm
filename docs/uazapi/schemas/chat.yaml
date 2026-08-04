@@ -1,0 +1,250 @@
+Chat:
+  type: object
+  description: Representa uma conversa/chamado no sistema
+  properties:
+    id:
+      type: string
+      description: ID único da conversa (r + 7 bytes aleatórios em hex)
+    wa_fastid:
+      type: string
+      description: Identificador rápido do WhatsApp
+    wa_chatid:
+      type: string
+      description: ID completo do chat no WhatsApp
+    wa_chatlid:
+      type: string
+      description: LID do chat no WhatsApp (quando disponível)
+    wa_archived:
+      type: boolean
+      description: Indica se o chat está arquivado
+      default: false
+    wa_contactName:
+      type: string
+      description: |
+        Nome salvo nos contatos pelo dono da conta/instância.
+        Só existe quando o número estiver salvo na agenda/contatos.
+      default: ''
+    wa_name:
+      type: string
+      description: |
+        Nome definido pelo usuário no perfil do WhatsApp ("push name").
+        Vem do perfil do contato e pode não estar disponível dependendo do contexto ou da origem dos dados.
+      default: ''
+    name:
+      type: string
+      description: |
+        Nome resolvido pelo sistema como fallback.
+        Normalmente consolida o melhor valor disponível entre dados internos, nome vindo do WhatsApp e nome salvo nos contatos.
+        Por isso, costuma ter maior chance de vir preenchido.
+      default: ''
+    image:
+      type: string
+      description: URL da imagem do chat
+      default: ''
+    imagePreview:
+      type: string
+      description: URL da miniatura da imagem
+      default: ''
+    wa_ephemeralExpiration:
+      type: integer
+      format: int64
+      description: Tempo de expiração de mensagens efêmeras
+      default: 0
+    wa_isBlocked:
+      type: boolean
+      description: Indica se o contato está bloqueado
+      default: false
+    wa_isGroup:
+      type: boolean
+      description: Indica se é um grupo
+      default: false
+    wa_isGroup_admin:
+      type: boolean
+      description: Indica se o usuário é admin do grupo
+      default: false
+    wa_isGroup_announce:
+      type: boolean
+      description: Indica se é um grupo somente anúncios
+      default: false
+    wa_isGroup_community:
+      type: boolean
+      description: Indica se é uma comunidade
+      default: false
+    wa_isGroup_member:
+      type: boolean
+      description: Indica se é membro do grupo
+      default: false
+    wa_isPinned:
+      type: boolean
+      description: Indica se o chat está fixado
+      default: false
+    wa_label:
+      type: array
+      description: Labels do chat
+      items:
+        type: string
+    wa_notes:
+      type: string
+      description: Anotações internas do chat sincronizadas via app state
+      default: ''
+    wa_lastMessageTextVote:
+      type: string
+      description: Texto/voto da última mensagem
+      default: ''
+    wa_lastMessageType:
+      type: string
+      description: Tipo da última mensagem
+      default: ''
+    wa_lastMsgTimestamp:
+      type: integer
+      format: int64
+      description: Timestamp da última mensagem
+      default: 0
+    wa_lastMessageSender:
+      type: string
+      description: Remetente da última mensagem
+      default: ''
+    wa_muteEndTime:
+      type: integer
+      format: int64
+      description: Timestamp do fim do silenciamento
+      default: 0
+    owner:
+      type: string
+      description: Dono da instância
+      default: ''
+    wa_unreadCount:
+      type: integer
+      format: int64
+      description: Contador de mensagens não lidas
+      default: 0
+    phone:
+      type: string
+      description: Número de telefone
+      default: ''
+    common_groups:
+      type: string
+      description: 'Grupos em comum separados por vírgula, formato: (nome_grupo)id_grupo'
+      default: ''
+      example: Grupo Família(120363123456789012@g.us),Trabalho(987654321098765432@g.us)
+    lead_name:
+      type: string
+      description: Nome do lead
+      default: ''
+    lead_fullName:
+      type: string
+      description: Nome completo do lead
+      default: ''
+    lead_email:
+      type: string
+      description: Email do lead
+      default: ''
+    lead_personalid:
+      type: string
+      description: Documento de identificação
+      default: ''
+    lead_status:
+      type: string
+      description: Status do lead
+      default: ''
+    lead_tags:
+      type: array
+      description: Tags do lead
+      items:
+        type: string
+    lead_notes:
+      type: string
+      description: Anotações sobre o lead
+      default: ''
+    lead_isTicketOpen:
+      type: boolean
+      description: Indica se tem ticket aberto
+      default: false
+    lead_assignedAttendant_id:
+      type: string
+      description: ID do atendente responsável
+      default: ''
+    lead_kanbanOrder:
+      type: integer
+      format: int64
+      description: Ordem no kanban
+      default: 0
+    lead_field01:
+      type: string
+      default: ''
+    lead_field02:
+      type: string
+      default: ''
+    lead_field03:
+      type: string
+      default: ''
+    lead_field04:
+      type: string
+      default: ''
+    lead_field05:
+      type: string
+      default: ''
+    lead_field06:
+      type: string
+      default: ''
+    lead_field07:
+      type: string
+      default: ''
+    lead_field08:
+      type: string
+      default: ''
+    lead_field09:
+      type: string
+      default: ''
+    lead_field10:
+      type: string
+      default: ''
+    lead_field11:
+      type: string
+      default: ''
+    lead_field12:
+      type: string
+      default: ''
+    lead_field13:
+      type: string
+      default: ''
+    lead_field14:
+      type: string
+      default: ''
+    lead_field15:
+      type: string
+      default: ''
+    lead_field16:
+      type: string
+      default: ''
+    lead_field17:
+      type: string
+      default: ''
+    lead_field18:
+      type: string
+      default: ''
+    lead_field19:
+      type: string
+      default: ''
+    lead_field20:
+      type: string
+      default: ''
+    chatbot_agentResetMemoryAt:
+      type: integer
+      format: int64
+      description: Timestamp do último reset de memória
+      default: 0
+    chatbot_lastTrigger_id:
+      type: string
+      description: ID do último gatilho executado
+      default: ''
+    chatbot_lastTriggerAt:
+      type: integer
+      format: int64
+      description: Timestamp do último gatilho
+      default: 0
+    chatbot_disableUntil:
+      type: integer
+      format: int64
+      description: Timestamp até quando chatbot está desativado
+      default: 0

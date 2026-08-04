@@ -1,0 +1,63 @@
+Label:
+  type: object
+  description: Representa uma etiqueta/categoria no sistema
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único da etiqueta
+    name:
+      type: string
+      description: Nome da etiqueta
+    color:
+      type: integer
+      description: Índice numérico da cor (0-19)
+      minimum: 0
+      maximum: 19
+      example: 2
+    colorHex:
+      type: string
+      description: Cor hexadecimal correspondente ao índice
+      enum:
+        - '#ff9484'
+        - '#64c4ff'
+        - '#fed428'
+        - '#dfaef0'
+        - '#9ab6c1'
+        - '#56ccb4'
+        - '#fe9dfe'
+        - '#d3a91f'
+        - '#6f7bcf'
+        - '#d8e651'
+        - '#01d0e2'
+        - '#ffc5c7'
+        - '#92ceac'
+        - '#f64847'
+        - '#00a1f2'
+        - '#83e421'
+        - '#ffae04'
+        - '#b4ebff'
+        - '#9ba6ff'
+        - '#9568cf'
+      example: '#fed428'
+    labelid:
+      type: string
+      description: ID da label no WhatsApp (quando sincronizada)
+    owner:
+      type: string
+      description: Dono da etiqueta
+    created:
+      type: string
+      format: date-time
+      description: Data de criação
+    updated:
+      type: string
+      format: date-time
+      description: Data da última atualização
+  example:
+    id: l121314mnop
+    name: Cliente VIP
+    color: 2
+    colorHex: '#fed428'
+    created: '2025-01-24T14:35:00.000Z'
+    updated: '2025-01-24T15:00:00.000Z'

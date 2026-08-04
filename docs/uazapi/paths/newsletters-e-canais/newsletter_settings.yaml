@@ -1,0 +1,74 @@
+post:
+  description: |
+    Atualiza configurações do canal/newsletter.
+
+    Atualmente, esta rota controla `reactionCodes`.
+
+    Valores aceitos:
+    - `all`
+    - `basic`
+    - `none`
+    - `blocklist`
+  operationId: updateNewsletterSettings
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+            reactionCodes:
+              example: basic
+              type: string
+          required:
+            - reactionCodes
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Configurações atualizadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid reactionCodes
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao atualizar configurações do canal
+  summary: Atualizar configurações do canal
+  tags:
+    - Newsletters e Canais

@@ -1,0 +1,107 @@
+get:
+  description: |-
+    Receber eventos em tempo real via Server-Sent Events (SSE)
+
+    ### Funcionalidades Principais:
+    - Configuração de URL para recebimento de eventos
+    - Seleção granular de tipos de eventos
+    - Filtragem avançada de mensagens
+    - Parâmetros adicionais na URL
+    - Gerenciamento múltiplo de webhooks
+
+    **Eventos Disponíveis**:
+    - `connection`: Alterações no estado da conexão
+    - `history`: Recebimento de histórico de mensagens
+    - `messages`: Novas mensagens recebidas
+    - `messages_update`: Atualizações em mensagens existentes
+    - `call`: Eventos de chamadas VoIP
+    - `contacts`: Atualizações na agenda de contatos
+    - `presence`: Alterações no status de presença
+    - `groups`: Modificações em grupos
+    - `labels`: Gerenciamento de etiquetas
+    - `chats`: Eventos de conversas
+    - `chat_labels`: Alterações em etiquetas de conversas
+    - `blocks`: Bloqueios/desbloqueios
+
+
+    Estabelece uma conexão persistente para receber eventos em tempo real. Este
+    endpoint:
+
+    1. Requer autenticação via token
+
+    2. Mantém uma conexão HTTP aberta com o cliente
+
+    3. Envia eventos conforme ocorrem no servidor
+
+    4. Suporta diferentes tipos de eventos
+
+    Exemplo de uso:
+
+    ```javascript
+
+    const eventSource = new
+    EventSource('/sse?token=SEU_TOKEN&events=chats,messages');
+
+
+    eventSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      console.log('Novo evento:', data);
+    };
+
+
+    eventSource.onerror = function(error) {
+      console.error('Erro na conexão SSE:', error);
+    };
+
+    ```
+
+
+    Estrutura de um evento:
+
+    ```json
+
+    {
+      "type": "message",
+      "data": {
+        "id": "3EB0538DA65A59F6D8A251",
+        "from": "5511999999999@s.whatsapp.net",
+        "to": "5511888888888@s.whatsapp.net",
+        "text": "Olá!",
+        "timestamp": 1672531200000
+      }
+    }
+
+    ```
+  operationId: subscribeSSE
+  parameters:
+    - description: Token de autenticação da instância
+      example: '{{token}}'
+      in: query
+      name: token
+      required: true
+      schema:
+        type: string
+    - description: |
+        Tipos de eventos a serem recebidos. Suporta dois formatos:
+        - Separados por vírgula: `?events=chats,messages`
+        - Parâmetros repetidos: `?events=chats&events=messages`
+      example: chats,messages
+      in: query
+      name: events
+      required: true
+      schema:
+        type: string
+    - description: |
+        Tipos de mensagens a serem excluídas do evento `messages`. Suporta dois formatos:
+        - Separados por vírgula: `?excludeMessages=poll,reaction`
+        - Parâmetros repetidos: `?excludeMessages=poll&excludeMessages=reaction`
+      example: poll,reaction
+      in: query
+      name: excludeMessages
+      required: false
+      schema:
+        type: string
+  security: []
+  summary: Server-Sent Events (SSE)
+  tags:
+    - Webhooks e SSE

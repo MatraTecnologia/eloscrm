@@ -1,0 +1,73 @@
+get:
+  description: |
+    Retorna a lista de contatos do WhatsApp conforme o filtro informado em `contactScope`.
+
+    O endpoint realiza:
+    - Busca todos os contatos armazenados
+    - Filtra para contatos da agenda, fora da agenda ou todos
+    - Usa `address_book` como padrao quando `contactScope` nao for informado
+    - Retorna dados formatados incluindo JID e informações de nome
+  operationId: checkContacts
+  parameters:
+    - description: Define se a busca retorna apenas contatos da agenda, apenas fora da agenda ou todos os contatos conhecidos.
+      in: query
+      name: contactScope
+      required: false
+      schema:
+        default: address_book
+        enum:
+          - address_book
+          - outside_address_book
+          - all
+        type: string
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              example:
+                contact_FirstName: Contato
+                contact_name: Contato Exemplo
+                jid: 5511999999999@s.whatsapp.net
+              properties:
+                contact_FirstName:
+                  description: Primeiro nome do contato
+                  example: Contato
+                  type: string
+                contact_name:
+                  description: Nome completo do contato
+                  example: Contato Exemplo
+                  type: string
+                jid:
+                  description: 'ID único do contato no WhatsApp (formato: número@s.whatsapp.net)'
+                  example: 5511999999999@s.whatsapp.net
+                  type: string
+              type: object
+            type: array
+      description: Lista de contatos retornada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Internal server error
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Retorna lista de contatos do WhatsApp
+  tags:
+    - Contatos

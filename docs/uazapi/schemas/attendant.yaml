@@ -1,0 +1,56 @@
+Attendant:
+  type: object
+  description: Modelo de atendente do sistema
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único gerado automaticamente
+    name:
+      type: string
+      description: Nome do atendente
+      default: ''
+    phone:
+      type: string
+      description: Número de telefone
+      default: ''
+    email:
+      type: string
+      format: email
+      description: Endereço de e-mail
+      default: ''
+    department:
+      type: string
+      description: Departamento de atuação
+      default: ''
+    customField01:
+      type: string
+      description: Campo personalizável 01
+      default: ''
+    customField02:
+      type: string
+      description: Campo personalizável 02
+      default: ''
+    owner:
+      type: string
+      description: Responsável pelo cadastro
+      default: ''
+    created:
+      type: string
+      format: date-time
+      description: Data de criação automática
+    updated:
+      type: string
+      format: date-time
+      description: Data de atualização automática
+  example:
+    id: r1234abcd
+    name: João da Silva
+    phone: '+5511999999999'
+    email: joao@empresa.com
+    department: Suporte Técnico
+    customField01: 'Turno: Manhã'
+    customField02: 'Nível: 2'
+    owner: admin
+    created: '2025-01-24T13:52:19.000Z'
+    updated: '2025-01-24T13:52:19.000Z'

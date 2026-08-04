@@ -1,0 +1,77 @@
+get:
+  description: |
+    Retorna o status atual de uma instância, incluindo:
+    - Estado da conexão (disconnected, connecting, connected, hibernated)
+    - QR code atualizado (se em processo de conexão)
+    - Código de pareamento (se disponível)
+    - Informações da última desconexão
+    - Detalhes completos da instância
+
+    Este endpoint é particularmente útil para:
+    1. Monitorar o progresso da conexão
+    2. Obter QR codes atualizados durante o processo de conexão
+    3. Verificar o estado atual da instância
+    4. Identificar problemas de conexão
+
+    Estados possíveis:
+    - `disconnected`: Desconectado do WhatsApp
+    - `connecting`: Em processo de conexão (aguardando QR code ou código de pareamento)
+    - `connected`: Conectado e autenticado com sucesso
+    - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
+  operationId: getInstanceStatus
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            instance:
+              currentTime: '2024-01-25T12:00:00.000Z'
+              id: r183e2ef9597845
+              name: minha-instancia
+              profileName: Meu WhatsApp
+              status: connected
+            status:
+              connected: true
+              jid:
+                agent: 0
+                device: 0
+                server: s.whatsapp.net
+                user: '5511999999999'
+              loggedIn: true
+          schema:
+            properties:
+              instance:
+                $ref: ../../schemas/instance.yaml#/Instance
+              status:
+                properties:
+                  connected:
+                    description: Indica se está conectado ao WhatsApp
+                    type: boolean
+                  jid:
+                    description: ID do WhatsApp quando conectado
+                    type:
+                      - object
+                      - 'null'
+                  loggedIn:
+                    description: Indica se está autenticado no WhatsApp
+                    type: boolean
+                type: object
+            type: object
+      description: Sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: instance info not found
+                type: string
+            type: object
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  summary: Verificar status da instância
+  tags:
+    - Instancia

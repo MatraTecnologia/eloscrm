@@ -1,0 +1,136 @@
+post:
+  description: |
+    Solicita um reset controlado do runtime da instância atual.
+
+    Este endpoint é útil quando a sessão ficou presa, o envio não está progredindo
+    ou a instância precisa forçar uma tentativa de recuperação sem apagar o registro
+    da instância.
+
+    Comportamentos possíveis:
+    - inicia um novo reset quando a instância está apta
+    - informa que um reset já está em andamento
+    - informa que existe cooldown ativo entre resets
+    - retorna erro quando a sessão não pode ser recuperada ou quando a política de
+      reconexão bloqueia a operação
+
+    A resposta sempre informa:
+    - `instanceId`: ID da instância autenticada
+    - `resetting`: se há reset em andamento no momento
+    - `queuedRecoveryAttempted`: se houve tentativa de recuperação da fila interna
+  operationId: resetInstance
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            cooldown:
+              summary: Cooldown ativo
+              value:
+                instanceId: r183e2ef9597845
+                queuedRecoveryAttempted: false
+                resetting: false
+                response: Instance reset cooldown active (8s remaining)
+            inProgress:
+              summary: Reset já em andamento
+              value:
+                instanceId: r183e2ef9597845
+                queuedRecoveryAttempted: false
+                resetting: true
+                response: Instance reset already in progress
+            started:
+              summary: Reset iniciado
+              value:
+                instanceId: r183e2ef9597845
+                queuedRecoveryAttempted: true
+                resetting: true
+                response: Instance reset started
+          schema:
+            properties:
+              instanceId:
+                example: r183e2ef9597845
+                type: string
+              queuedRecoveryAttempted:
+                example: true
+                type: boolean
+              resetting:
+                example: true
+                type: boolean
+              response:
+                example: Instance reset started
+                type: string
+            type: object
+      description: Reset aceito, já em andamento ou em cooldown
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid payload
+                type: string
+            type: object
+      description: Payload JSON inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Token inválido, ausente ou cliente não encontrado
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                type: string
+              instanceId:
+                type: string
+              queuedRecoveryAttempted:
+                type: boolean
+              resetting:
+                example: false
+                type: boolean
+            type: object
+      description: Reset bloqueado pela política de reconexão
+    '409':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                type: string
+              instanceId:
+                type: string
+              queuedRecoveryAttempted:
+                type: boolean
+              resetting:
+                example: false
+                type: boolean
+            type: object
+      description: Sessão atual não é reconectável por reset
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: server not available
+                type: string
+              instanceId:
+                type: string
+              queuedRecoveryAttempted:
+                type: boolean
+              resetting:
+                example: false
+                type: boolean
+            type: object
+      description: Erro interno ao solicitar o reset
+  security:
+    - token: []
+  summary: Reiniciar runtime da instância
+  tags:
+    - Instancia

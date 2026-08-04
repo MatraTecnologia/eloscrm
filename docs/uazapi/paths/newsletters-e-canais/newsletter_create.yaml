@@ -1,0 +1,74 @@
+post:
+  description: |
+    Cria um novo canal/newsletter no WhatsApp.
+
+    Observações:
+    - `name` é obrigatório
+    - `picture` é opcional
+    - `picture` aceita URL HTTP/HTTPS, base64 puro ou data URI
+    - imagens acima de 1 MB são rejeitadas
+  operationId: createNewsletter
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            description:
+              example: Ofertas e novidades da loja
+              type: string
+            name:
+              example: Canal de Promoções
+              type: string
+            picture:
+              description: URL, base64 puro ou data URI da imagem do canal.
+              example: https://example.com/newsletter.png
+              type: string
+          required:
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                additionalProperties: true
+                description: Metadata do canal retornada pelo WhatsApp.
+                type: object
+            type: object
+      description: Canal criado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: name is required
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao criar o canal
+  summary: Criar canal
+  tags:
+    - Newsletters e Canais

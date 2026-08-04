@@ -1,0 +1,17 @@
+get:
+  description: Retorna todas as respostas rápidas cadastradas para a instância autenticada
+  operationId: listQuickReplies
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              $ref: ../../schemas/quick_reply.yaml#/QuickReply
+            type: array
+      description: Lista de respostas rápidas
+    '500':
+      description: Erro no servidor
+  summary: Listar todas as respostas rápidas
+  tags:
+    - Respostas Rápidas

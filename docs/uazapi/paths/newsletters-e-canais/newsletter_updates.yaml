@@ -1,0 +1,162 @@
+post:
+  description: |
+    Consulta diretamente no WhatsApp os updates de posts já existentes de um canal.
+
+    Esta rota é diferente de `/newsletter/messages`:
+    - `/newsletter/messages` retorna o conteúdo dos posts
+    - `/newsletter/updates` retorna mudanças posteriores nos posts, especialmente métricas
+
+    Esta rota também não é um evento de webhook:
+    - não existe webhook `newsletter_messages_update`
+    - para views e reactions de canais, consulte `/newsletter/updates` sob demanda
+
+    Casos de uso:
+    - atualizar contadores de `views` de posts já carregados
+    - atualizar `reactionCounts` de posts do canal
+    - consultar sob demanda os mesmos tipos de métricas que chegam nos live updates internos do WhatsApp
+
+    Observações:
+    - use preferencialmente `afterid`
+    - `afterid` filtra updates depois de um `serverid`
+    - `since` filtra pelo momento do update
+    - `since` aceita timestamp em segundos ou milissegundos
+    - o retorno vem no campo `response`
+  operationId: getNewsletterMessageUpdates
+  requestBody:
+    content:
+      application/json:
+        examples:
+          por_after_id:
+            summary: Buscar updates depois de um post conhecido
+            value:
+              afterid: 12345
+              count: 50
+              id: '120363123456789012'
+          por_since:
+            summary: Buscar updates a partir de um timestamp
+            value:
+              count: 50
+              jid: 120363123456789012@newsletter
+              since: 1710000000
+        schema:
+          properties:
+            afterid:
+              description: Retorna apenas updates posteriores ao `serverid` informado.
+              example: 12345
+              minimum: 1
+              type: integer
+            count:
+              description: Quantidade máxima de updates retornados.
+              example: 50
+              minimum: 1
+              type: integer
+            id:
+              description: ID numérico do canal. Se informado sem domínio, será convertido para `@newsletter`.
+              example: '120363123456789012'
+              type: string
+            jid:
+              description: JID completo do canal.
+              example: 120363123456789012@newsletter
+              type: string
+            since:
+              description: |
+                Timestamp de corte.
+                - Se maior que `1000000000000`, é interpretado como milissegundos.
+                - Caso contrário, é interpretado como segundos.
+              example: 1710000000
+              type: integer
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso:
+              value:
+                response:
+                  - messageid: 3EB0B4302B3A8A52F7A1
+                    reactionCounts:
+                      👍: 35
+                      🔥: 11
+                    serverid: 12345
+                    timestamp: '2026-03-24T19:00:00Z'
+                    type: text
+                    viewsCount: 1540
+          schema:
+            properties:
+              response:
+                description: Lista de updates de mensagens do canal.
+                items:
+                  properties:
+                    message:
+                      additionalProperties: true
+                      description: |
+                        Conteúdo bruto da mensagem, quando presente.
+                        Em muitos live updates esse campo pode vir ausente.
+                      type: object
+                    messageid:
+                      description: ID lógico da mensagem.
+                      example: 3EB0B4302B3A8A52F7A1
+                      type: string
+                    reactionCounts:
+                      additionalProperties:
+                        type: integer
+                      description: Mapa atualizado de emoji para quantidade de reações.
+                      example:
+                        👍: 35
+                        🔥: 11
+                      type: object
+                    serverid:
+                      description: Identificador do post no canal.
+                      example: 12345
+                      type: integer
+                    timestamp:
+                      description: Momento associado ao update retornado.
+                      format: date-time
+                      type: string
+                    type:
+                      description: Tipo da mensagem do canal.
+                      example: text
+                      type: string
+                    viewsCount:
+                      description: Quantidade atualizada de visualizações.
+                      example: 1540
+                      type: integer
+                  type: object
+                type: array
+            type: object
+      description: Updates de mensagens do canal recuperados com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid newsletter id
+                type: string
+            type: object
+      description: Payload inválido ou ID/JID do canal inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao consultar updates do canal no WhatsApp
+  summary: Buscar updates de mensagens de um canal
+  tags:
+    - Newsletters e Canais

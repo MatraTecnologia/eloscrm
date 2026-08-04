@@ -1,0 +1,282 @@
+get:
+  description: |
+    Retorna a configuração atual do webhook da instância, incluindo:
+    - URL configurada
+    - Eventos ativos
+    - Filtros aplicados
+    - Configurações adicionais
+
+    Exemplo de resposta:
+    ```json
+    [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "enabled": true,
+        "url": "https://example.com/webhook",
+        "events": ["messages", "messages_update"],
+        "excludeMessages": ["wasSentByApi", "isGroupNo"],
+        "addUrlEvents": true,
+        "addUrlTypesMessages": true
+      },
+      {
+        "id": "987fcdeb-51k3-09j8-x543-864297539100",
+        "enabled": true,
+        "url": "https://outro-endpoint.com/webhook",
+        "events": ["connection", "presence"],
+        "excludeMessages": [],
+        "addUrlEvents": false,
+        "addUrlTypesMessages": false
+      }
+    ]
+    ```
+
+    A resposta é sempre um array, mesmo quando há apenas um webhook configurado.
+  operationId: getWebhook
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            - addUrlEvents: true
+              addUrlTypesMessages: true
+              enabled: true
+              events:
+                - messages
+                - messages_update
+              excludeMessages:
+                - wasSentByApi
+                - isGroupNo
+              id: 123e4567-e89b-12d3-a456-426614174000
+              url: https://example.com/webhook
+            - addUrlEvents: false
+              addUrlTypesMessages: false
+              enabled: true
+              events:
+                - connection
+                - presence
+              excludeMessages: []
+              id: 987fcdeb-51k3-09j8-x543-864297539100
+              url: https://outro-endpoint.com/webhook
+          schema:
+            items:
+              $ref: ../../schemas/webhook.yaml#/Webhook
+            type: array
+      description: Configuração do webhook retornada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: missing token
+                type: string
+            type: object
+      description: Token inválido ou não fornecido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to process webhook data
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Ver Webhook da Instância
+  tags:
+    - Webhooks e SSE
+post:
+  description: "Gerencia a configuração de webhooks para receber eventos em tempo real da instância.\nPermite gerenciar múltiplos\
+    \ webhooks por instância através do campo ID e action.\n\n### \U0001F680 Modo Simples (Recomendado)\n\n**Uso mais fácil\
+    \ - sem complexidade de IDs**:\n- Não inclua `action` nem `id` no payload\n- Gerencia automaticamente um único webhook\
+    \ por instância\n- Cria novo ou atualiza o existente automaticamente\n- **Recomendado**: Sempre use `\"excludeMessages\"\
+    : [\"wasSentByApi\"]` para evitar loops\n- **Exemplo**: `{\"url\": \"https://meusite.com/webhook\", \"events\": [\"messages\"\
+    ], \"excludeMessages\": [\"wasSentByApi\"]}`\n\n### \U0001F9EA Sites para Testes (ordenados por qualidade)\n\n**Para testar\
+    \ webhooks durante desenvolvimento**:\n1. **https://webhook.cool/** - ⭐ Melhor opção (sem rate limit, interface limpa)\n\
+    2. **https://rbaskets.in/** - ⭐ Boa alternativa (confiável, baixo rate limit)\n3. **https://webhook.site/** - ⚠️ Evitar\
+    \ se possível (rate limit agressivo)\n\n### ⚙️ Modo Avançado (Para múltiplos webhooks)\n\n**Para usuários que precisam\
+    \ de múltiplos webhooks por instância**:\n\n\U0001F4A1 **Dica**: Mesmo precisando de múltiplos webhooks, considere usar\
+    \ `addUrlEvents` no modo simples.\nUm único webhook pode receber diferentes tipos de eventos em URLs específicas \n(ex:\
+    \ `/webhook/message`, `/webhook/connection`), eliminando a necessidade de múltiplos webhooks.\n\n1. **Criar Novo Webhook**:\n\
+    \   - Use `action: \"add\"`\n   - Não inclua `id` no payload\n   - O sistema gera ID automaticamente\n\n2. **Atualizar\
+    \ Webhook Existente**:\n   - Use `action: \"update\"`\n   - Inclua o `id` do webhook no payload\n   - Todos os campos\
+    \ serão atualizados\n\n3. **Remover Webhook**:\n   - Use `action: \"delete\"`\n   - Inclua apenas o `id` do webhook\n\
+    \   - Outros campos são ignorados\n\n\n\n### Eventos Disponíveis\n- `connection`: Alterações no estado da conexão\n- `history`:\
+    \ Recebimento de histórico de mensagens\n- `messages`: Novas mensagens recebidas\n- `messages_update`: Atualizações em\
+    \ mensagens existentes\n- `newsletter_messages`: Novos posts/mensagens de canais do WhatsApp\n  Para views e reactions\
+    \ de canais, use a rota `/newsletter/updates`.\n- `call`: Eventos de chamadas VoIP\n- `contacts`: Atualizações na agenda\
+    \ de contatos\n- `presence`: Alterações no status de presença\n- `groups`: Modificações em grupos\n- `labels`: Gerenciamento\
+    \ de etiquetas\n- `chats`: Eventos de conversas\n- `chat_labels`: Alterações em etiquetas de conversas\n- `blocks`: Bloqueios/desbloqueios\n\
+    - `sender`: Atualizações de campanhas, quando inicia, e quando completa\n\n**Remover mensagens com base nos filtros**:\n\
+    - `wasSentByApi`: Mensagens originadas pela API ⚠️ **IMPORTANTE:** Use sempre este filtro para evitar loops em automações\n\
+    - `wasNotSentByApi`: Mensagens não originadas pela API\n- `fromMeYes`: Mensagens enviadas pelo usuário\n- `fromMeNo`:\
+    \ Mensagens recebidas de terceiros\n- `isGroupYes`: Mensagens em grupos\n- `isGroupNo`: Mensagens em conversas individuais\n\
+    \n\U0001F4A1 **Prevenção de Loops**: Se você tem automações que enviam mensagens via API, sempre inclua `\"excludeMessages\"\
+    : [\"wasSentByApi\"]` no seu webhook. Caso prefira receber esses eventos, certifique-se de que sua automação detecta mensagens\
+    \ enviadas pela própria API para não criar loops infinitos.\n\n**Ações Suportadas**:\n- `add`: Registrar novo webhook\n\
+    - `delete`: Remover webhook existente\n\n**Parâmetros de URL**:\n- `addUrlEvents` (boolean): Quando ativo, adiciona o\
+    \ tipo do evento como path parameter na URL.\n  Exemplo: `https://api.example.com/webhook/{evento}`\n- `addUrlTypesMessages`\
+    \ (boolean): Quando ativo, adiciona o tipo da mensagem como path parameter na URL.\n  Exemplo: `https://api.example.com/webhook/{tipo_mensagem}`\n\
+    \n**Combinações de Parâmetros**:\n- Ambos ativos: `https://api.example.com/webhook/{evento}/{tipo_mensagem}`\n  Exemplo\
+    \ real: `https://api.example.com/webhook/message/conversation`\n- Apenas eventos: `https://api.example.com/webhook/message`\n\
+    - Apenas tipos: `https://api.example.com/webhook/conversation`\n\n**Notas Técnicas**:\n1. Os parâmetros são adicionados\
+    \ na ordem: evento → tipo mensagem\n2. A URL deve ser configurada para aceitar esses parâmetros dinâmicos\n3. Funciona\
+    \ com qualquer combinação de eventos/mensagens\n"
+  operationId: updateWebhook
+  requestBody:
+    content:
+      application/json:
+        examples:
+          modo_avancado_criar:
+            description: Criar novo webhook com ID automático
+            summary: Modo Avançado - Criar Webhook
+            value:
+              action: add
+              enabled: true
+              events:
+                - messages
+                - groups
+              excludeMessages:
+                - wasSentByApi
+              url: https://api.exemplo.com/webhook
+          modo_simples:
+            description: Configuração básica sem complexidade
+            summary: Exemplo Modo Simples (Recomendado)
+            value:
+              enabled: true
+              events:
+                - messages
+                - newsletter_messages
+                - connection
+              excludeMessages:
+                - wasSentByApi
+              url: https://webhook.cool/example
+          modo_simples_com_urls:
+            description: Alternativa ao modo avançado usando addUrlEvents
+            summary: Modo Simples com URLs Dinâmicas
+            value:
+              addUrlEvents: true
+              enabled: true
+              events:
+                - messages
+                - connection
+                - groups
+              excludeMessages:
+                - wasSentByApi
+              url: https://webhook.cool/api
+        schema:
+          properties:
+            action:
+              description: |
+                Ação a ser executada:
+                - add: criar novo webhook
+                - update: atualizar webhook existente (requer id)
+                - delete: remover webhook (requer apenas id)
+                Se não informado, opera no modo simples (único webhook)
+              enum:
+                - add
+                - update
+                - delete
+              type: string
+            addUrlEvents:
+              default: false
+              description: |
+                Adiciona o tipo do evento como parâmetro na URL.
+                - `false` (padrão): URL normal
+                - `true`: Adiciona evento na URL (ex: `/webhook/message`)
+              type: boolean
+            addUrlTypesMessages:
+              default: false
+              description: "Adiciona o tipo da mensagem como parâmetro na URL.\n- `false` (padrão): URL normal  \n- `true`:\
+                \ Adiciona tipo da mensagem (ex: `/webhook/conversation`)\n"
+              type: boolean
+            enabled:
+              description: Habilita/desabilita o webhook
+              example: true
+              type: boolean
+            events:
+              description: Lista de eventos monitorados
+              items:
+                enum:
+                  - connection
+                  - history
+                  - messages
+                  - messages_update
+                  - newsletter_messages
+                  - call
+                  - contacts
+                  - presence
+                  - groups
+                  - labels
+                  - chats
+                  - chat_labels
+                  - blocks
+                  - sender
+                type: string
+              type: array
+            excludeMessages:
+              description: Filtros para excluir tipos de mensagens
+              items:
+                enum:
+                  - wasSentByApi
+                  - wasNotSentByApi
+                  - fromMeYes
+                  - fromMeNo
+                  - isGroupYes
+                  - isGroupNo
+                type: string
+              type: array
+            id:
+              description: ID único do webhook (necessário para update/delete)
+              example: 123e4567-e89b-12d3-a456-426614174000
+              type: string
+            url:
+              description: URL para receber os eventos
+              example: https://example.com/webhook
+              type: string
+          required:
+            - url
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              $ref: ../../schemas/webhook.yaml#/Webhook
+            type: array
+      description: Webhook configurado ou atualizado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid action
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: missing token
+                type: string
+            type: object
+      description: Token inválido ou não fornecido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Could not save webhook
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Configurar Webhook da Instância
+  tags:
+    - Webhooks e SSE

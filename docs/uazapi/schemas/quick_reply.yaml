@@ -1,0 +1,42 @@
+QuickReply:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único da resposta rápida
+    onWhatsApp:
+      type: boolean
+      description: Indica se a resposta está sincronizada com o WhatsApp Business
+      default: false
+    docName:
+      type: string
+      description: Nome de documento associado (quando aplicável)
+      default: ''
+    file:
+      type: string
+      description: Caminho ou conteúdo do arquivo associado
+      default: ''
+    shortCut:
+      type: string
+      description: Atalho para acionar a resposta
+    text:
+      type: string
+      description: Conteúdo da mensagem pré-definida
+    type:
+      type: string
+      description: Tipo da resposta rápida (texto/documento/outros)
+    owner:
+      type: string
+      description: Dono da resposta rápida
+    created:
+      type: string
+      format: date-time
+      description: Data de criação
+    updated:
+      type: string
+      format: date-time
+      description: Data da última atualização
+  required:
+    - shortCut
+    - text

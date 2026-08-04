@@ -1,0 +1,84 @@
+post:
+  description: |
+    Recupera informações completas de um grupo do WhatsApp, incluindo:
+    - Detalhes do grupo
+    - Participantes
+    - Configurações
+    - Link de convite (opcional)
+  operationId: getGroupInfo
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            force:
+              default: false
+              description: Forçar atualização, ignorando cache
+              example: false
+              type: boolean
+            getInviteLink:
+              default: false
+              description: Recuperar link de convite do grupo
+              example: true
+              type: boolean
+            getRequestsParticipants:
+              default: false
+              description: Recuperar lista de solicitações pendentes de participação
+              example: false
+              type: boolean
+            groupjid:
+              description: Identificador único do grupo (JID)
+              example: 120363153742561022@g.us
+              type: string
+          required:
+            - groupjid
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            IsAnnounce: false
+            IsLocked: false
+            JID: 120363153742561022@g.us
+            Name: uazapiGO Community
+            Participants:
+              - IsAdmin: true
+                JID: 5521987654321@s.whatsapp.net
+          schema:
+            $ref: ../../schemas/group.yaml#/Group
+      description: Informações do grupo obtidas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid invite code
+                type: string
+            type: object
+      description: Código de convite inválido ou mal formatado
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Group invite link is invalid or has expired
+                type: string
+            type: object
+      description: Grupo não encontrado ou link de convite expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to retrieve group information
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Obter informações detalhadas de um grupo
+  tags:
+    - Grupos e Comunidades

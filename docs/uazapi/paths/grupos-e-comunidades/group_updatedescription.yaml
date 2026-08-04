@@ -1,0 +1,54 @@
+post:
+  description: |
+    Altera a descrição (tópico) do grupo WhatsApp especificado.
+    Requer que o usuário seja administrador do grupo.
+    A descrição aparece na tela de informações do grupo e pode ser visualizada por todos os participantes.
+  operationId: updateGroupDescription
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            description:
+              description: Nova descrição/tópico do grupo
+              example: Grupo oficial de suporte
+              maxLength: 512
+              type: string
+            groupjid:
+              description: JID (ID) do grupo no formato xxxxx@g.us
+              example: 120363339858396166@g.us
+              pattern: ^[0-9]+@g\.us$
+              type: string
+          required:
+            - groupjid
+            - description
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group description updated successfully
+                type: string
+            type: object
+      description: Descrição atualizada com sucesso
+    '401':
+      description: Token inválido ou ausente
+    '403':
+      description: Usuário não é administrador do grupo
+    '404':
+      description: Grupo não encontrado
+    '413':
+      description: Descrição excede o limite máximo permitido
+  summary: Atualizar descrição do grupo
+  tags:
+    - Grupos e Comunidades

@@ -1,0 +1,135 @@
+post:
+  description: |
+    Este endpoint envia uma mensagem com um botão que solicita a localização do usuário.
+    Quando o usuário clica no botão, o WhatsApp abre a interface para compartilhar a localização atual.
+
+    ## Campos Comuns
+
+    Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+    `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders e envio para grupos.
+
+    ## Estrutura do Payload
+
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Por favor, compartilhe sua localização",
+      "delay": 0,
+      "readchat": true
+    }
+    ```
+
+    ## Exemplo de Uso
+
+    ```json
+    {
+      "number": "5511999999999",
+      "text": "Para continuar o atendimento, clique no botão abaixo e compartilhe sua localização"
+    }
+    ```
+
+    > **Nota**: O botão de localização é adicionado automaticamente à mensagem
+  operationId: sendLocationButton
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            async:
+              description: Se true, envia a mensagem de forma assíncrona via fila interna
+              example: false
+              type: boolean
+            delay:
+              description: Atraso em milissegundos antes do envio
+              example: 0
+              type: integer
+            mentions:
+              description: Números para mencionar (separados por vírgula)
+              example: 5511999999999,5511888888888
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+              example: '5511999999999'
+              type: string
+            readchat:
+              description: Se deve marcar a conversa como lida após envio
+              example: true
+              type: boolean
+            readmessages:
+              description: Marca últimas mensagens recebidas como lidas
+              example: true
+              type: boolean
+            replyid:
+              description: ID da mensagem para responder
+              example: 3EB0538DA65A59F6D8A251
+              type: string
+            text:
+              description: Texto da mensagem que será exibida
+              example: Por favor, compartilhe sua localização
+              type: string
+            track_id:
+              description: ID para rastreamento da mensagem (aceita valores duplicados)
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento da mensagem
+              example: chatwoot
+              type: string
+          required:
+            - number
+            - text
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Location sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Localização enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing required fields or invalid coordinates
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to send location
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Solicitar localização do usuário
+  tags:
+    - Enviar Mensagem

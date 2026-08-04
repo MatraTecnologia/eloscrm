@@ -1,0 +1,101 @@
+post:
+  description: |
+    Adiciona um novo contato à agenda do celular.
+
+    O endpoint realiza:
+    - Adiciona o contato à agenda usando o WhatsApp
+    - Usa o campo 'name' tanto para o nome completo quanto para o primeiro nome
+    - Salva as informações do contato na agenda do WhatsApp
+    - Retorna informações do contato adicionado
+  operationId: addContact
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            name:
+              description: Nome completo do contato (será usado como primeiro nome e nome completo)
+              example: João Silva
+              type: string
+            number:
+              description: "Número de telefone no formato internacional com código do país obrigatório. \nPara Brasil, deve\
+                \ começar com 55. Aceita variações com/sem símbolo +, \ncom/sem parênteses, com/sem hífen e com/sem espaços.\
+                \ Também aceita formato \nJID do WhatsApp (@s.whatsapp.net). Não aceita contatos comerciais (@lid) \nnem grupos\
+                \ (@g.us).\n"
+              examples:
+                - +55 (21) 99999-9999
+                - +55 21 99999-9999
+                - +55 21 999999999
+                - '+5521999999999'
+                - '5521999999999'
+                - 5521999999999@s.whatsapp.net
+              type: string
+          required:
+            - number
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              contact:
+                properties:
+                  jid:
+                    description: 'ID único do contato no WhatsApp (formato: número@s.whatsapp.net)'
+                    example: 5511999999999@s.whatsapp.net
+                    type: string
+                  name:
+                    description: Nome completo do contato
+                    example: João Silva
+                    type: string
+                  phone:
+                    description: Número de telefone
+                    example: '5511999999999'
+                    type: string
+                type: object
+              message:
+                example: Contato adicionado com sucesso
+                type: string
+              success:
+                example: true
+                type: boolean
+            type: object
+      description: Contato adicionado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Número inválido
+                type: string
+            type: object
+      description: Dados inválidos na requisição
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Sem sessão ativa
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Erro ao adicionar contato
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - token: []
+  summary: Adiciona um contato à agenda
+  tags:
+    - Contatos

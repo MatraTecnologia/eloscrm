@@ -1,0 +1,610 @@
+openapi: 3.1.0
+info:
+  title: uazapiGO - WhatsApp API
+  version: 2.1.1
+  x-logo:
+    url: /uazapi-logo.png
+  description: |
+    API para gerenciamento de instâncias do WhatsApp e comunicações.
+
+    ## ⚠️ Recomendação Importante: WhatsApp Business
+    **É ALTAMENTE RECOMENDADO usar contas do WhatsApp Business** em vez do WhatsApp normal para integração, o WhatsApp normal pode apresentar inconsistências, desconexões, limitações e instabilidades durante o uso com a nossa API.
+
+    ## Autenticação
+    - Endpoints regulares requerem um header 'token' com o token da instância
+    - Endpoints administrativos requerem um header 'admintoken'
+
+    ## Estados da Instância
+    As instâncias podem estar nos seguintes estados:
+    - `disconnected`: Desconectado do WhatsApp
+    - `connecting`: Em processo de conexão
+    - `connected`: Conectado e autenticado com sucesso
+    - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
+
+    ## Limites de Uso
+    - O servidor possui um limite máximo de instâncias conectadas
+    - Quando o limite é atingido, novas tentativas receberão erro 429
+    - Servidores gratuitos/demo podem ter restrições adicionais de tempo de vida
+servers:
+  - url: https://{subdomain}.uazapi.com
+    description: Servidor da API uazapiGO
+    variables:
+      subdomain:
+        enum:
+          - free
+          - api
+        default: free
+tags:
+  - name: Admininstração
+    description: |
+      Endpoints para **administração geral** do sistema.
+      Requerem um `admintoken` para autenticação.
+  - name: Instancia
+    description: |
+      Operações relacionadas ao ciclo de vida de uma instância, como conectar,
+      desconectar e verificar o status.
+  - name: Proxy
+    description: |
+      A uazapiGO opera com um proxy interno como padrão.
+      Você pode manter esse padrão, configurar um proxy próprio via `proxy_url` ou usar seu celular android como proxy instalando o app em https://github.com/uazapi/silver_proxy_apk (APK direto: https://github.com/uazapi/silver_proxy_apk/raw/refs/heads/main/silver_proxy.apk).
+      Se nada for enviado, seguimos no proxy interno. IPs são brasileiros; para clientes internacionais, considere um proxy da região do cliente.
+  - name: Perfil
+    description: |
+      Operações relacionadas ao perfil da conta do WhatsApp atualmente conectada, como alterar
+      nome e imagem de perfil.
+  - name: Business
+    description: |
+      ⚠️ **EXPERIMENTAL** - Endpoints ainda não testados completamente.
+
+      Operações relacionadas ao perfil comercial do WhatsApp Business.
+      Permite consultar e atualizar dados do perfil comercial como descrição,
+      endereço, email, categorias e gerenciar o catálogo de produtos.
+
+      **Requisitos:**
+      - A conta atualmente conectada deve ser uma conta **WhatsApp Business**
+      - Contas pessoais do WhatsApp não possuem perfil comercial
+
+      **Nota:** Estes endpoints podem não funcionar como esperado.
+      Reporte problemas encontrados.
+  - name: Chamadas
+    description: |
+      Operações relacionadas a chamadas peloWhatsApp.
+      Permite realizar e rejeitar chamadas programaticamente.
+  - name: Webhooks e SSE
+  - name: Enviar Mensagem
+    description: |
+      Endpoints para envio de mensagens do WhatsApp com diferentes tipos de conteúdo.
+
+      ## Campos Opcionais Comuns
+
+      Todos os endpoints de envio de mensagem suportam os seguintes campos opcionais:
+
+      - **`delay`** *(integer)*: Atraso em milissegundos antes do envio
+        - Durante o atraso aparecerá "Digitando..." ou "Gravando áudio..." dependendo do tipo
+        - Exemplo: `5000` (5 segundos)
+
+      - **`readchat`** *(boolean)*: Marcar chat como lido após envio
+        - Remove o contador de mensagens não lidas do chat
+        - Exemplo: `true`
+
+      - **`readmessages`** *(boolean)*: Marcar últimas mensagens recebidas como lidas
+        - Marca as últimas 10 mensagens **recebidas** (não enviadas por você) como lidas
+        - Útil para confirmar leitura de mensagens pendentes antes de responder
+        - Diferente do `readchat` que apenas remove contador de não lidas
+        - Exemplo: `true`
+
+      - **`replyid`** *(string)*: ID da mensagem para responder
+        - Cria uma resposta vinculada à mensagem original
+        - Suporte varia por tipo de mensagem
+
+      - **`viewOnce`** *(boolean)*: Recomendado quando quiser mídia de visualização única
+        - Use em `/send/media` com `type` compatível (`image`, `video`, `videoplay`, `ptv`, `audio`, `myaudio`, `ptt`)
+        - Nos demais endpoints de envio, o campo é aceito, mas é ignorado silenciosamente
+        - Exemplo: `"3A12345678901234567890123456789012"`
+
+      - **`mentions`** *(string)*: Números para mencionar (apenas para envio em grupos)
+        - Números específicos: `"5511999999999,5511888888888"`
+        - Mencionar todos: `"all"`
+
+      - **`forward`** *(boolean)*: Marca a mensagem como encaminhada no WhatsApp
+        - Adiciona o indicador "Encaminhada" na mensagem
+        - Exemplo: `true`
+
+      - **`track_source`** *(string)*: Origem do rastreamento da mensagem
+        - Identifica o sistema ou fonte que está enviando a mensagem
+        - Útil para integrações (ex: "chatwoot", "crm", "chatbot")
+        - Exemplo: `"chatwoot"`
+
+      - **`track_id`** *(string)*: ID para rastreamento da mensagem
+        - Identificador livre para acompanhar a mensagem em sistemas externos
+        - Permite correlacionar mensagens entre diferentes plataformas
+        - **Nota**: O sistema aceita valores duplicados - não há validação de unicidade
+        - Use o mesmo ID em várias mensagens se fizer sentido para sua integração
+        - Exemplo: `"msg_123456789"`
+
+      - **`async`** *(boolean)*: Envia pela fila interna sem bloquear a requisição
+        - Resposta 200 indica que a mensagem entrou na fila; o envio real pode falhar depois
+        - Em caso de falha, pesquise em `/message/find` com `status=failed`
+
+      ## Diagnóstico de limites do WhatsApp
+
+      Em alguns casos, o WhatsApp pode recusar novas conversas por regras próprias de volume, qualidade ou limitação temporária.
+
+      Quando isso acontecer, a resposta de erro pode incluir:
+      - `error_source: "whatsapp_server"`
+      - `provider: "whatsapp"`
+      - `provider_code: 463`
+      - `error_key`
+      - `message`
+      - `message_ptbr`
+      - `provider_message`
+      - `provider_message_ptbr`
+      - `diagnostics_endpoint`
+      - `details.new_chat_message_capping`
+      - `details.reachout_timelock`
+
+      Para consultar o estado atual desses limites para a conta atualmente conectada, use:
+      - `GET /instance/wa_messages_limits`
+
+      ### Envio para Grupos
+      - **`number`** *(string)*: Para enviar mensagem para grupo, use o ID do grupo que termina com `@g.us`
+        - Exemplo: `"120363012345678901@g.us"`
+        - **Como obter o ID do grupo:**
+          - Use o `chatid` do webhook recebido quando alguém envia mensagem no grupo
+          - Use o endpoint `GET /group/list` para listar todos os grupos e seus IDs
+
+      ## Placeholders Disponíveis
+
+      Todos os endpoints de envio de mensagem suportam placeholders dinâmicos para personalização automática:
+
+      ### Campos de Nome
+      - **`{{name}}`**: Nome consolidado do chat, usando a primeira opção disponível:
+        1. Nome do lead (`lead_name`)
+        2. Nome completo do lead (`lead_fullName`)
+        3. Nome do contato no WhatsApp (`wa_contactName`)
+        4. Nome do perfil do WhatsApp (`wa_name`)
+
+      - **`{{first_name}}`**: Primeira palavra válida do nome consolidado (mínimo 2 caracteres)
+
+      ### Campos do WhatsApp
+      - **`{{wa_name}}`**: Nome do perfil do WhatsApp
+      - **`{{wa_contactName}}`**: Nome do contato como salvo no WhatsApp
+
+      ### Campos do Lead
+      - **`{{lead_name}}`**: Nome do lead
+      - **`{{lead_fullName}}`**: Nome completo do lead
+      - **`{{lead_personalid}}`**: ID pessoal (CPF, CNPJ, etc)
+      - **`{{lead_email}}`**: Email do lead
+      - **`{{lead_status}}`**: Status atual do lead
+      - **`{{lead_notes}}`**: Anotações do lead
+      - **`{{lead_assignedAttendant_id}}`**: ID do atendente designado
+
+      ### Campos Personalizados
+      Campos adicionados via custom fields são acessíveis usando `{{lead_field01}}` à `{{lead_field20}}` ou usar `{{nomedocampo}}` definido em `/instance/updateFieldsMap`.
+
+      ### Exemplo de Uso
+      ```
+      Olá {{name}}! Vi que você trabalha na {{company}}.
+      Seu email {{lead_email}} está correto?
+      ```
+
+      **💡 Dica**: Use `/chat/find` para buscar dados do chat e ver os campos disponíveis antes de enviar mensagens com placeholders.
+  - name: Mensagem Async
+    description: |
+      Controles operacionais da fila interna de envio assíncrono usada quando um endpoint de envio recebe `async=true`.
+
+      Esta seção serve para:
+      - consultar o estado atual da fila async
+      - configurar o delay entre mensagens enviadas com `async=true`
+      - limpar backlog pendente e cancelar mensagens ainda não concluídas
+
+      Escopo:
+      - cobre apenas a fila interna de mensagens diretas async
+      - não cobre campanhas do sender (`/sender/*`)
+      - não altera mensagens já enviadas com sucesso
+  - name: Ações na mensagem e Buscar
+  - name: Chats
+  - name: Contatos
+  - name: Bloqueios
+  - name: Etiquetas
+  - name: Grupos e Comunidades
+  - name: Newsletters e Canais
+    description: |
+      Operações para leitura e acompanhamento de canais do WhatsApp (newsletters).
+
+      Casos de uso principais:
+      - listar posts já publicados em um canal
+      - editar posts recentes de um canal
+      - deletar posts recentes de um canal
+      - consultar updates de engajamento dos posts
+      - integrar canais sem necessidade de persistir as mensagens localmente
+
+      Observações:
+      - `/newsletter/messages` retorna o conteúdo dos posts
+      - `/newsletter/messages/edit` edita o conteúdo de posts recentes
+      - `/newsletter/messages/delete` apaga posts recentes
+      - `/newsletter/updates` retorna updates dos posts, como views e reactions
+      - views e reactions de canal devem ser consultados por `/newsletter/updates`, não por evento de webhook
+      - newsletters usam rotas próprias e não devem usar `/message/edit` ou `/message/delete`
+  - name: Respostas Rápidas
+    description: "Gerenciamento de respostas rápidas para agilizar o atendimento.\n\n**⚠️ Importante**: Este recurso tem serventia\
+      \ apenas se você utilizar um sistema frontend/interface\npersonalizada para registrar e utilizar as respostas. A API\
+      \ apenas armazena as respostas, \nmas não as aplica automaticamente.\n\n### Como funciona:\n- **Criar**: Cadastre respostas\
+      \ pré-definidas com títulos e conteúdo\n- **Listar**: Recupere todas as respostas cadastradas para exibir na sua interface\n\
+      - **Usar**: Seu sistema frontend pode usar essas respostas para agilizar digitação\n\n### Casos de uso:\n- Interfaces\
+      \ web personalizadas de atendimento\n- Apps mobile com sugestões de resposta\n- Sistemas CRM com templates de mensagem\n\
+      - Ferramentas de produtividade para atendentes\n\n**Não é um chatbot**: Para respostas automáticas, use os recursos\
+      \ de Chatbot.\n"
+  - name: CRM
+    description: |
+      Sistema completo de gestão de relacionamento com clientes integrado à API.
+
+      **💾 Armazenamento interno**: Todos os dados dos leads ficam salvos diretamente na API,
+      eliminando a necessidade de bancos de dados externos. Sua aplicação pode focar apenas
+      na interface e lógica de negócio.
+
+      ### Recursos disponíveis:
+      - **📋 20+ campos personalizáveis**: Nome, telefone, email, empresa, observações, etc.
+      - **🏷️ Sistema de etiquetas**: Organize e categorize seus contatos
+      - **🔍 Busca avançada**: Filtre por qualquer campo ou etiqueta
+      - **📊 Histórico completo**: Todas as interações ficam registradas automaticamente
+
+      ### 🎯 Placeholders em mensagens:
+      Use variáveis dinâmicas nas mensagens para personalização automática:
+
+      ```
+      Olá {{nome}}! Vi que você trabalha na {{empresa}}.
+      Seu email {{email}} está correto?
+      Observações: {{observacoes}}
+      ```
+
+      ### Fluxo típico:
+      1. **Captura**: Leads chegam via WhatsApp ou formulários
+      2. **Enriquecimento**: Adicione dados usando `/chat/editLead`
+      3. **Segmentação**: Organize com etiquetas
+      4. **Comunicação**: Envie mensagens personalizadas com placeholders
+      5. **Acompanhamento**: Histórico fica salvo automaticamente
+
+      **Ideal para**: Vendas, marketing, atendimento, qualificação de leads
+  - name: Mensagem em massa
+  - name: Integração Chatwoot
+    description: |
+      **🚧 INTEGRAÇÃO BETA - Sistema de integração com Chatwoot para atendimento unificado**
+
+      **⚠️ AVISO**: Esta integração está em fase BETA. Use por sua conta e risco. Recomendamos testes em ambiente não-produtivo antes do uso em produção.
+
+      Esta categoria contém recursos para configurar e gerenciar a integração com o Chatwoot, uma plataforma de atendimento ao cliente open-source. A integração permite centralizar conversas do WhatsApp no Chatwoot.
+
+      ### Recursos disponíveis:
+      - 🔧 **Configuração Completa**: Configure URL, tokens e credenciais do Chatwoot
+      - 📬 **Sincronização Bidirecional**: Mensagens novas entre WhatsApp e Chatwoot são sincronizadas automaticamente
+      - 📱 **Gerenciamento de Contatos**: Sincronização automática de nomes e telefones
+      - 🔄 **Atualização LID→PN**: Migração automática de Local ID para Phone Number
+      - 🏷️ **Nomes Inteligentes**: Sistema de nomes com til (~) para atualização automática
+      - 🚫 **Separação de Grupos**: Opção para ignorar grupos na sincronização
+      - 👤 **Assinatura de Mensagens**: Identificação do agente nas mensagens enviadas
+      - 🔗 **Webhook Automático**: URL gerada automaticamente para configurar no Chatwoot
+
+      ### 🏷️ Sistema de Nomes Inteligentes:
+      - **Nomes com til (~)**: Atualizados automaticamente quando contato modifica nome no WhatsApp
+      - **Nomes específicos**: Para nome fixo, remover til (~) do nome no Chatwoot
+      - **Exemplo**: "~João Silva" = automático, "João Silva" = fixo
+      - **Migração LID→PN**: Sem duplicação de conversas durante a transição
+      - **Respostas nativas**: Aparecem diretamente no Chatwoot sem marcações externas
+
+      ### ⚠️ Limitações conhecidas:
+      - **Sincronização de histórico**: Não implementada - apenas mensagens novas são sincronizadas
+
+      ### Casos de uso:
+      - Atendimento centralizado no Chatwoot
+      - Equipes de suporte com múltiplos agentes
+      - Integração com CRM via Chatwoot
+      - Centralização de canais de comunicação
+      - Gestão automática de contatos e nomes
+
+      **Ideal para**: Empresas com equipes de atendimento, call centers, suporte técnico (em ambiente de testes)
+
+      **Requer**: Instância do Chatwoot configurada, tokens de API e ambiente de testes
+
+      **🚧 Lembre-se**: Integração em BETA - funcionalidades podem mudar sem aviso prévio
+security:
+  - token: []
+components:
+  securitySchemes:
+    token:
+      name: token
+      type: apiKey
+      in: header
+    admintoken:
+      name: admintoken
+      type: apiKey
+      in: header
+      description: Token de administrador para endpoints administrativos
+  schemas:
+    Instance:
+      $ref: ./schemas/instance.yaml#/Instance
+    Webhook:
+      $ref: ./schemas/webhook.yaml#/Webhook
+    Chat:
+      $ref: ./schemas/chat.yaml#/Chat
+    Message:
+      $ref: ./schemas/message.yaml#/Message
+    Label:
+      $ref: ./schemas/label.yaml#/Label
+    Attendant:
+      $ref: ./schemas/attendant.yaml#/Attendant
+    MessageQueueFolder:
+      $ref: ./schemas/message_queue_folder.yaml#/MessageQueueFolder
+    QuickReply:
+      $ref: ./schemas/quick_reply.yaml#/QuickReply
+    Group:
+      $ref: ./schemas/group.yaml#/Group
+    GroupParticipant:
+      $ref: ./schemas/group_participant.yaml#/GroupParticipant
+    WebhookEvent:
+      $ref: ./schemas/webhook_event.yaml#/WebhookEvent
+paths:
+  /instance/create:
+    $ref: ./paths/admininstracao/instance_create.yaml
+  /instance/all:
+    $ref: ./paths/admininstracao/instance_all.yaml
+  /instance/connect:
+    $ref: ./paths/instancia/instance_connect.yaml
+  /instance/disconnect:
+    $ref: ./paths/instancia/instance_disconnect.yaml
+  /instance/reset:
+    $ref: ./paths/instancia/instance_reset.yaml
+  /instance/status:
+    $ref: ./paths/instancia/instance_status.yaml
+  /instance/wa_messages_limits:
+    $ref: ./paths/instancia/instance_wa_messages_limits.yaml
+  /instance/updateFieldsMap:
+    $ref: ./paths/crm/instance_updatefieldsmap.yaml
+  /instance/updateInstanceName:
+    $ref: ./paths/instancia/instance_updateinstancename.yaml
+  /instance/updateAdminFields:
+    $ref: ./paths/admininstracao/instance_updateadminfields.yaml
+  /instance/proxy:
+    $ref: ./paths/proxy/instance_proxy.yaml
+  /proxy-managed/cities:
+    $ref: ./paths/proxy/proxy_managed_cities.yaml
+  /profile/name:
+    $ref: ./paths/perfil/profile_name.yaml
+  /profile/image:
+    $ref: ./paths/perfil/profile_image.yaml
+  /instance:
+    $ref: ./paths/instancia/instance.yaml
+  /instance/privacy:
+    $ref: ./paths/instancia/instance_privacy.yaml
+  /instance/presence:
+    $ref: ./paths/instancia/instance_presence.yaml
+  /send/text:
+    $ref: ./paths/enviar-mensagem/send_text.yaml
+  /send/media:
+    $ref: ./paths/enviar-mensagem/send_media.yaml
+  /send/contact:
+    $ref: ./paths/enviar-mensagem/send_contact.yaml
+  /send/location:
+    $ref: ./paths/enviar-mensagem/send_location.yaml
+  /message/presence:
+    $ref: ./paths/enviar-mensagem/message_presence.yaml
+  /send/status:
+    $ref: ./paths/enviar-mensagem/send_status.yaml
+  /send/menu:
+    $ref: ./paths/enviar-mensagem/send_menu.yaml
+  /send/carousel:
+    $ref: ./paths/enviar-mensagem/send_carousel.yaml
+  /send/location-button:
+    $ref: ./paths/enviar-mensagem/send_location_button.yaml
+  /send/request-payment:
+    $ref: ./paths/enviar-mensagem/send_request_payment.yaml
+  /send/pix-button:
+    $ref: ./paths/enviar-mensagem/send_pix_button.yaml
+  /message/async:
+    $ref: ./paths/mensagem-async/message_async.yaml
+  /instance/updateDelaySettings:
+    $ref: ./paths/mensagem-async/instance_updatedelaysettings.yaml
+  /message/download:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_download.yaml
+  /message/find:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_find.yaml
+  /message/history-sync:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_history_sync.yaml
+  /message/markread:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_markread.yaml
+  /message/react:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_react.yaml
+  /message/delete:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_delete.yaml
+  /message/edit:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_edit.yaml
+  /message/pin:
+    $ref: ./paths/acoes-na-mensagem-e-buscar/message_pin.yaml
+  /group/create:
+    $ref: ./paths/grupos-e-comunidades/group_create.yaml
+  /group/info:
+    $ref: ./paths/grupos-e-comunidades/group_info.yaml
+  /group/inviteInfo:
+    $ref: ./paths/grupos-e-comunidades/group_inviteinfo.yaml
+  /group/join:
+    $ref: ./paths/grupos-e-comunidades/group_join.yaml
+  /group/leave:
+    $ref: ./paths/grupos-e-comunidades/group_leave.yaml
+  /group/list:
+    $ref: ./paths/grupos-e-comunidades/group_list.yaml
+  /group/resetInviteCode:
+    $ref: ./paths/grupos-e-comunidades/group_resetinvitecode.yaml
+  /group/updateAnnounce:
+    $ref: ./paths/grupos-e-comunidades/group_updateannounce.yaml
+  /group/updateJoinApproval:
+    $ref: ./paths/grupos-e-comunidades/group_updatejoinapproval.yaml
+  /group/updateMemberAddMode:
+    $ref: ./paths/grupos-e-comunidades/group_updatememberaddmode.yaml
+  /group/updateDescription:
+    $ref: ./paths/grupos-e-comunidades/group_updatedescription.yaml
+  /group/ephemeral:
+    $ref: ./paths/grupos-e-comunidades/group_ephemeral.yaml
+  /group/updateImage:
+    $ref: ./paths/grupos-e-comunidades/group_updateimage.yaml
+  /group/updateLocked:
+    $ref: ./paths/grupos-e-comunidades/group_updatelocked.yaml
+  /group/updateName:
+    $ref: ./paths/grupos-e-comunidades/group_updatename.yaml
+  /group/updateParticipants:
+    $ref: ./paths/grupos-e-comunidades/group_updateparticipants.yaml
+  /community/create:
+    $ref: ./paths/grupos-e-comunidades/community_create.yaml
+  /community/editgroups:
+    $ref: ./paths/grupos-e-comunidades/community_editgroups.yaml
+  /newsletter/create:
+    $ref: ./paths/newsletters-e-canais/newsletter_create.yaml
+  /newsletter/list:
+    $ref: ./paths/newsletters-e-canais/newsletter_list.yaml
+  /newsletter/info:
+    $ref: ./paths/newsletters-e-canais/newsletter_info.yaml
+  /newsletter/link:
+    $ref: ./paths/newsletters-e-canais/newsletter_link.yaml
+  /newsletter/subscribe:
+    $ref: ./paths/newsletters-e-canais/newsletter_subscribe.yaml
+  /newsletter/messages:
+    $ref: ./paths/newsletters-e-canais/newsletter_messages.yaml
+  /newsletter/messages/edit:
+    $ref: ./paths/newsletters-e-canais/newsletter_messages_edit.yaml
+  /newsletter/messages/delete:
+    $ref: ./paths/newsletters-e-canais/newsletter_messages_delete.yaml
+  /newsletter/updates:
+    $ref: ./paths/newsletters-e-canais/newsletter_updates.yaml
+  /newsletter/viewed:
+    $ref: ./paths/newsletters-e-canais/newsletter_viewed.yaml
+  /newsletter/reaction:
+    $ref: ./paths/newsletters-e-canais/newsletter_reaction.yaml
+  /newsletter/follow:
+    $ref: ./paths/newsletters-e-canais/newsletter_follow.yaml
+  /newsletter/unfollow:
+    $ref: ./paths/newsletters-e-canais/newsletter_unfollow.yaml
+  /newsletter/mute:
+    $ref: ./paths/newsletters-e-canais/newsletter_mute.yaml
+  /newsletter/unmute:
+    $ref: ./paths/newsletters-e-canais/newsletter_unmute.yaml
+  /newsletter/delete:
+    $ref: ./paths/newsletters-e-canais/newsletter_delete.yaml
+  /newsletter/picture:
+    $ref: ./paths/newsletters-e-canais/newsletter_picture.yaml
+  /newsletter/name:
+    $ref: ./paths/newsletters-e-canais/newsletter_name.yaml
+  /newsletter/description:
+    $ref: ./paths/newsletters-e-canais/newsletter_description.yaml
+  /newsletter/settings:
+    $ref: ./paths/newsletters-e-canais/newsletter_settings.yaml
+  /newsletter/search:
+    $ref: ./paths/newsletters-e-canais/newsletter_search.yaml
+  /newsletter/admin/invite:
+    $ref: ./paths/newsletters-e-canais/newsletter_admin_invite.yaml
+  /newsletter/admin/accept:
+    $ref: ./paths/newsletters-e-canais/newsletter_admin_accept.yaml
+  /newsletter/admin/remove:
+    $ref: ./paths/newsletters-e-canais/newsletter_admin_remove.yaml
+  /newsletter/admin/revoke:
+    $ref: ./paths/newsletters-e-canais/newsletter_admin_revoke.yaml
+  /newsletter/owner/transfer:
+    $ref: ./paths/newsletters-e-canais/newsletter_owner_transfer.yaml
+  /webhook:
+    $ref: ./paths/webhooks-e-sse/webhook.yaml
+  /webhook/errors:
+    $ref: ./paths/webhooks-e-sse/webhook_errors.yaml
+  /globalwebhook:
+    $ref: ./paths/admininstracao/globalwebhook.yaml
+  /globalwebhook/errors:
+    $ref: ./paths/admininstracao/globalwebhook_errors.yaml
+  /sse:
+    $ref: ./paths/webhooks-e-sse/sse.yaml
+  /sender/simple:
+    $ref: ./paths/mensagem-em-massa/sender_simple.yaml
+  /sender/advanced:
+    $ref: ./paths/mensagem-em-massa/sender_advanced.yaml
+  /sender/edit:
+    $ref: ./paths/mensagem-em-massa/sender_edit.yaml
+  /sender/cleardone:
+    $ref: ./paths/mensagem-em-massa/sender_cleardone.yaml
+  /sender/clearall:
+    $ref: ./paths/mensagem-em-massa/sender_clearall.yaml
+  /sender/listfolders:
+    $ref: ./paths/mensagem-em-massa/sender_listfolders.yaml
+  /sender/listmessages:
+    $ref: ./paths/mensagem-em-massa/sender_listmessages.yaml
+  /chat/block:
+    $ref: ./paths/bloqueios/chat_block.yaml
+  /chat/blocklist:
+    $ref: ./paths/bloqueios/chat_blocklist.yaml
+  /chat/labels:
+    $ref: ./paths/etiquetas/chat_labels.yaml
+  /chat/delete:
+    $ref: ./paths/chats/chat_delete.yaml
+  /chat/archive:
+    $ref: ./paths/chats/chat_archive.yaml
+  /chat/ephemeral:
+    $ref: ./paths/chats/chat_ephemeral.yaml
+  /chat/read:
+    $ref: ./paths/chats/chat_read.yaml
+  /chat/mute:
+    $ref: ./paths/chats/chat_mute.yaml
+  /chat/pin:
+    $ref: ./paths/chats/chat_pin.yaml
+  /chat/find:
+    $ref: ./paths/chats/chat_find.yaml
+  /chat/notes:
+    $ref: ./paths/chats/chat_notes.yaml
+  /chat/notes/refresh:
+    $ref: ./paths/chats/chat_notes_refresh.yaml
+  /chat/notes/edit:
+    $ref: ./paths/chats/chat_notes_edit.yaml
+  /chat/editLead:
+    $ref: ./paths/crm/chat_editlead.yaml
+  /contacts:
+    $ref: ./paths/contatos/contacts.yaml
+  /contacts/list:
+    $ref: ./paths/contatos/contacts_list.yaml
+  /contact/add:
+    $ref: ./paths/contatos/contact_add.yaml
+  /contact/remove:
+    $ref: ./paths/contatos/contact_remove.yaml
+  /chat/details:
+    $ref: ./paths/contatos/chat_details.yaml
+  /chat/check:
+    $ref: ./paths/contatos/chat_check.yaml
+  /label/edit:
+    $ref: ./paths/etiquetas/label_edit.yaml
+  /labels:
+    $ref: ./paths/etiquetas/labels.yaml
+  /labels/refresh:
+    $ref: ./paths/etiquetas/labels_refresh.yaml
+  /quickreply/edit:
+    $ref: ./paths/respostas-rapidas/quickreply_edit.yaml
+  /quickreply/showall:
+    $ref: ./paths/respostas-rapidas/quickreply_showall.yaml
+  /call/make:
+    $ref: ./paths/chamadas/call_make.yaml
+  /call/reject:
+    $ref: ./paths/chamadas/call_reject.yaml
+  /chatwoot/config:
+    $ref: ./paths/integracao-chatwoot/chatwoot_config.yaml
+  /business/get/profile:
+    $ref: ./paths/business/business_get_profile.yaml
+  /business/get/categories:
+    $ref: ./paths/business/business_get_categories.yaml
+  /business/update/profile:
+    $ref: ./paths/business/business_update_profile.yaml
+  /business/catalog/list:
+    $ref: ./paths/business/business_catalog_list.yaml
+  /business/catalog/info:
+    $ref: ./paths/business/business_catalog_info.yaml
+  /business/catalog/delete:
+    $ref: ./paths/business/business_catalog_delete.yaml
+  /business/catalog/show:
+    $ref: ./paths/business/business_catalog_show.yaml
+  /business/catalog/hide:
+    $ref: ./paths/business/business_catalog_hide.yaml
+  /admin/restart:
+    $ref: ./paths/admininstracao/admin_restart.yaml
+  /admin/token/rotate:
+    $ref: ./paths/admininstracao/admin_token_rotate.yaml

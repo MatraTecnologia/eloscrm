@@ -1,0 +1,63 @@
+post:
+  description: |
+    Busca os detalhes de um canal/newsletter pelo `id` numérico ou pelo `jid`.
+  operationId: getNewsletterInfo
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              description: ID numérico do canal. Se informado sem domínio, será convertido para `@newsletter`.
+              example: '120363123456789012'
+              type: string
+            jid:
+              description: JID completo do canal.
+              example: 120363123456789012@newsletter
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                additionalProperties: true
+                type: object
+            type: object
+      description: Informações do canal recuperadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid newsletter id
+                type: string
+            type: object
+      description: ID/JID inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao consultar o canal
+  summary: Buscar informações de um canal
+  tags:
+    - Newsletters e Canais

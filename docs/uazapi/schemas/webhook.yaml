@@ -1,0 +1,70 @@
+Webhook:
+  type: object
+  description: Configuração completa de webhook com filtros e opções avançadas
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único gerado automaticamente
+    enabled:
+      type: boolean
+      description: Webhook ativo/inativo
+      default: false
+    url:
+      type: string
+      format: uri
+      description: URL de destino dos eventos
+    events:
+      type: array
+      items:
+        type: string
+        enum:
+          - connection
+          - history
+          - messages
+          - messages_update
+          - newsletter_messages
+          - call
+          - contacts
+          - presence
+          - groups
+          - labels
+          - chats
+          - chat_labels
+          - blocks
+          - sender
+      description: Tipos de eventos monitorados
+    addUrlTypesMessages:
+      type: boolean
+      description: Incluir na URLs o tipo de mensagem
+      default: false
+    addUrlEvents:
+      type: boolean
+      description: Incluir na URL o nome do evento
+      default: false
+    excludeMessages:
+      type: array
+      items:
+        type: string
+        enum:
+          - wasSentByApi
+          - wasNotSentByApi
+          - fromMeYes
+          - fromMeNo
+          - isGroupYes
+          - isGroupNo
+      description: Filtros para excluir tipos de mensagens
+  required:
+    - url
+    - events
+  example:
+    id: wh_9a8b7c6d5e
+    enabled: true
+    url: https://webhook.cool/example
+    events:
+      - messages
+      - newsletter_messages
+      - connection
+    addUrlTypesMessages: false
+    addUrlEvents: false
+    excludeMessages: []

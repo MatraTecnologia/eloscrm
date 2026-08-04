@@ -1,0 +1,165 @@
+get:
+  description: |
+    Retorna a configuração atual da integração com Chatwoot para a instância.
+
+    ### Funcionalidades:
+    - Retorna todas as configurações do Chatwoot incluindo credenciais
+    - Mostra status de habilitação da integração
+    - Útil para verificar configurações atuais antes de fazer alterações
+  operationId: getChatwootConfig
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              chatwoot_access_token:
+                description: Token de acesso da API Chatwoot
+                example: pXXGHHHyJPYHYgWHJHYHgJjj
+                type: string
+              chatwoot_account_id:
+                description: ID da conta no Chatwoot
+                example: 1
+                format: int64
+                type: integer
+              chatwoot_create_new_conversation:
+                description: Sempre criar nova conversa ao invés de reutilizar conversas existentes
+                example: false
+                type: boolean
+              chatwoot_enabled:
+                description: Se a integração com Chatwoot está habilitada
+                example: true
+                type: boolean
+              chatwoot_ignore_groups:
+                description: Se deve ignorar mensagens de grupos na sincronização
+                example: false
+                type: boolean
+              chatwoot_inbox_id:
+                description: ID da inbox no Chatwoot
+                example: 5
+                format: int64
+                type: integer
+              chatwoot_sign_messages:
+                description: Se deve assinar mensagens enviadas para o WhatsApp
+                example: true
+                type: boolean
+              chatwoot_url:
+                description: URL base da instância Chatwoot
+                example: https://app.chatwoot.com
+                type: string
+            type: object
+      description: Configuração obtida com sucesso
+    '401':
+      description: Token inválido/expirado
+    '500':
+      description: Erro interno do servidor
+  summary: Obter configuração do Chatwoot
+  tags:
+    - Integração Chatwoot
+put:
+  description: |
+    Atualiza a configuração da integração com Chatwoot para a instância.
+
+    ### Funcionalidades:
+    - Configura todos os parâmetros da integração Chatwoot
+    - Reinicializa automaticamente o cliente Chatwoot quando habilitado
+    - Retorna URL do webhook para configurar no Chatwoot
+    - Sincronização bidirecional de mensagens novas entre WhatsApp e Chatwoot
+    - Sincronização automática de contatos (nome e telefone)
+    - Atualização automática LID → PN (Local ID para Phone Number)
+    - Sistema de nomes inteligentes com til (~)
+
+    ### Configuração no Chatwoot:
+    1. Após configurar via API, use a URL retornada no webhook settings da inbox no Chatwoot
+    2. Configure como webhook URL na sua inbox do Chatwoot
+    3. A integração ficará ativa e sincronizará mensagens e contatos automaticamente
+
+    ### 🏷️ Sistema de Nomes Inteligentes:
+    - **Nomes com til (~)**: São atualizados automaticamente quando o contato modifica seu nome no WhatsApp
+    - **Nomes específicos**: Para definir um nome fixo, remova o til (~) do nome no Chatwoot
+    - **Exemplo**: "~João Silva" será atualizado automaticamente, "João Silva" (sem til) permanecerá fixo
+    - **Atualização LID→PN**: Contatos migram automaticamente de Local ID para Phone Number quando disponível
+    - **Sem duplicação**: Durante a migração LID→PN, não haverá duplicação de conversas
+    - **Respostas nativas**: Todas as respostas dos agentes aparecem nativamente no Chatwoot
+
+    ### 🚧 AVISO IMPORTANTE - INTEGRAÇÃO BETA:
+    - **Fase Beta**: Esta integração está em fase de desenvolvimento e testes
+    - **Uso por conta e risco**: O usuário assume total responsabilidade pelo uso
+    - **Recomendação**: Teste em ambiente não-produtivo antes de usar em produção
+    - **Suporte limitado**: Funcionalidades podem mudar sem aviso prévio
+
+    ### ⚠️ Limitações Conhecidas:
+    - **Sincronização de histórico**: Não implementada - apenas mensagens novas são sincronizadas
+  operationId: updateChatwootConfig
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            access_token:
+              description: Token de acesso da API Chatwoot (obtido em Profile Settings > Access Token)
+              example: pXXGHHHyJPYHYgWHJHYHgJjj
+              type: string
+            account_id:
+              description: ID da conta no Chatwoot (visível na URL da conta)
+              example: 1
+              format: int64
+              type: integer
+            create_new_conversation:
+              description: Sempre criar nova conversa ao invés de reutilizar conversas existentes
+              example: false
+              type: boolean
+            enabled:
+              description: Habilitar/desabilitar integração com Chatwoot
+              example: true
+              type: boolean
+            ignore_groups:
+              description: Ignorar mensagens de grupos do WhatsApp na sincronização
+              example: false
+              type: boolean
+            inbox_id:
+              description: ID da inbox no Chatwoot (obtido nas configurações da inbox)
+              example: 5
+              format: int64
+              type: integer
+            sign_messages:
+              description: Assinar mensagens enviadas para WhatsApp com identificação do agente
+              example: true
+              type: boolean
+            url:
+              description: URL base da instância Chatwoot (sem barra final)
+              example: https://app.chatwoot.com
+              type: string
+          required:
+            - enabled
+            - url
+            - access_token
+            - account_id
+            - inbox_id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              chatwoot_inbox_webhook_url:
+                description: URL do webhook para configurar na inbox do Chatwoot
+                example: https://sua-api.com/chatwoot/webhook/inst_abc123
+                type: string
+              message:
+                description: Mensagem de confirmação
+                example: 'Chatwoot config updated successfully, put this URL in Chatwoot inbox webhook settings:'
+                type: string
+            type: object
+      description: Configuração atualizada com sucesso
+    '400':
+      description: Dados inválidos no body da requisição
+    '401':
+      description: Token inválido/expirado
+    '500':
+      description: Erro interno ao salvar configuração
+  summary: Atualizar configuração do Chatwoot
+  tags:
+    - Integração Chatwoot

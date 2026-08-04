@@ -1,0 +1,46 @@
+post:
+  description: "Atualiza os campos administrativos (adminField01/adminField02) de uma instância.\n\nCampos administrativos\
+    \ são opcionais e podem ser usados para armazenar metadados personalizados. \nEstes campos são persistidos no banco de\
+    \ dados e podem ser utilizados para integrações com outros sistemas ou para armazenamento de informações internas.\nOS\
+    \ valores desses campos são vísiveis para o dono da instancia via token, porém apenas o administrador da api (via admin\
+    \ token) pode editá-los.\n"
+  operationId: updateAdminFields
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            adminField01:
+              description: Campo administrativo 1
+              example: clientId_456
+              type: string
+            adminField02:
+              description: Campo administrativo 2
+              example: integration_xyz
+              type: string
+            id:
+              description: ID da instância
+              example: inst_123456
+              type: string
+          required:
+            - id
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            $ref: ../../schemas/instance.yaml#/Instance
+      description: Campos atualizados com sucesso
+    '401':
+      description: Token de administrador inválido
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  security:
+    - admintoken: []
+  summary: Atualizar campos administrativos
+  tags:
+    - Admininstração

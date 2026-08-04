@@ -1,0 +1,199 @@
+post:
+  description: |
+    Envia uma solicitação de pagamento com o botão nativo **"Revisar e pagar"** do WhatsApp.
+    O fluxo suporta PIX (estático, dinâmico ou desabilitado), boleto, link de pagamento e cartão,
+    combinando tudo em uma única mensagem interativa.
+
+    ## Como funciona
+    - Define o valor em `amount` (BRL por padrão) e opcionalmente personaliza título, texto e nota adicional.
+    - Por padrão exige `pixKey`.
+    - O arquivo apontado por `fileUrl` é anexado como documento (boleto ou fatura em PDF, por exemplo).
+    - `paymentLink` habilita o botão externo.
+
+
+
+    ## Campos comuns
+    Este endpoint também suporta os campos padrão: `delay`, `readchat`, `readmessages`, `replyid`,
+    `mentions`, `track_source`, `track_id` e `async`.
+  operationId: sendRequestPayment
+  requestBody:
+    content:
+      application/json:
+        examples:
+          completo:
+            summary: PIX + boleto + link
+            value:
+              amount: 599
+              boletoCode: 23793.38128 60000.000123 45670.000012 3 45670000012345
+              fileName: Clique para abrir o PDF.pdf
+              fileUrl: https://cdn.exemplo.com/boleto-inv-789.pdf
+              footer: footer
+              invoiceNumber: INV-789
+              itemName: Bolo XYZ
+              number: '5511888888888'
+              paymentLink: https://payment-link.pagar.me/checkout/inv-789
+              pixKey: 123e4567-e89b-12d3-a456-426614174000
+              pixName: Empresa Exemplo
+              pixType: EVP
+              text: Plano anual disponível para pagamento
+              title: Assinatura Premium
+          pixEBoleto:
+            summary: PIX + boleto
+            value:
+              additionalNote: Pague via PIX ou utilize o boleto em anexo
+              amount: 349.5
+              boletoCode: 34191.79001 01043.510047 91020.150008 5 91070026000
+              number: '5511999999999'
+              pixKey: '12345678000190'
+              pixName: Loja Exemplo LTDA
+              pixType: CNPJ
+              text: 'Pedido #457 com boleto'
+          pixSimples:
+            summary: PIX simples
+            value:
+              amount: 199.9
+              number: '5511999999999'
+              pixKey: 123e4567-e89b-12d3-a456-426614174000
+              pixType: EVP
+              text: 'Pedido #123 pronto para pagamento'
+        schema:
+          properties:
+            amount:
+              description: Valor da cobrança (em BRL por padrão)
+              example: 199.9
+              format: float
+              type: number
+            async:
+              description: Enfileira o envio para processamento assíncrono
+              type: boolean
+            boletoCode:
+              description: Linha digitável do boleto (habilita o método boleto automaticamente)
+              example: 34191.79001 01043.510047 91020.150008 5 91070026000
+              type: string
+            delay:
+              description: Atraso em milissegundos antes do envio (exibe "digitando..." no WhatsApp)
+              type: integer
+            fileName:
+              description: Nome do arquivo exibido no WhatsApp ao anexar `fileUrl`
+              example: boleto-123.pdf
+              type: string
+            fileUrl:
+              description: 'URL ou caminho (base64) do documento a ser anexado (ex.: boleto PDF)'
+              example: https://cdn.exemplo.com/boleto-123.pdf
+              type: string
+            footer:
+              description: Texto do rodapé da mensagem
+              example: Loja Exemplo
+              type: string
+            invoiceNumber:
+              description: Identificador ou número da fatura
+              example: PED-123
+              type: string
+            itemName:
+              description: Nome do item principal listado no fluxo
+              example: Assinatura Plano Ouro
+              type: string
+            mentions:
+              description: Números mencionados separados por vírgula
+              type: string
+            number:
+              description: ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato internacional,
+                um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+              example: '5511999999999'
+              type: string
+            paymentLink:
+              description: URL externa para checkout (somente dominios homologados; veja lista acima)
+              example: https://pagamentos.exemplo.com/checkout/abc
+              type: string
+            pixKey:
+              description: Chave PIX estático (CPF/CNPJ/telefone/email/EVP)
+              example: 123e4567-e89b-12d3-a456-426614174000
+              type: string
+            pixName:
+              description: Nome do recebedor exibido no fluxo (padrão usa o nome do perfil da instância)
+              example: Loja Exemplo
+              type: string
+            pixType:
+              description: Tipo da chave PIX (`CPF`, `CNPJ`, `PHONE`, `EMAIL`, `EVP`). Padrão `EVP`
+              example: EVP
+              type: string
+            readchat:
+              description: Marca o chat como lido após enviar a mensagem
+              type: boolean
+            readmessages:
+              description: Marca mensagens recentes como lidas após o envio
+              type: boolean
+            replyid:
+              description: ID da mensagem que será respondida
+              type: string
+            text:
+              description: Mensagem exibida no corpo do fluxo
+              example: 'Pedido #123 pronto para pagamento'
+              type: string
+            title:
+              description: Título que aparece no cabeçalho do fluxo
+              example: Detalhes do pedido
+              type: string
+            track_id:
+              description: Identificador de rastreamento (aceita valores duplicados)
+              type: string
+            track_source:
+              description: 'Origem de rastreamento (ex.: chatwoot, crm-interno)'
+              type: string
+          required:
+            - number
+            - amount
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: ../../schemas/message.yaml#/Message
+              - properties:
+                  response:
+                    properties:
+                      message:
+                        example: Payment request sent successfully
+                        type: string
+                      status:
+                        example: success
+                        type: string
+                    type: object
+                type: object
+      description: Solicitação de pagamento enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Missing pixKey or pixCode
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid token
+                type: string
+            type: object
+      description: Não autorizado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to send payment request
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Solicitar pagamento
+  tags:
+    - Enviar Mensagem

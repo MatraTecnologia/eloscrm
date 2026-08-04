@@ -1,0 +1,96 @@
+post:
+  description: |
+    Retorna uma lista paginada de contatos da conta do WhatsApp atualmente conectada.
+    Use este endpoint (POST) para controlar `limit` e `offset` via corpo da requisicao.
+    O campo `contactScope` permite escolher entre contatos da agenda, fora da agenda ou todos os contatos conhecidos.
+    A rota GET `/contacts` continua disponivel para quem prefere a lista completa sem paginacao.
+  operationId: listContacts
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            contactScope:
+              default: address_book
+              description: Define se a busca retorna apenas contatos da agenda, apenas fora da agenda ou todos os contatos
+                conhecidos.
+              enum:
+                - address_book
+                - outside_address_book
+                - all
+              type: string
+            limit:
+              default: 100
+              description: Quantidade maxima de resultados por pagina (padrao 100, maximo 1000)
+              type: integer
+            offset:
+              default: 0
+              description: Deslocamento base zero para paginacao
+              type: integer
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              contacts:
+                items:
+                  properties:
+                    contact_FirstName:
+                      description: Primeiro nome do contato
+                      example: Joao
+                      type: string
+                    contact_name:
+                      description: Nome completo do contato (quando salvo)
+                      example: Joao Silva
+                      type: string
+                    jid:
+                      description: 'ID unico do contato no WhatsApp (formato: numero@s.whatsapp.net)'
+                      example: 5511999999999@s.whatsapp.net
+                      type: string
+                  type: object
+                type: array
+              pagination:
+                properties:
+                  limit:
+                    description: Limite aplicado na pagina atual
+                    type: integer
+                  offset:
+                    description: Offset efetivamente usado na pagina atual
+                    type: integer
+                  totalRecords:
+                    description: Total de contatos apos filtragem
+                    type: integer
+                type: object
+              totalDeviceContacts:
+                description: Total bruto de contatos no dispositivo
+                type: integer
+            type: object
+      description: Lista de contatos recuperada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Token nao fornecido ou invalido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar contatos
+  security:
+    - token: []
+  summary: Listar todos os contatos com paginacao
+  tags:
+    - Contatos

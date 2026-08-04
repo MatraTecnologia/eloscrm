@@ -1,0 +1,126 @@
+post:
+  description: |
+    Atualiza as labels associadas a um chat específico. Este endpoint oferece três modos de operação:
+
+    1. **Definir todas as labels** (labelids): Define o conjunto completo de labels para o chat, substituindo labels existentes
+    2. **Adicionar uma label** (add_labelid): Adiciona uma única label ao chat sem afetar as existentes
+    3. **Remover uma label** (remove_labelid): Remove uma única label do chat sem afetar as outras
+
+    **Importante**: Use apenas um dos três parâmetros por requisição. Labels inexistentes serão rejeitadas.
+
+    As labels devem ser fornecidas no formato id ou labelid encontradas na função get labels.
+  operationId: setChatLabels
+  requestBody:
+    content:
+      application/json:
+        examples:
+          adicionar_label:
+            description: Adiciona uma única label sem afetar as existentes
+            summary: Adicionar uma label ao chat
+            value:
+              add_labelid: '10'
+              number: '5511999999999'
+          definir_todas_labels:
+            description: Define o conjunto completo de labels, substituindo as existentes
+            summary: Definir todas as labels do chat
+            value:
+              labelids:
+                - '10'
+                - '20'
+                - '30'
+              number: '5511999999999'
+          remover_label:
+            description: Remove uma única label sem afetar as outras
+            summary: Remover uma label do chat
+            value:
+              number: '5511999999999'
+              remove_labelid: '20'
+        schema:
+          oneOf:
+            - required:
+                - labelids
+            - required:
+                - add_labelid
+            - required:
+                - remove_labelid
+          properties:
+            add_labelid:
+              description: ID da label a ser adicionada ao chat
+              example: '10'
+              type: string
+            labelids:
+              description: Lista de IDs das labels a serem aplicadas ao chat (define todas as labels)
+              example:
+                - '10'
+                - '20'
+              items:
+                type: string
+              type: array
+            number:
+              description: Número do chat ou grupo
+              example: '5511999999999'
+              type: string
+            remove_labelid:
+              description: ID da label a ser removida do chat
+              example: '20'
+              type: string
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            adicionar_label:
+              summary: Resposta para adicionar uma label
+              value:
+                response: Label added to chat
+            definir_todas_labels:
+              summary: Resposta para definir todas as labels
+              value:
+                editions:
+                  - Added label 10 to chat
+                  - Added label 20 to chat
+                  - Removed label 5 from chat
+                response: Labels updated successfully
+            remover_label:
+              summary: Resposta para remover uma label
+              value:
+                response: Label removed from chat
+          schema:
+            properties:
+              editions:
+                description: Lista de operações realizadas (apenas para operação labelids)
+                items:
+                  type: string
+                type: array
+              response:
+                description: Mensagem de confirmação
+                type: string
+            type: object
+      description: Labels atualizadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'Use only one operation: labelids, add_labelid, or remove_labelid'
+                type: string
+            type: object
+      description: Erro na requisição
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Chat not found
+                type: string
+            type: object
+      description: Chat não encontrado
+  summary: Gerencia labels de um chat
+  tags:
+    - Etiquetas

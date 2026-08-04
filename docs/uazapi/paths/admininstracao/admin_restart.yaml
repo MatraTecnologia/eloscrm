@@ -1,0 +1,32 @@
+post:
+  description: |
+    Reinicia toda a aplicação para forçar a reconexão de todas as instâncias de uma vez.
+
+    Use apenas em situações realmente necessárias, como instabilidades gerais.
+    Após o restart, os números entram em reconexão automática e não ficam desconectados permanentemente.
+  responses:
+    '202':
+      content:
+        application/json:
+          schema:
+            properties:
+              message:
+                description: Mensagem de sucesso.
+                type: string
+            type: object
+      description: Reinicio agendado com sucesso
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao agendar o reinicio
+  security:
+    - admintoken: []
+  summary: Reiniciar a aplicação
+  tags:
+    - Admininstração

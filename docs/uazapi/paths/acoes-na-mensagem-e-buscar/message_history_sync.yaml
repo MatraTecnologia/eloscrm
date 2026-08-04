@@ -1,0 +1,158 @@
+post:
+  description: |
+    Solicita ao WhatsApp um sync sob demanda de mensagens antigas de um chat
+    ou tenta recuperar uma mensagem exata já conhecida localmente.
+
+    Modos suportados:
+    - `history` (padrão): busca histórico para trás a partir de uma mensagem âncora
+    - `exact`: tenta recarregar a mensagem exata informada em `messageid`
+
+    Regras:
+    - envie `number`
+    - `mode` é opcional; quando omitido, assume `history`
+    - em `mode=history`, `count` é opcional e limitado a 100
+    - em `mode=history`, `messageid` é opcional; quando informado, a API usa essa mensagem como referência para buscar mensagens mais antigas do chat
+    - em `mode=exact`, `messageid` é obrigatório e `count` não é necessário
+
+    Observação:
+    - **Importante:** a recuperação pode só acontecer depois de abrir o WhatsApp no celular ou deixá-lo ativo em segundo plano
+    - em `mode=history`, `messageid` define a mensagem de referência para carregar histórico anterior
+    - em `mode=history`, esse campo não serve para buscar essa mensagem específica
+    - em `mode=history`, o histórico é buscado para trás a partir da mensagem de referência informada
+    - se você quiser recuperar apenas uma mensagem específica `X` via histórico, informe como `messageid` a mensagem logo depois de `X` e use `count=1`
+    - se `messageid` não for informado em `mode=history`, a API usa a mensagem mais antiga conhecida localmente desse chat como referência para buscar histórico anterior
+    - em `mode=exact`, a API tenta um rerequest da mensagem exata informada em `messageid`
+    - **`mode=exact` está em teste** e funciona melhor quando a mensagem já existe no histórico local da instância
+    - as mensagens retornam depois via webhook/SSE em eventos do tipo `history` e também ficam disponíveis em `/message/find`
+  operationId: requestHistorySync
+  requestBody:
+    content:
+      application/json:
+        examples:
+          recuperar_mensagem_especifica:
+            summary: Recuperar apenas a mensagem imediatamente anterior à referência
+            value:
+              count: 1
+              messageid: 3EB0MENSAGEM_LOGO_APOS_X
+              mode: history
+              number: 5511999999999@s.whatsapp.net
+          recuperar_mensagem_exata:
+            summary: Recuperar a mensagem exata informada
+            value:
+              messageid: 3EB01234567890ABCDEF
+              mode: exact
+              number: 5511999999999@s.whatsapp.net
+          usando_ancora_explicita:
+            summary: Buscar histórico anterior a uma mensagem de referência
+            value:
+              count: 20
+              messageid: 3EB01234567890ABCDEF
+              mode: history
+              number: 5511999999999@s.whatsapp.net
+          usando_ancora_local:
+            summary: Reutilizar âncora local já persistida
+            value:
+              count: 50
+              mode: history
+              number: 5511999999999@s.whatsapp.net
+        schema:
+          properties:
+            count:
+              description: Quantidade desejada de mensagens no sync em `mode=history`. Em `mode=exact`, este campo é ignorado.
+              example: 20
+              maximum: 100
+              minimum: 1
+              type: integer
+            messageid:
+              description: |
+                Em `mode=history`, ID da mensagem de referência usada para buscar mensagens mais antigas do chat.
+                Em `mode=exact`, ID exato da mensagem que deve ser recarregada.
+              example: 3EB01234567890ABCDEF
+              type: string
+            mode:
+              default: history
+              description: |
+                Define o comportamento da operação.
+                - `history`: busca mensagens mais antigas a partir de uma âncora
+                - `exact`: tenta recuperar a mensagem exata informada em `messageid`
+              enum:
+                - history
+                - exact
+              example: history
+              type: string
+            number:
+              description: JID completo do chat. Mantido obrigatório em todos os modos para simplificar o contrato público
+                e restringir a busca ao chat esperado.
+              example: 5511999999999@s.whatsapp.net
+              type: string
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            async_padrão:
+              summary: Solicitação de histórico enviada
+              value:
+                message: History sync request sent. Messages will be received as history sync events.
+                mode: history
+                success: true
+            exact_padrão:
+              summary: Solicitação de mensagem exata enviada
+              value:
+                message: Exact message reload request sent. The message will be received if available.
+                mode: exact
+                success: true
+          schema:
+            properties:
+              details:
+                additionalProperties: true
+                description: Metadados adicionais da operação
+                type: object
+              message:
+                example: History sync request sent. Messages will be received as history sync events.
+                type: string
+              mode:
+                example: history
+                type: string
+              success:
+                example: true
+                type: boolean
+            type: object
+      description: Solicitação enviada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: number is required
+                type: string
+            type: object
+      description: Payload inválido, modo inválido ou âncora insuficiente
+    '404':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: messageid not found in local history for chat; use mode=history to fetch older messages first
+                type: string
+            type: object
+      description: Mensagem exata não encontrada no histórico local
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'Failed to request history: connection closed'
+                type: string
+            type: object
+      description: Erro interno ao solicitar o history sync ou o rerequest exato
+  summary: Solicitar histórico sob demanda de um chat
+  tags:
+    - Ações na mensagem e Buscar

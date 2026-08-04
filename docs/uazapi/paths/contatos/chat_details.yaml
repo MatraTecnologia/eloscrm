@@ -1,0 +1,143 @@
+post:
+  description: |
+    Retorna informações **completas** sobre um contato ou chat, incluindo **todos os campos disponíveis** do modelo Chat.
+
+    ### Funcionalidades:
+    - **Retorna chat completo**: Todos os campos do modelo Chat (mais de 60 campos)
+    - **Busca informações para contatos individuais e grupos**
+    - **URLs de imagem em dois tamanhos**: preview (menor) ou full (original)
+    - **Combina informações de diferentes fontes**: WhatsApp, contatos salvos, leads
+    - **Atualiza automaticamente dados desatualizados** no banco
+
+    ### Campos Retornados:
+    - **Informações básicas**: id, wa_fastid, wa_chatid, owner, name, phone
+    - **Dados do WhatsApp**: wa_name, wa_contactName, wa_archived, wa_isBlocked, etc.
+    - **Dados de lead/CRM**: lead_name, lead_email, lead_status, lead_field01-20, etc.
+    - **Informações de grupo**: wa_isGroup, wa_isGroup_admin, wa_isGroup_announce, etc.
+    - **Chatbot**: chatbot_summary, chatbot_lastTrigger_id, chatbot_disableUntil, etc.
+    - **Configurações**: wa_muteEndTime, wa_isPinned, wa_unreadCount, etc.
+
+    **Comportamento**:
+    - Para contatos individuais:
+      - Busca nome verificado do WhatsApp
+      - Verifica nome salvo nos contatos
+      - Formata número internacional
+      - Calcula grupos em comum
+    - Para grupos:
+      - Busca nome do grupo
+      - Verifica status de comunidade
+  operationId: getChatDetails
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            number:
+              description: Número do telefone ou ID do grupo
+              example: '5511999999999'
+              type: string
+            preview:
+              default: false
+              description: |
+                Controla o tamanho da imagem de perfil retornada:
+                - `true`: Retorna imagem em tamanho preview (menor, otimizada para listagens)
+                - `false` (padrão): Retorna imagem em tamanho full (resolução original, maior qualidade)
+              type: boolean
+          required:
+            - number
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            contact_example:
+              description: Exemplo de resposta para um contato individual
+              summary: Contato individual
+              value:
+                common_groups: Grupo Família(120363123456789012@g.us),Trabalho(987654321098765432@g.us)
+                id: r1a2b3c4d5e6f7
+                image: https://pps.whatsapp.net/v/t61.24694-24/12345_image.jpg
+                lead_email: joao@exemplo.com
+                lead_fullName: João Silva
+                lead_name: João
+                lead_status: ativo
+                name: João Silva
+                owner: admin
+                phone: +55 11 99999-9999
+                wa_archived: false
+                wa_chatid: 5511999999999@s.whatsapp.net
+                wa_contactName: João Silva
+                wa_fastid: admin:5511999999999
+                wa_isBlocked: false
+                wa_isGroup: false
+                wa_name: João Silva
+            group_example:
+              description: Exemplo de resposta para um grupo
+              summary: Grupo
+              value:
+                id: r9z8y7x6w5v4u3
+                image: https://pps.whatsapp.net/v/t61.24694-24/67890_group.jpg
+                name: Grupo Família
+                owner: admin
+                phone: ''
+                wa_archived: false
+                wa_chatid: 120363123456789012@g.us
+                wa_fastid: admin:120363123456789012@g.us
+                wa_isBlocked: false
+                wa_isGroup: true
+                wa_isGroup_admin: true
+                wa_isGroup_announce: false
+                wa_isGroup_community: false
+                wa_isGroup_member: true
+                wa_name: Grupo Família
+          schema:
+            allOf:
+              - $ref: ../../schemas/chat.yaml#/Chat
+              - properties:
+                  common_groups:
+                    description: 'Grupos em comum separados por vírgula, formato: nome_grupo(id_grupo)'
+                    example: Grupo Família(120363123456789012@g.us),Trabalho(987654321098765432@g.us)
+                    type: string
+                  image:
+                    description: URL da imagem de perfil em tamanho full (resolução original) - apenas se preview=false
+                    type: string
+                  imagePreview:
+                    description: URL da imagem de perfil em tamanho preview (menor) - apenas se preview=true
+                    type: string
+                type: object
+      description: Informações completas do chat retornadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid request payload
+                type: string
+            type: object
+      description: Payload inválido ou número inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token não fornecido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: No session
+                type: string
+            type: object
+      description: Erro interno do servidor ou sessão não iniciada
+  summary: Obter Detalhes Completos
+  tags:
+    - Contatos

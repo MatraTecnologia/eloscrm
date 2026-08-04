@@ -1,0 +1,69 @@
+post:
+  description: |
+    Define quem tem permissão para adicionar novos participantes diretamente ao grupo.
+    No objeto retornado em `group` e também em `/group/info`, esse estado aparece no campo `MemberAddMode`.
+
+    Valores aceitos em `MemberAddMode`:
+    - `admin_add`: apenas administradores podem adicionar membros
+    - `all_member_add`: qualquer participante pode adicionar membros
+
+    Requer que o usuário seja administrador do grupo.
+  operationId: updateGroupMemberAddMode
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            MemberAddMode:
+              description: Define quem pode adicionar novos membros ao grupo; reflete no campo `MemberAddMode`
+              enum:
+                - admin_add
+                - all_member_add
+              example: admin_add
+              type: string
+            groupjid:
+              description: Identificador único do grupo no formato xxxx@g.us
+              example: 120363339858396166@g.us
+              type: string
+          required:
+            - groupjid
+            - MemberAddMode
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            success:
+              summary: Apenas admins podem adicionar membros
+              value:
+                group:
+                  JID: 120363339858396166@g.us
+                  MemberAddMode: admin_add
+                needs_refresh: false
+                response: Group member add mode set to admin_add successfully
+          schema:
+            properties:
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisa ser atualizado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Group member add mode set to admin_add successfully
+                type: string
+            type: object
+      description: Configuração atualizada com sucesso
+    '400':
+      description: Valor inválido para MemberAddMode
+    '403':
+      description: Usuário não é administrador do grupo
+    '404':
+      description: Grupo não encontrado
+    '500':
+      description: Erro interno do servidor ou falha na API do WhatsApp
+  summary: Configurar quem pode adicionar novos membros ao grupo
+  tags:
+    - Grupos e Comunidades

@@ -1,0 +1,279 @@
+post:
+  description: |
+    Envia um status do WhatsApp com suporte para texto, imagem, vídeo e áudio.
+
+    Este endpoint possui 3 modos de uso:
+
+    - envio normal: omita `recipients` e `max_recipients`
+    - envio explícito: informe `recipients` para enviar apenas para números específicos; o backend aproveita os válidos e descarta os inválidos com motivo no `debug`
+    - envio parcial: informe `max_recipients` para limitar a audiência ou aplicar um cap de segurança sobre `recipients`
+
+    ## Observação importante sobre `recipients`
+    Quando `recipients` é informado, o backend:
+
+    - aceita números em formato WhatsApp, JIDs `@s.whatsapp.net` e JIDs `@lid`
+    - quando recebe `@lid`, primeiro tenta resolver esse identificador para o PN (`@s.whatsapp.net`) usando o cache local de LID do WhatsApp
+    - se o `@lid` não puder ser resolvido para PN, esse item é descartado com motivo `lid_unresolved`
+    - valida se o destinatário existe no WhatsApp usando o mesmo fluxo de verificação do envio normal, com batch para evitar uma chamada remota por recipient
+    - cruza os destinatários verificados com a audiência atual permitida pela privacidade do status, aceitando equivalência PN/LID quando o cache local conhece esse vínculo
+    - recipients descartados aparecem em `debug.discarded_recipients`, com motivos como `invalid_format`, `lid_unresolved`, `not_on_whatsapp`, `outside_status_audience` e `duplicate`
+    - a requisição só retorna `400` quando nenhum recipient válido sobra para envio
+
+    ## Observação importante sobre `max_recipients`
+    O campo `max_recipients` foi adicionado como mitigação operacional.
+    Já observamos casos em que o WhatsApp bloqueia imediatamente o envio de status quando a audiência é muito grande
+    (por exemplo, agendas com milhares de contatos, como ~3.000).
+    A causa exata ainda não está totalmente clara, então a recomendação é começar com limites menores e aumentar gradualmente.
+
+    ## Tipos suportados
+    - `text`: texto com cor de fundo e fonte
+    - `image`: imagem com legenda opcional
+    - `video`: vídeo com legenda opcional
+    - `audio`: áudio normal
+    - `myaudio`: áudio enviado como voz
+    - `ptt`: áudio enviado como voz
+
+    ## Cores de fundo
+    Informe um valor de `1` a `19`. O backend converte esse índice para a cor ARGB usada pelo WhatsApp.
+
+    - `1`: amarelo esverdeado suave
+    - `2`: amarelo pálido
+    - `3`: amarelo alaranjado vibrante
+    - `4`: verde vibrante
+    - `5`: verde musgo
+    - `6`: verde claro
+    - `7`: azul piscina
+    - `8`: azul intenso
+    - `9`: azul claro acinzentado
+    - `10`: lilás claro
+    - `11`: lilás quente
+    - `12`: roxo azulado
+    - `13`: magenta profundo
+    - `14`: rosa suave
+    - `15`: salmão rosado
+    - `16`: marrom claro
+    - `17`: cinza claro azulado
+    - `18`: cinza médio
+    - `19`: cinza profundo padrão
+
+    Exemplo rápido:
+    - `7`: azul piscina
+    - `13`: magenta profundo
+    - `19`: cinza profundo (padrão)
+
+    ## Fontes válidas para `type=text`
+    Valores aceitos atualmente: `0`, `1`, `2`, `6`, `7`, `8`, `9`, `10`.
+
+    ## Limites
+    - `text`: máximo de 656 caracteres
+    - `max_recipients`: não pode ser negativo
+    - `recipients`: aceita números, JIDs `@s.whatsapp.net` e JIDs `@lid`
+    - `@lid` só entra no envio quando puder ser resolvido localmente para um PN válido; caso contrário, é descartado
+    - para tipos de mídia, `file` é obrigatório
+
+    Exemplo de envio explícito:
+    ```json
+    {
+      "type": "text",
+      "text": "Novidades chegando!",
+      "recipients": [
+        "5511999999999",
+        "5511888888888@s.whatsapp.net"
+      ]
+    }
+    ```
+
+    Exemplo de envio parcial:
+    ```json
+    {
+      "type": "text",
+      "text": "Novidades chegando!",
+      "background_color": 7,
+      "font": 1,
+      "max_recipients": 100
+    }
+    ```
+  operationId: sendStatus
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            background_color:
+              description: Índice da cor de fundo para status em texto.
+              example: 7
+              maximum: 19
+              minimum: 1
+              type: integer
+            file:
+              description: URL ou base64 do arquivo de mídia.
+              example: https://example.com/video.mp4
+              type: string
+            font:
+              description: Fonte aceita para `type=text`.
+              enum:
+                - 0
+                - 1
+                - 2
+                - 6
+                - 7
+                - 8
+                - 9
+                - 10
+              example: 1
+              type: integer
+            max_recipients:
+              description: Limita o envio a um subconjunto determinístico da audiência. Quando `recipients` for informado,
+                funciona como cap de segurança sobre a lista explícita já validada.
+              example: 100
+              minimum: 0
+              type: integer
+            mimetype:
+              description: MIME type do arquivo, quando necessário.
+              example: video/mp4
+              type: string
+            recipients:
+              description: Lista explícita de destinatários. Aceita números em formato WhatsApp, JIDs `@s.whatsapp.net` e
+                JIDs `@lid`. O backend valida item a item, descarta os inválidos com motivo no `debug` e envia para o subconjunto
+                válido restante. Entradas `@lid` dependem de resolução local para PN.
+              example:
+                - '5511999999999'
+                - 5511888888888@s.whatsapp.net
+              items:
+                type: string
+              type: array
+            text:
+              description: Texto principal ou legenda.
+              example: Novidades chegando!
+              type: string
+            thumbnail:
+              description: Campo aceito no payload; o backend gera thumbnail automaticamente quando necessário.
+              example: https://example.com/thumb.jpg
+              type: string
+            type:
+              description: Tipo do status.
+              enum:
+                - text
+                - image
+                - video
+                - audio
+                - myaudio
+                - ptt
+              example: text
+              type: string
+          required:
+            - type
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              Id:
+                description: ID da mensagem quando há envio real.
+                example: ABCD1234
+                type: string
+              content:
+                description: Conteúdo processado da mensagem quando há envio real.
+                type: object
+              debug:
+                description: Métricas agregadas da audiência e da seleção aplicada.
+                properties:
+                  audience_recipient_count:
+                    example: 245
+                    type: integer
+                  contacts_with_business_name_only:
+                    example: 23
+                    type: integer
+                  contacts_with_full_name:
+                    example: 245
+                    type: integer
+                  contacts_with_push_name_only:
+                    example: 32
+                    type: integer
+                  discarded_recipient_count:
+                    example: 5
+                    type: integer
+                  discarded_recipients:
+                    items:
+                      properties:
+                        input:
+                          example: 144637553594388@lid
+                          type: string
+                        reason:
+                          example: lid_unresolved
+                          type: string
+                      type: object
+                    type: array
+                  explicit_recipients:
+                    example: true
+                    type: boolean
+                  max_recipients:
+                    example: 100
+                    type: integer
+                  partial_send:
+                    example: true
+                    type: boolean
+                  privacy_lookup_error:
+                    example: privacy unavailable
+                    type: string
+                  requested_recipient_count:
+                    example: 25
+                    type: integer
+                  resolved_recipient_count:
+                    example: 20
+                    type: integer
+                  selected_recipient_count:
+                    example: 100
+                    type: integer
+                  status_privacy_type:
+                    example: contacts
+                    type: string
+                  total_contacts_in_store:
+                    example: 300
+                    type: integer
+                  used_default_privacy_fallback:
+                    example: false
+                    type: boolean
+                type: object
+              messageTimestamp:
+                description: Timestamp em milissegundos quando há envio real.
+                example: 1672531200000
+                type: integer
+              status:
+                description: Status do envio quando há envio real.
+                example: Pending
+                type: string
+            type: object
+      description: Status enviado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              debug:
+                description: Presente especialmente quando `recipients` foi informado, para indicar quais itens foram descartados
+                  antes de concluir que nenhum recipient válido sobrou.
+                type: object
+              error:
+                example: Invalid font
+                type: string
+            type: object
+      description: Requisição inválida
+    '401':
+      description: Não autorizado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'failed to determine status audience: privacy unavailable'
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Enviar status (stories)
+  tags:
+    - Enviar Mensagem

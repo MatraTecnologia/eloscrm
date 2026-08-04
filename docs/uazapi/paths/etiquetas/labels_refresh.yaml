@@ -1,0 +1,86 @@
+post:
+  description: |
+    Inicia uma nova leitura das etiquetas no WhatsApp em background.
+    A resposta confirma apenas que a recarga foi iniciada ou que já existe uma recarga em andamento.
+    Para obter a lista atualizada, consulte `GET /labels` depois.
+
+    Efeitos no backend:
+    - a recarga também processa associações de etiquetas sincronizadas do WhatsApp
+    - chats existentes podem ter o campo `wa_label` atualizado com as etiquetas corretas
+    - quando uma associação de etiqueta muda após a sincronização do histórico, o webhook `chat_labels` pode ser enviado com os dados completos do chat
+
+    Uso recomendado:
+    - tente primeiro com `force=false`
+    - se isso não trouxer as etiquetas corretamente, tente `force=true`
+    - use `force=true` apenas como tentativa de correção, porque ele faz uma recarga mais pesada
+  operationId: refreshLabels
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            force:
+              default: false
+              description: |
+                Tente primeiro com `false`.
+                Use `true` apenas quando a recarga padrão não funcionar bem,
+                pois esse modo faz uma nova leitura mais completa das etiquetas.
+              example: false
+              type: boolean
+          type: object
+    required: false
+  responses:
+    '202':
+      content:
+        application/json:
+          schema:
+            properties:
+              force:
+                example: false
+                type: boolean
+              fullSync:
+                example: false
+                type: boolean
+              message:
+                example: Label refresh started. Use GET /labels to fetch the refreshed list.
+                type: string
+              status:
+                enum:
+                  - started
+                  - in_progress
+                example: started
+                type: string
+              success:
+                example: true
+                type: boolean
+            required:
+              - success
+              - status
+              - message
+              - force
+              - fullSync
+            type: object
+      description: Recarga de etiquetas aceita para processamento em background
+    '409':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: history sync still in progress, try again in a moment
+                type: string
+            type: object
+      description: A recarga não pôde ser executada porque a sincronização do histórico ainda está em andamento
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: failed to reload labels from WhatsApp
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Iniciar recarga de etiquetas do WhatsApp
+  tags:
+    - Etiquetas

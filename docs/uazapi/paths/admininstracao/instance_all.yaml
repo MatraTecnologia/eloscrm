@@ -1,0 +1,76 @@
+get:
+  description: |
+    Retorna uma lista completa de todas as instâncias do sistema, incluindo:
+    - ID e nome de cada instância
+    - Status atual (disconnected, connecting, connected, hibernated)
+    - Data de criação
+    - Última desconexão e motivo
+    - Informações de perfil (se conectado)
+
+    Requer permissões de administrador.
+  operationId: listAllInstances
+  responses:
+    '200':
+      content:
+        application/json:
+          example:
+            - created: '2024-01-01T12:00:00.000Z'
+              id: r183e2ef9597845
+              isBusiness: true
+              name: instancia-1
+              owner: user@example.com
+              plataform: Android
+              profileName: Meu WhatsApp
+              profilePicUrl: https://example.com/profile.jpg
+              status: connected
+              systemName: uazapi
+              token: abc123xyz
+              updated: '2024-01-01T12:30:00.000Z'
+            - created: '2024-01-02T12:00:00.000Z'
+              id: r283e2ef9597846
+              lastDisconnect: '2024-01-02T12:00:00.000Z'
+              lastDisconnectReason: manual disconnect
+              name: instancia-2
+              status: disconnected
+              token: def456xyz
+              updated: '2024-01-02T12:30:00.000Z'
+          schema:
+            items:
+              $ref: ../../schemas/instance.yaml#/Instance
+            type: array
+      description: Lista de instâncias retornada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Invalid AdminToken Header
+                type: string
+            type: object
+      description: Token de administrador inválido
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Internal server error
+                type: string
+            type: object
+      description: Erro interno do servidor
+  security:
+    - admintoken: []
+  summary: Listar todas as instâncias
+  tags:
+    - Admininstração

@@ -1,0 +1,26 @@
+get:
+  description: |
+    Retorna a lista completa de etiquetas da instância.
+  operationId: listLabels
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            items:
+              $ref: ../../schemas/label.yaml#/Label
+            type: array
+      description: Lista de etiquetas retornada com sucesso
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Failed to fetch labels from database
+                type: string
+            type: object
+      description: Erro interno do servidor
+  summary: Buscar todas as etiquetas
+  tags:
+    - Etiquetas

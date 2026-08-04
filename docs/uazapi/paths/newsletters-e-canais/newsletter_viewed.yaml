@@ -1,0 +1,71 @@
+post:
+  description: |
+    Marca um ou mais posts do canal como visualizados usando `serverid`.
+
+    Observações:
+    - envie `serverids` com uma lista de posts
+  operationId: markNewsletterViewed
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+            serverids:
+              example:
+                - 12345
+                - 12346
+              items:
+                type: integer
+              type: array
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Posts marcados como visualizados
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: serverids is required
+                type: string
+            type: object
+      description: Payload inválido ou faltando `serverids`
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao marcar visualização
+  summary: Marcar posts do canal como visualizados
+  tags:
+    - Newsletters e Canais

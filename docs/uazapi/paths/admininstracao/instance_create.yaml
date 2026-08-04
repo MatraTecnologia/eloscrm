@@ -1,0 +1,69 @@
+post:
+  description: "Cria uma nova instância do WhatsApp. Para criar uma instância você precisa:\n\n1. Ter um admintoken válido\n\
+    2. Enviar pelo menos o nome da instância\n3. A instância será criada desconectada\n4. Será gerado um token único para\
+    \ autenticação\n\nApós criar a instância, guarde o token retornado pois ele será necessário\npara todas as outras operações.\n\
+    \nEstados possíveis da instância:\n\n- `disconnected`: Desconectado do WhatsApp\n- `connecting`: Em processo de conexão\n\
+    - `connected`: Conectado e autenticado\n- `hibernated`: Sessão pausada, com credenciais preservadas para reconexão\n\nCampos administrativos (adminField01/adminField02) são opcionais e podem ser\
+    \ usados para armazenar metadados personalizados. \nOS valores desses campos são vísiveis para o dono da instancia via\
+    \ token, porém apenas o administrador da api (via admin token) pode editá-los.\n"
+  operationId: createInstance
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            adminField01:
+              description: Campo administrativo 1 para metadados personalizados (opcional)
+              example: custom-metadata-1
+              type: string
+            adminField02:
+              description: Campo administrativo 2 para metadados personalizados (opcional)
+              example: custom-metadata-2
+              type: string
+            name:
+              description: Nome da instância
+              example: minha-instancia
+              type: string
+          required:
+            - name
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              connected:
+                example: false
+                type: boolean
+              info:
+                example: This instance will be automatically disconnected and deleted after 1 hour.
+                type: string
+              instance:
+                $ref: ../../schemas/instance.yaml#/Instance
+              loggedIn:
+                example: false
+                type: boolean
+              name:
+                example: minha-instancia
+                type: string
+              response:
+                example: Instance created successfully
+                type: string
+              token:
+                example: 123e4567-e89b-12d3-a456-426614174000
+                type: string
+            type: object
+      description: Sucesso
+    '401':
+      description: Token inválido/expirado
+    '404':
+      description: Instância não encontrada
+    '500':
+      description: Erro interno
+  security:
+    - admintoken: []
+  summary: Criar Instancia
+  tags:
+    - Admininstração

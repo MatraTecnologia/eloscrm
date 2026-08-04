@@ -1,0 +1,151 @@
+post:
+  description: |
+    Busca diretamente no WhatsApp os posts/mensagens de um canal (newsletter).
+
+    Esta rota não depende de mensagens salvas localmente e é útil para:
+    - carregar o histórico recente de posts de um canal
+    - paginar mensagens anteriores usando `beforeid`
+    - consumir conteúdo de newsletters sem persistência em banco
+
+    Identificação do canal:
+    - envie `id` com o identificador numérico do canal; o backend converte para `@newsletter`
+    - ou envie `jid` completo no formato `1234567890@newsletter`
+
+    Observações:
+    - `count` controla quantos posts retornar
+    - use preferencialmente `beforeid`
+    - `beforeid` pagina para trás a partir de um `serverid`
+    - o retorno vem no campo `response`
+  operationId: getNewsletterMessages
+  requestBody:
+    content:
+      application/json:
+        examples:
+          basico:
+            summary: Buscar últimos posts do canal
+            value:
+              count: 20
+              id: '120363123456789012'
+          paginacao:
+            summary: Buscar posts anteriores a um server id
+            value:
+              beforeid: 12345
+              count: 20
+              jid: 120363123456789012@newsletter
+        schema:
+          properties:
+            beforeid:
+              description: |
+                Retorna mensagens anteriores ao `serverid` informado.
+                Use para paginação retroativa.
+              example: 12345
+              minimum: 1
+              type: integer
+            count:
+              description: Quantidade de mensagens/posts a buscar.
+              example: 20
+              minimum: 1
+              type: integer
+            id:
+              description: ID numérico do canal. Se informado sem domínio, será convertido para `@newsletter`.
+              example: '120363123456789012'
+              type: string
+            jid:
+              description: JID completo do canal.
+              example: 120363123456789012@newsletter
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso:
+              value:
+                response:
+                  - message:
+                      conversation: Post do canal
+                    messageid: 3EB0B4302B3A8A52F7A1
+                    reactionCounts:
+                      👍: 22
+                      🔥: 7
+                    serverid: 12345
+                    timestamp: '2026-03-24T18:20:00Z'
+                    type: text
+                    viewsCount: 1200
+          schema:
+            properties:
+              response:
+                description: Lista de mensagens/posts do canal retornados diretamente pelo WhatsApp.
+                items:
+                  properties:
+                    message:
+                      additionalProperties: true
+                      description: Conteúdo bruto da mensagem retornado pelo WhatsApp quando disponível.
+                      type: object
+                    messageid:
+                      description: ID lógico da mensagem.
+                      example: 3EB0B4302B3A8A52F7A1
+                      type: string
+                    reactionCounts:
+                      additionalProperties:
+                        type: integer
+                      description: Mapa de emoji para quantidade de reações.
+                      example:
+                        👍: 22
+                        🔥: 7
+                      type: object
+                    serverid:
+                      description: Identificador sequencial do post no canal.
+                      example: 12345
+                      type: integer
+                    timestamp:
+                      description: Momento em que o post foi publicado.
+                      format: date-time
+                      type: string
+                    type:
+                      description: Tipo da mensagem do canal.
+                      example: text
+                      type: string
+                    viewsCount:
+                      description: Quantidade de visualizações conhecida no momento da consulta.
+                      example: 1200
+                      type: integer
+                  type: object
+                type: array
+            type: object
+      description: Mensagens do canal recuperadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: invalid newsletter id
+                type: string
+            type: object
+      description: Payload inválido ou ID/JID do canal inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao consultar mensagens do canal no WhatsApp
+  summary: Buscar mensagens de um canal
+  tags:
+    - Newsletters e Canais

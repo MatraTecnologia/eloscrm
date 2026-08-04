@@ -1,0 +1,548 @@
+get:
+  description: |
+    A uazapiGO distingue a intenção persistida do cliente (`mode`) do transporte efetivo em runtime (`effective_mode`).
+    Isso evita degradar silenciosamente para conexão direta quando a instância foi configurada para usar proxy.
+
+    `mode` sempre será:
+      - `custom`: o cliente escolheu um proxy próprio;
+      - `internal`: a instância deve usar o pool interno ou a rota interna; ou
+      - `none`: o cliente confirmou explicitamente que aceita conexão direta.
+
+    `effective_mode` mostra o que está sendo usado no momento:
+      - `custom`
+      - `internal`
+      - `direct`
+
+    `effective_detail` qualifica o transporte efetivo:
+      - `managed_pool`: proxy interno gerenciado pela plataforma;
+      - `internal_route`: rota interna dedicada do ambiente, sem uma `proxy_url` própria;
+      - `relay`: túnel relay do cliente;
+      - campo omitido: sem detalhe adicional.
+
+    Quando um proxy customizado falha, a plataforma pode seguir uma cadeia de contingência:
+      1. `proxy_fallback` explícito, se configurado com outra URL;
+      2. proxy interno;
+      3. conexão direta como último recurso, quando a política permitir.
+
+    Em qualquer fallback, a intenção persistida continua sendo `mode=custom`. O cliente deve olhar
+    `effective_mode`, `effective_detail` e `fallback.active` para entender o estado runtime.
+
+    Como ler cada campo da resposta:
+    - `mode`: intenção salva na instância. É o que o cliente pediu para usar.
+    - `effective_mode`: transporte realmente em uso agora. Pode divergir de `mode` durante fallback.
+    - `effective_detail`: detalhe extra do transporte efetivo. Use para distinguir pool interno, rota interna ou relay. Quando não há detalhe adicional, o campo é omitido.
+    - `fallback.active`: `true` quando a instância está operando fora da rota principal configurada.
+    - `fallback.reason`: motivo interno resumido do fallback atual. Serve para diagnóstico e pode mudar conforme a causa.
+    - `fallback.since`: timestamp Unix em milissegundos desde quando o fallback atual começou.
+    - `proxy_url`: proxy persistido na instância, sempre mascarado. Se `mode=custom`, continua mostrando o proxy do cliente mesmo quando a sessão caiu em fallback.
+    - `proxy_fallback`: política persistida de contingência para `mode=custom`. Pode ser `internal`, `never` ou outra URL de proxy.
+    - `managed`: campo legado. Fica `true` quando a infraestrutura interna da plataforma está envolvida no transporte atual ou pretendido.
+    - `last_test_at`: timestamp Unix em milissegundos do último teste ou da última falha persistida para esse proxy.
+    - `last_test_error`: último erro persistido para diagnóstico. String vazia significa ausência de erro salvo.
+    - `validation_error`: atalho booleano para `last_test_error != ""`.
+
+    Leitura rápida dos cenários mais comuns:
+    - `mode=custom` + `effective_mode=custom`: o proxy do cliente está sendo usado normalmente.
+    - `mode=custom` + `effective_mode=internal`: o proxy do cliente falhou e a sessão está operando no fallback interno.
+    - `mode=custom` + `effective_mode=direct`: o proxy do cliente falhou e a sessão caiu para conexão direta como último recurso.
+    - `mode=internal` + `effective_detail=managed_pool`: a instância está usando um proxy do pool interno.
+    - `mode=internal` + `effective_detail=internal_route`: a instância está usando uma rota interna dedicada, sem `proxy_url` própria.
+    - `mode=none` + `effective_mode=direct`: conexão direta assumida explicitamente.
+
+    Combinações que não devem aparecer numa resposta válida:
+    - `mode=none` com `effective_mode=custom` ou `internal`
+    - `effective_detail=managed_pool` com `effective_mode=custom`
+    - `effective_detail=relay` com `effective_mode=internal` ou `direct`
+  operationId: getProxyConfig
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            custom_active:
+              summary: Proxy do cliente ativo
+              value:
+                effective_mode: custom
+                fallback:
+                  active: false
+                  reason: ''
+                  since: 0
+                last_test_at: 0
+                last_test_error: ''
+                managed: false
+                mode: custom
+                proxy_fallback: internal
+                proxy_url: http://***:***@cliente-proxy.example:8080
+                validation_error: false
+            custom_direct_fallback:
+              summary: Proxy do cliente falhou e a sessão caiu para direto como último recurso
+              value:
+                effective_mode: direct
+                fallback:
+                  active: true
+                  reason: custom_failed_direct:dial tcp timeout
+                  since: 1760000005000
+                last_test_at: 1760000005000
+                last_test_error: dial tcp timeout
+                managed: false
+                mode: custom
+                proxy_fallback: internal
+                proxy_url: http://***:***@cliente-proxy.example:8080
+                validation_error: true
+            custom_internal_fallback:
+              summary: Proxy do cliente falhou e a sessão subiu no proxy interno
+              value:
+                effective_detail: managed_pool
+                effective_mode: internal
+                fallback:
+                  active: true
+                  reason: custom_failed_internal:dial tcp timeout
+                  since: 1760000000000
+                last_test_at: 1760000000000
+                last_test_error: dial tcp timeout
+                managed: true
+                mode: custom
+                proxy_fallback: internal
+                proxy_url: http://***:***@cliente-proxy.example:8080
+                validation_error: true
+            internal_dedicated_route:
+              summary: Modo interno usando rota interna dedicada
+              value:
+                effective_detail: internal_route
+                effective_mode: internal
+                fallback:
+                  active: false
+                  reason: ''
+                  since: 0
+                last_test_at: 0
+                last_test_error: ''
+                managed: true
+                mode: internal
+                proxy_fallback: internal
+                proxy_url: ''
+                validation_error: false
+          schema:
+            example:
+              effective_detail: managed_pool
+              effective_mode: internal
+              fallback:
+                active: true
+                reason: custom_failed_internal:dial tcp timeout
+                since: 1760000000000
+              last_test_at: 1760000000000
+              last_test_error: dial tcp timeout
+              managed: true
+              mode: custom
+              proxy_fallback: internal
+              proxy_url: http://***:***@cliente-proxy.example:8080
+              validation_error: true
+            properties:
+              effective_detail:
+                description: |
+                  Detalhe opcional do transporte atual.
+                  `managed_pool` = proxy interno gerenciado.
+                  `internal_route` = rota interna dedicada do ambiente.
+                  `relay` = túnel relay do cliente.
+                  Quando não há detalhe adicional, o campo é omitido.
+                enum:
+                  - managed_pool
+                  - internal_route
+                  - relay
+                example: managed_pool
+                type: string
+              effective_mode:
+                description: Transporte efetivo em runtime. É o valor principal para entender por onde a sessão está saindo
+                  neste momento.
+                enum:
+                  - custom
+                  - internal
+                  - direct
+                example: internal
+                type: string
+              fallback:
+                description: Estado do fallback runtime. Só fica ativo quando a instância precisou sair da rota principal
+                  configurada.
+                properties:
+                  active:
+                    description: Indica se a instância está operando em fallback neste momento.
+                    example: true
+                    type: boolean
+                  reason:
+                    description: Motivo interno resumido do fallback atual, útil para observabilidade e suporte.
+                    example: custom_failed_internal:dial tcp timeout
+                    type: string
+                  since:
+                    description: Timestamp Unix em milissegundos desde quando o fallback atual está ativo.
+                    example: 1760000000000
+                    type: integer
+                type: object
+              last_test_at:
+                description: Timestamp Unix em milissegundos do último teste ou da última falha persistida.
+                example: 1760000000000
+                type: integer
+              last_test_error:
+                description: Último erro persistido para diagnóstico. String vazia significa ausência de erro salvo.
+                example: dial tcp timeout
+                type: string
+              managed:
+                description: Campo legado indicando participação da infraestrutura interna. Pode ficar `true` tanto em `mode=internal`
+                  quanto em fallback interno de `mode=custom`.
+                example: true
+                type: boolean
+              mode:
+                description: Intenção persistida do cliente. Representa o modo salvo na instância, não necessariamente o transporte
+                  em uso agora.
+                enum:
+                  - custom
+                  - internal
+                  - none
+                example: custom
+                type: string
+              proxy_fallback:
+                description: |
+                  Política de contingência persistida para `mode=custom`.
+                  Valores aceitos:
+                    - `internal`
+                    - `never`
+                    - uma URL de proxy HTTP/HTTPS/SOCKS para contingência explícita
+                example: internal
+                type: string
+              proxy_url:
+                description: URL mascarada do proxy persistido. Em fallback de proxy custom, continua mostrando a URL do cliente;
+                  não troca para o proxy efetivo de contingência.
+                example: http://***:***@cliente-proxy.example:8080
+                type: string
+              validation_error:
+                description: Indica se `last_test_error` está preenchido.
+                example: true
+                type: boolean
+            type: object
+      description: Configuração de proxy recuperada com sucesso
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao recuperar a configuração
+  security:
+    - token: []
+  summary: Obter configuração de proxy da instância
+  tags:
+    - Proxy
+post:
+  description: |
+    Define explicitamente um dos três estados aceitos:
+      - `mode=custom`: usa um proxy próprio informado em `proxy_url`;
+      - `mode=internal`: usa a infraestrutura interna; ou
+      - `mode=none`: conexão direta, permitida apenas com `confirm_no_proxy=true`.
+
+    Importante: `POST /instance/proxy` confirma que a configuração foi salva, não que o proxy já foi comprovado em uso.
+    A validação operacional principal acontece no próximo ciclo real de conexão da instância.
+
+    Em termos práticos:
+      - `200 OK` aqui = configuração persistida com sucesso;
+      - falhas reais de conectividade podem aparecer depois; e
+      - para observar o estado real, consulte `GET /instance/proxy` e leia:
+        - `effective_mode`
+        - `effective_detail`
+        - `fallback.active`
+        - `last_test_error`
+        - `validation_error`
+
+    Quando `mode=custom`, você também pode definir a contingência via `proxy_fallback`:
+      - `internal`: tenta a infraestrutura interna e, se ainda assim falhar, pode usar direto como último recurso;
+      - `never`: não usa contingência; ou
+      - uma URL de proxy de contingência controlada pelo próprio cliente.
+
+    Quando `mode=internal`, `rotate_now: true` troca imediatamente o proxy interno persistido.
+    Se houver mais de uma origem interna disponível, a plataforma escolhe outra origem sem expor o fornecedor.
+    Se houver apenas uma origem, troca apenas o proxy/IP dentro dessa origem.
+
+    Protocolos aceitos em URLs de proxy customizado:
+      - `http://usuario:senha@host:porta`
+      - `https://usuario:senha@host:porta`
+      - `socks5://usuario:senha@host:porta`
+      - `socks5h://usuario:senha@host:porta`
+
+    O esquema `socks://` genérico não é aceito. Para proxies SOCKS, use `socks5://` ou `socks5h://`.
+  operationId: updateProxyConfig
+  requestBody:
+    content:
+      application/json:
+        examples:
+          custom_with_explicit_backup_proxy:
+            summary: Proxy customizado com proxy de contingência próprio
+            value:
+              mode: custom
+              proxy_fallback: socks5://backup:senha@proxy-backup.example:1080
+              proxy_url: http://usuario:senha@proxy-principal.example:8080
+          custom_with_internal_fallback:
+            summary: Proxy customizado com fallback interno
+            value:
+              mode: custom
+              proxy_fallback: internal
+              proxy_url: http://usuario:senha@proxy-do-cliente.example:8080
+          internal_now:
+            summary: Modo interno
+            value:
+              mode: internal
+          internal_rotate_now:
+            summary: Rotacionar proxy interno agora
+            value:
+              mode: internal
+              rotate_now: true
+          no_proxy:
+            summary: Direto explícito
+            value:
+              confirm_no_proxy: true
+              mode: none
+        schema:
+          properties:
+            confirm_no_proxy:
+              description: Obrigatório quando `mode=none`.
+              type: boolean
+            mode:
+              description: Campo canônico para definir a estratégia de proxy.
+              enum:
+                - custom
+                - internal
+                - none
+              type: string
+            proxy_fallback:
+              description: |
+                Política de contingência para `mode=custom`.
+                Aceita `internal`, `never` ou uma URL de proxy de contingência usando `http://`, `https://`, `socks5://` ou `socks5h://`.
+              type: string
+            proxy_url:
+              description: |
+                Obrigatório quando `mode=custom`.
+                Protocolos aceitos: `http://`, `https://`, `socks5://` e `socks5h://`.
+                O esquema `socks://` genérico não é suportado; use `socks5://` ou `socks5h://`.
+              example: http://usuario:senha@ip:porta
+              type: string
+            rotate_now:
+              default: false
+              description: Quando `true` com `mode=internal`, troca imediatamente o proxy interno persistido sem expor o fornecedor usado.
+              type: boolean
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            after_connect_failure_example:
+              summary: Exemplo do que o GET pode mostrar depois se o proxy salvo falhar
+              value:
+                details: Proxy configurado
+                proxy:
+                  effective_mode: custom
+                  fallback:
+                    active: false
+                    reason: ''
+                    since: 0
+                  last_test_at: 0
+                  last_test_error: ''
+                  managed: false
+                  mode: custom
+                  proxy_fallback: internal
+                  proxy_url: http://***:***@proxy-do-cliente.example:8080
+                  validation_error: false
+                restart_requested: true
+            custom_internal_fallback_saved:
+              summary: Configuração salva; o uso real será confirmado no próximo ciclo de conexão
+              value:
+                details: Proxy configurado
+                proxy:
+                  effective_mode: custom
+                  fallback:
+                    active: false
+                    reason: ''
+                    since: 0
+                  last_test_at: 0
+                  last_test_error: ''
+                  managed: false
+                  mode: custom
+                  proxy_fallback: internal
+                  proxy_url: http://***:***@proxy-do-cliente.example:8080
+                  validation_error: false
+                restart_requested: true
+            direct_explicit:
+              summary: Direto explícito
+              value:
+                details: Proxy configurado
+                proxy:
+                  effective_mode: direct
+                  fallback:
+                    active: false
+                    reason: ''
+                    since: 0
+                  last_test_at: 0
+                  last_test_error: ''
+                  managed: false
+                  mode: none
+                  proxy_fallback: internal
+                  proxy_url: ''
+                  validation_error: false
+            internal_rotated:
+              summary: Proxy interno rotacionado
+              value:
+                details: Proxy configurado
+                proxy:
+                  effective_detail: managed_pool
+                  effective_mode: internal
+                  fallback:
+                    active: false
+                    reason: ''
+                    since: 0
+                  last_test_at: 0
+                  last_test_error: ''
+                  managed: true
+                  mode: internal
+                  proxy_fallback: internal
+                  proxy_url: managed_pool://hidden
+                  validation_error: false
+                rotated: true
+          schema:
+            example:
+              details: Proxy configurado
+              proxy:
+                effective_mode: custom
+                fallback:
+                  active: false
+                  reason: ''
+                  since: 0
+                last_test_at: 0
+                last_test_error: ''
+                managed: false
+                mode: custom
+                proxy_fallback: internal
+                proxy_url: http://***:***@proxy-do-cliente.example:8080
+                validation_error: false
+              restart_requested: true
+            properties:
+              details:
+                example: Proxy configurado
+                type: string
+              proxy:
+                properties:
+                  effective_detail:
+                    description: Detalhe complementar do transporte efetivo. Quando não há detalhe adicional, o campo é omitido.
+                    enum:
+                      - managed_pool
+                      - internal_route
+                      - relay
+                    type: string
+                  effective_mode:
+                    description: Transporte efetivo no momento da resposta.
+                    enum:
+                      - custom
+                      - internal
+                      - direct
+                    type: string
+                  fallback:
+                    description: Estado do fallback runtime.
+                    properties:
+                      active:
+                        description: Indica se a instância está operando em fallback neste momento.
+                        type: boolean
+                      reason:
+                        description: Motivo interno resumido do fallback atual.
+                        type: string
+                      since:
+                        description: Timestamp Unix em milissegundos desde quando o fallback atual está ativo.
+                        type: integer
+                    type: object
+                  last_test_at:
+                    description: Timestamp do último teste/erro persistido.
+                    type: integer
+                  last_test_error:
+                    description: Último erro persistido para diagnóstico.
+                    type: string
+                  managed:
+                    description: Campo legado ligado ao uso da infraestrutura interna.
+                    type: boolean
+                  mode:
+                    description: Intenção persistida do cliente após a gravação.
+                    enum:
+                      - custom
+                      - internal
+                      - none
+                    type: string
+                  proxy_fallback:
+                    description: Política de contingência persistida para `mode=custom`.
+                    type: string
+                  proxy_url:
+                    description: URL mascarada do proxy persistido.
+                    type: string
+                  validation_error:
+                    description: Indica se `last_test_error` está preenchido.
+                    type: boolean
+                type: object
+              restart_requested:
+                description: Indica se uma reinicialização da conexão foi solicitada para aplicar o proxy.
+                type: boolean
+              rotated:
+                description: Presente como `true` quando `rotate_now` troca o proxy interno com sucesso.
+                type: boolean
+            type: object
+      description: Proxy configurado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: confirm_no_proxy é obrigatório para desabilitar proxy
+                type: string
+            type: object
+      description: Payload inválido ou falha na validação do proxy
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: Unauthorized
+                type: string
+            type: object
+      description: Token inválido ou expirado
+    '409':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'nao foi possivel rotacionar proxy interno: nenhum proxy alternativo disponível para rotação'
+                type: string
+            type: object
+      description: Não há proxy alternativo disponível para rotação interna
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                description: Mensagem detalhando o erro encontrado
+                type: string
+            type: object
+      description: Erro interno do servidor ao configurar o proxy
+  security:
+    - token: []
+  summary: Configurar ou alterar o proxy
+  tags:
+    - Proxy

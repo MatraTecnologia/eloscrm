@@ -1,0 +1,163 @@
+delete:
+  description: |
+    Cancela toda a fila de envio `async=true` da instância e marca as mensagens pendentes como `Canceled`.
+
+    Este endpoint atua apenas na fila interna de envio direto assíncrono. Ele **não** afeta:
+    - campanhas do sender (`/sender/*`)
+    - mensagens já enviadas com sucesso
+    - mensagens em massa agendadas
+
+    O fluxo executado é:
+    1. pausa o worker interno da fila async
+    2. drena jobs pendentes em memória e overflow
+    3. marca backlog persistido em `Queued` como `Canceled`
+    4. libera a fila para novos envios async
+
+    Use este endpoint quando houver backlog preso, fila acumulada ou quando você quiser abortar todos os envios assíncronos ainda não concluídos.
+  operationId: clearAsyncQueue
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              instanceId:
+                description: ID da instância
+                type: string
+              response:
+                example: Async queue cleared
+                type: string
+              stats:
+                properties:
+                  bufferedJobsMarkedCanceled:
+                    description: Jobs em memória marcados como `Canceled`
+                    example: 2
+                    type: integer
+                  clearedOverflowJobs:
+                    description: Jobs removidos do backlog de overflow
+                    example: 1
+                    type: integer
+                  drainedChannelJobs:
+                    description: Jobs removidos do canal principal da fila
+                    example: 1
+                    type: integer
+                  persistedQueuedCanceled:
+                    description: Mensagens persistidas em `Queued` que foram atualizadas para `Canceled`
+                    example: 5
+                    format: int64
+                    type: integer
+                  trackedJobsCleared:
+                    description: Quantidade de IDs rastreados removidos da fila em memória
+                    example: 3
+                    type: integer
+                type: object
+            type: object
+      description: Fila async limpa com sucesso
+    '401':
+      description: Token inválido ou ausente
+    '409':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: async queue did not drain before reset
+                type: string
+              instanceId:
+                type: string
+              stats:
+                additionalProperties: true
+                type: object
+            type: object
+      description: A fila não pôde ser limpa porque a instância está em reset ou havia envio em progresso que não drenou a
+        tempo
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                type: string
+              instanceId:
+                type: string
+              stats:
+                additionalProperties: true
+                type: object
+            type: object
+      description: Erro interno ao limpar a fila async
+  summary: Limpar fila async de envio direto
+  tags:
+    - Mensagem Async
+get:
+  description: |
+    Retorna um resumo simples da fila de envio `async=true` da instância atual autenticada.
+
+    Este endpoint cobre apenas a fila interna de envio direto assíncrono. Ele **não** representa:
+    - campanhas de envio em massa do sender (`/sender/*`)
+
+    A resposta padrão foi pensada para clientes:
+    - `status`: visão resumida da fila (`idle`, `queued`, `processing`, `waiting_connection`, `resetting`)
+    - `pending`: quantidade total estimada de mensagens pendentes
+    - `processingNow`: indica se o worker está ocupando um job neste momento
+    - `acceptingNewMessages`: indica se a fila aceita novos envios async
+    - `sessionReady`: indica se a sessão WhatsApp está pronta para envio
+    - `resetting`: indica se a fila está pausada por reset/clear
+  operationId: getAsyncQueueStatus
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              instanceId:
+                description: ID da instância
+                type: string
+              queue:
+                properties:
+                  acceptingNewMessages:
+                    description: Indica se a fila aceita novos envios async
+                    example: true
+                    type: boolean
+                  pending:
+                    description: Quantidade total estimada de mensagens pendentes
+                    example: 3
+                    format: int64
+                    type: integer
+                  processingNow:
+                    description: Indica se há um job ativo no worker agora
+                    example: true
+                    type: boolean
+                  resetting:
+                    description: Indica se a fila async está pausada por reset/clear
+                    example: false
+                    type: boolean
+                  sessionReady:
+                    description: Indica se a sessão WhatsApp está pronta para envio
+                    example: false
+                    type: boolean
+                  status:
+                    description: Estado resumido da fila
+                    example: waiting_connection
+                    type: string
+                type: object
+              response:
+                example: Async queue status
+                type: string
+            type: object
+      description: Resumo da fila async
+    '401':
+      description: Token inválido ou ausente
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                type: string
+              instanceId:
+                type: string
+            type: object
+      description: Erro interno ao consultar a fila async
+  summary: Consultar fila async de envio direto
+  tags:
+    - Mensagem Async

@@ -1,0 +1,61 @@
+post:
+  description: |
+    Busca as informações de um canal a partir da chave de convite.
+  operationId: getNewsletterInfoWithInvite
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            key:
+              description: Chave do convite do canal.
+              example: AbCdEfGhIjKlMn
+              type: string
+          required:
+            - key
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                additionalProperties: true
+                type: object
+            type: object
+      description: Informações do canal recuperadas com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: key is required
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao consultar o convite
+  summary: Buscar canal por link-chave de convite
+  tags:
+    - Newsletters e Canais

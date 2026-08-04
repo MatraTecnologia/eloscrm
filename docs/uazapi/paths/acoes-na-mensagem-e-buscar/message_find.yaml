@@ -1,0 +1,102 @@
+post:
+  description: |
+    Busca mensagens com múltiplos filtros disponíveis. Este endpoint permite:
+
+    1. **Busca por ID específico**: Use `id` para encontrar uma mensagem exata
+    2. **Filtrar por chat**: Use `chatid` para mensagens de uma conversa específica
+    3. **Filtrar por rastreamento**: Use `track_source` e `track_id` para mensagens com dados de tracking
+    4. **Limitar resultados**: Use `limit` para controlar quantas mensagens retornar
+    5. **Ordenação**: Resultados ordenados por data (mais recentes primeiro)
+  operationId: findMessages
+  requestBody:
+    content:
+      application/json:
+        examples:
+          chatSearch:
+            description: Busca mensagens de uma conversa especifica
+            summary: Buscar por chat especifico
+            value:
+              chatid: 5511999999999@s.whatsapp.net
+              limit: 20
+              offset: 0
+          idSearch:
+            description: Busca uma mensagem especifica pelo seu ID
+            summary: Buscar por ID especifico
+            value:
+              id: user123:r3EB0538
+          trackingSearch:
+            description: Busca mensagens usando dados de tracking com paginacao
+            summary: Buscar por rastreamento
+            value:
+              limit: 50
+              offset: 100
+              track_id: conv_123456
+              track_source: chatwoot
+        schema:
+          properties:
+            chatid:
+              description: ID do chat no formato internacional
+              example: 5511999999999@s.whatsapp.net
+              type: string
+            id:
+              description: ID específico da mensagem para busca exata
+              example: user123:r3EB0538
+              type: string
+            limit:
+              default: 100
+              description: Numero maximo de mensagens a retornar (padrao 100)
+              example: 20
+              minimum: 1
+              type: integer
+            offset:
+              default: 0
+              description: Deslocamento para paginacao (0 retorna as mensagens mais recentes)
+              type: integer
+            track_id:
+              description: ID de rastreamento para filtrar mensagens
+              example: msg_123456789
+              type: string
+            track_source:
+              description: Origem do rastreamento para filtrar mensagens
+              example: chatwoot
+              type: string
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              hasMore:
+                description: Indica se existem mais mensagens apos esta pagina
+                type: boolean
+              limit:
+                description: Limite aplicado na busca
+                type: integer
+              messages:
+                items:
+                  $ref: ../../schemas/message.yaml#/Message
+                type: array
+              nextOffset:
+                description: Offset sugerido para a proxima pagina
+                type: integer
+              offset:
+                description: Offset usado para recuperar os resultados
+                type: integer
+              returnedMessages:
+                description: Quantidade de mensagens retornadas nesta pagina
+                type: integer
+            type: object
+      description: Lista de mensagens encontradas com metadados de paginacao
+    '400':
+      description: Parametros invalidos
+    '401':
+      description: Token invalido ou expirado
+    '404':
+      description: Chat nao encontrado
+    '500':
+      description: Erro interno do servidor
+  summary: Buscar mensagens em um chat
+  tags:
+    - Ações na mensagem e Buscar

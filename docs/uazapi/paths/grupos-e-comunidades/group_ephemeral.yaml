@@ -1,0 +1,132 @@
+post:
+  description: |
+    Define o temporizador de mensagens temporárias (disappearing messages) de um grupo.
+
+    Valores aceitos para a duração:
+    - `0` ou `off` para desativar
+    - `1d`
+    - `7d`
+    - `90d`
+
+    Observações:
+    - este endpoint é apenas para grupos
+    - requer privilégios de administrador do grupo
+    - se o identificador informado não for de grupo, a API retorna erro orientando usar `/chat/ephemeral`
+    - após sucesso, a resposta devolve o chat atualizado e o snapshot mais recente do grupo no cache local
+  operationId: updateGroupEphemeral
+  requestBody:
+    content:
+      application/json:
+        examples:
+          ativar_1_dia:
+            summary: Ativar por 1 dia
+            value:
+              duration: 1d
+              groupjid: 120363339858396166@g.us
+          desativar:
+            summary: Desativar mensagens temporárias
+            value:
+              duration: 'off'
+              groupjid: 120363339858396166@g.us
+        schema:
+          properties:
+            duration:
+              description: Duração desejada para mensagens temporárias
+              example: 1d
+              oneOf:
+                - type: string
+                - type: integer
+            groupjid:
+              description: JID do grupo no formato xxxxx@g.us
+              example: 120363339858396166@g.us
+              type: string
+          required:
+            - groupjid
+            - duration
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          examples:
+            sucesso:
+              summary: Timer atualizado
+              value:
+                chat:
+                  wa_chatid: 120363339858396166@g.us
+                  wa_ephemeralExpiration: 86400
+                  wa_isGroup: true
+                ephemeral:
+                  enabled: true
+                  label: 1d
+                  seconds: 86400
+                group:
+                  DisappearingTimer: 86400
+                  IsEphemeral: true
+                  JID: 120363339858396166@g.us
+                needs_refresh: false
+                response: Ephemeral timer updated successfully
+          schema:
+            properties:
+              chat:
+                $ref: ../../schemas/chat.yaml#/Chat
+              ephemeral:
+                properties:
+                  enabled:
+                    example: true
+                    type: boolean
+                  label:
+                    example: 1d
+                    type: string
+                  seconds:
+                    example: 86400
+                    format: int64
+                    type: integer
+                type: object
+              group:
+                $ref: ../../schemas/group.yaml#/Group
+              needs_refresh:
+                description: Indica se o grupo precisou ser recarregado no cache local
+                example: false
+                type: boolean
+              response:
+                example: Ephemeral timer updated successfully
+                type: string
+            type: object
+      description: Temporizador atualizado com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'invalid duration. Allowed values: 0, off, 1d, 7d, 90d'
+                type: string
+            type: object
+      description: Payload inválido, grupo inválido ou duração não suportada
+    '401':
+      description: Token inválido ou ausente
+    '403':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: user is not an admin of this group
+                type: string
+            type: object
+      description: Usuário não é administrador do grupo
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: 'Error updating chat ephemeral timer: connection closed'
+                type: string
+            type: object
+      description: Erro interno ao atualizar o temporizador
+  summary: Configurar mensagens temporárias em grupo
+  tags:
+    - Grupos e Comunidades

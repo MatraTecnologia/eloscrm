@@ -1,0 +1,70 @@
+post:
+  description: |
+    Atualiza a imagem do canal/newsletter.
+
+    Observações:
+    - `picture` aceita URL HTTP/HTTPS, base64 puro ou data URI
+    - imagens acima de 1 MB são rejeitadas
+  operationId: updateNewsletterPicture
+  requestBody:
+    content:
+      application/json:
+        schema:
+          properties:
+            id:
+              example: '120363123456789012'
+              type: string
+            jid:
+              example: 120363123456789012@newsletter
+              type: string
+            picture:
+              example: https://example.com/newsletter.png
+              type: string
+          required:
+            - picture
+          type: object
+    required: true
+  responses:
+    '200':
+      content:
+        application/json:
+          schema:
+            properties:
+              response:
+                example: true
+                type: boolean
+            type: object
+      description: Foto do canal atualizada com sucesso
+    '400':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: empty image source
+                type: string
+            type: object
+      description: Payload inválido
+    '401':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: client not found
+                type: string
+            type: object
+      description: Instância não autenticada ou cliente não encontrado
+    '500':
+      content:
+        application/json:
+          schema:
+            properties:
+              error:
+                example: connection closed
+                type: string
+            type: object
+      description: Erro interno ao atualizar a foto do canal
+  summary: Atualizar foto do canal
+  tags:
+    - Newsletters e Canais

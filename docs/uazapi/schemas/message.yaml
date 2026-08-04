@@ -1,0 +1,163 @@
+Message:
+  type: object
+  description: Representa uma mensagem trocada no sistema
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único interno da mensagem (formato r + 7 caracteres hex aleatórios)
+    messageid:
+      type: string
+      description: ID original da mensagem no provedor
+    chatid:
+      type: string
+      description: ID da conversa relacionada
+    sender:
+      type: string
+      description: ID do remetente da mensagem
+    senderName:
+      type: string
+      description: Nome exibido do remetente
+    isGroup:
+      type: boolean
+      description: Indica se é uma mensagem de grupo
+      default: false
+    fromMe:
+      type: boolean
+      description: Indica se a mensagem foi enviada pelo usuário
+      default: false
+    messageType:
+      type: string
+      description: Tipo de conteúdo da mensagem
+    source:
+      type: string
+      description: Plataforma de origem da mensagem
+    messageTimestamp:
+      type: integer
+      description: Timestamp original da mensagem em milissegundos
+      default: 0
+    status:
+      type: string
+      description: |
+        Status do ciclo de vida da mensagem.
+        Exemplos comuns: `Queued`, `Canceled`, `Failed`, `Sent`, `Delivered`, `Read`.
+    text:
+      type: string
+      description: Texto original da mensagem
+      default: ''
+    quoted:
+      type: string
+      description: ID da mensagem citada/respondida
+      default: ''
+    edited:
+      type: string
+      description: Histórico de edições da mensagem
+      default: ''
+    reaction:
+      type: string
+      description: ID da mensagem reagida
+      default: ''
+    vote:
+      type: string
+      description: Dados de votação de enquete e listas
+      default: ''
+    convertOptions:
+      type: string
+      description: Conversão de opções da mensagem, lista, enquete e botões
+      default: ''
+    buttonOrListid:
+      type: string
+      description: ID do botão ou item de lista selecionado
+      default: ''
+    owner:
+      type: string
+      description: Dono da mensagem
+      default: ''
+    error:
+      type: string
+      description: Mensagem de erro caso o envio tenha falhado
+      default: ''
+    content:
+      description: Conteúdo bruto da mensagem (JSON serializado ou texto)
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: string
+          description: Texto bruto quando não for JSON
+    wasSentByApi:
+      type: boolean
+      description: Indica se a mensagem foi enviada via API
+    sendFunction:
+      type: string
+      description: Função usada para enviar a mensagem (quando enviada via API)
+    sendPayload:
+      description: Payload enviado (texto/JSON serializado)
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: string
+          description: Texto bruto quando não for JSON
+    fileURL:
+      type: string
+      description: URL ou referência de arquivo da mensagem
+    send_folder_id:
+      type: string
+      description: Pasta associada ao envio (quando aplicável)
+    track_source:
+      type: string
+      description: Origem de rastreamento
+    track_id:
+      type: string
+      description: ID de rastreamento (pode repetir)
+    ai_metadata:
+      type: object
+      description: Metadados do processamento por IA
+      properties:
+        agent_id:
+          type: string
+          description: ID do agente de IA responsável
+        request:
+          type: object
+          description: Dados da requisição à API de IA
+          properties:
+            messages:
+              type: array
+              description: Histórico de mensagens enviadas para a API
+            tools:
+              type: array
+              description: Ferramentas disponíveis para o agente
+            options:
+              type: object
+              description: Opções de configuração da API
+              properties:
+                model:
+                  type: string
+                temperature:
+                  type: number
+                maxTokens:
+                  type: integer
+                topP:
+                  type: number
+                frequencyPenalty:
+                  type: number
+                presencePenalty:
+                  type: number
+        response:
+          type: object
+          description: Resposta da API de IA
+          properties:
+            choices:
+              type: array
+              description: Resultados retornados pela API
+            toolResults:
+              type: array
+              description: Resultados da execução de ferramentas
+            error:
+              type: string
+              description: Mensagem de erro, se houver
+    sender_pn:
+      type: string
+      description: JID PN resolvido do remetente (quando disponível)
+    sender_lid:
+      type: string
+      description: LID original do remetente (quando disponível)
