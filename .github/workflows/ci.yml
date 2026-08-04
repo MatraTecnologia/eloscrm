@@ -37,6 +37,11 @@ jobs:
       R2_ACCESS_KEY_ID: test
       R2_SECRET_ACCESS_KEY: test12345
       R2_PRIVATE_BUCKET_NAME: eloscrm-test
+      # uazapi: a suíte mocka o client HTTP; estes valores são fictícios e nada sai do runner.
+      UAZAPI_BASE_URL: http://uazapi.invalid
+      UAZAPI_ADMIN_TOKEN: ci-admin-token
+      UAZAPI_TOKEN_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      PUBLIC_API_URL: http://localhost:3333
 
     steps:
       - uses: actions/checkout@v4

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Esta pasta contém a especificação OpenAPI 3.1 da **uazapiGO** (WhatsApp API, v2.1.1). É documentação de referência; não há código executável aqui.
 
-> ⚠️ **A pasta veio importada do `matra-notification-manager`** e ainda não tem consumidor no elosCRM — nenhum código deste repo lê a spec. Quando houver cliente HTTP aqui, documentar onde ele fica e que os tipos são mantidos à mão (não há geração automática a partir dos `schemas/*.yaml`).
+> **Consumidor:** `eloscrm-api/src/lib/uazapi/` — cliente HTTP modular, com os tipos mantidos **à mão** a partir dos `schemas/*.yaml` (não há geração automática). Mexeu na spec, atualize `types.ts` junto.
 
 ## Estrutura
 

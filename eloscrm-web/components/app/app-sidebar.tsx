@@ -3,7 +3,16 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Building2, Calendar, Handshake, LayoutDashboard, Settings, Snowflake, Users } from "lucide-react";
+import {
+  Building2,
+  Calendar,
+  Handshake,
+  LayoutDashboard,
+  MessageCircle,
+  Settings,
+  Snowflake,
+  Users,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +34,7 @@ const items = [
   { title: "Nutrição", href: "/nurturing", icon: Snowflake },
   { title: "Imóveis", href: "/properties", icon: Building2 },
   { title: "Agenda", href: "/agenda", icon: Calendar },
+  { title: "WhatsApp", href: "/integracoes/whatsapp", icon: MessageCircle },
   { title: "Configurações", href: "/settings", icon: Settings },
 ];
 

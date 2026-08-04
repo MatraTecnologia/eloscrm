@@ -109,7 +109,12 @@ Dois pontos sensíveis à segurança:
 - `authGuard` e `orgGuard` são adicionados **por arquivo de rota** (`app.addHook("preHandler", …)` ou `{ preHandler: [...] }`), não globalmente. Rota nova sem os hooks fica **desprotegida** — copiar o padrão de `src/routes/v1/deals/index.ts`.
 - Só o `authGuardPlugin`/`orgGuardPlugin` (decorators) são globais em `src/app.ts`; eles apenas declaram `request.session`/`request.user`/`request.orgId`.
 
-Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`, `activities`, `agenda`, `dashboard`.
+Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`, `activities`, `agenda`, `dashboard`, `whatsapp`.
+
+O `whatsapp` foge do formato em dois pontos, ambos deliberados e documentados em
+`eloscrm-api/CLAUDE.md`: fala com a uazapi por `src/lib/uazapi/` (não só com o Prisma), e registra
+**uma rota fora de `/v1` e sem guards** — `/webhooks/uazapi/:instanceId/:secret`, receptor de eventos
+do provedor, autenticado por segredo na URL + hash do token no corpo.
 
 ## Estrutura do web
 
@@ -124,4 +129,4 @@ Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`,
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 20:47 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 21:59 (-03)

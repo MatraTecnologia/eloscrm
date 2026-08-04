@@ -96,9 +96,61 @@ existiam neste documento: `no-console` (liberado em `prisma/` e `scripts/`, que 
 - Commits em português, imperativo ("adiciona", "corrige")
 - Arquivos focados e pequenos, uma responsabilidade cada
 
+## Integração WhatsApp (uazapi)
+
+Cliente HTTP em `src/lib/uazapi/` (tem `CLAUDE.md` próprio), módulo em `src/modules/whatsapp/`,
+design em `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`.
+
+**Uma instância por organização.** `UazapiInstance.organizationId` é `@unique` e nenhuma rota tem
+`:id` — todas são `/v1/whatsapp/instance` e resolvem por `request.orgId`. Não recoloque id na URL:
+é o que hoje torna impossível apontar para a instância de outra imobiliária.
+
+**A rota `/webhooks/uazapi/:instanceId/:secret` não tem `authGuard` de propósito.** Quem chama é o
+servidor da uazapi, sem cookie. A autenticação é o **segredo de 32 bytes na URL**, comparado em tempo
+constante em `whatsapp.webhook.service.ts`; o hash do token no corpo é defesa em profundidade e só é
+conferido quando o campo vem. Rota nova ali dentro precisa chamar `authenticate` também. Ainda **não
+há rate limit** — o projeto não tem `@fastify/rate-limit`.
+
+**O envelope do webhook é palpite, e o receptor é tolerante de propósito.** A spec da uazapi não
+documenta o corpo entregue (`paths/webhooks-e-sse/webhook.yaml` só cobre a configuração, sem
+`callbacks` nem exemplo), e as três fontes disponíveis discordam: `EventType`/`token`/`instance` no
+`matra-notification-manager` (onde o webhook era **global**, e o token era o único jeito de
+identificar a instância), `event`/`instance`/`data` em `schemas/webhook_event.yaml`, `type`/`data` no
+SSE. Por isso `webhookBodySchema` aceita os três nomes e **não exige nenhum campo**: rejeitar o corpo
+derrubaria todos os eventos em silêncio, e o sintoma só apareceria em `/webhook/errors` da uazapi.
+Envelope irreconhecível vira `request.log.warn`. **Não aperte esse schema sem antes capturar um corpo
+real** — e, quando capturar, registre-o aqui.
+
+**`UazapiInstanceLog.payload` não sai pela API.** Ele guarda resposta bruta da uazapi para
+diagnóstico e pode conter URL de webhook (que termina no `webhookSecret`) ou campo novo que ninguém
+revisou. `repo.listLogs` usa `select` explícito sem ele — não troque por um `findMany` cru.
+
+**Em dev o webhook não chega.** `PUBLIC_API_URL` cai em `BETTER_AUTH_URL`, que é `localhost:3333`, e
+a uazapi não alcança a sua máquina. Sem um túnel (`cloudflared tunnel --url http://localhost:3333`)
+apontado em `PUBLIC_API_URL`, o estado da conexão só muda pelo botão **Sincronizar** da tela.
+
+**As envs são opcionais de propósito** (`UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`,
+`UAZAPI_TOKEN_ENCRYPTION_KEY`, `PUBLIC_API_URL`), como o `RESEND_API_KEY`: sem elas a API sobe e só
+as rotas de WhatsApp respondem `503 INTEGRATION_NOT_CONFIGURED`. `GET /v1/whatsapp/instance` funciona
+mesmo assim — lê só o estado local.
+
+**Perder a `UAZAPI_TOKEN_ENCRYPTION_KEY` inutiliza todos os tokens salvos** (AES-256-GCM em
+`src/lib/crypto.ts`). Ela pertence ao cofre de produção, junto com `BETTER_AUTH_SECRET`.
+
+**Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
+a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
+
+## Erro 5xx com código próprio
+
+`httpError()` marca `expose: true`, e o `errorHandler` só mascara 5xx **sem** essa marca. É o que
+permite a integração devolver `502 UAZAPI_ERROR` / `503 UAZAPI_CAPACITY` / `504 UAZAPI_UNAVAILABLE`
+com mensagem em pt-BR, enquanto um erro que vazou continua virando `{ code: "INTERNAL" }`. Nunca
+construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpError`.
+
 ## Docs
 
 - Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
+- WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 18:05 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 21:59 (-03)
