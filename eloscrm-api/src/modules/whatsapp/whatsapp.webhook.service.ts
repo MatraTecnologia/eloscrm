@@ -8,7 +8,12 @@ import { hashToken } from "../../lib/crypto.js";
 import { httpError } from "../../lib/http-error.js";
 import { applyInstanceSnapshot, eventForTransition, parseStatus, str } from "../../lib/uazapi/snapshot.js";
 import { enqueueMessageEvent } from "./ingest.service.js";
-import { applyStatusUpdate, parseStatusUpdate } from "./status.service.js";
+import {
+  applyDeletion,
+  applyStatusUpdate,
+  parseDeletion,
+  parseStatusUpdate,
+} from "./status.service.js";
 import * as repo from "./whatsapp.repo.js";
 import { connectionDataOf, eventNameOf, type WebhookBody } from "./whatsapp.schema.js";
 
@@ -83,7 +88,14 @@ export const process = async (
 
   if (event === "messages_update") {
     // barato: é um updateMany por lote de ids, sem chamada externa. Não precisa de fila.
-    const parsed = parseStatusUpdate(body as Record<string, unknown>);
+    // O mesmo evento carrega recibo (Delivered/Read) e deleção (Deleted) — são ramos distintos.
+    const raw = body as Record<string, unknown>;
+    const apagadas = parseDeletion(raw);
+    if (apagadas) {
+      await applyDeletion(instance.organizationId, apagadas);
+      return { event, handled: true };
+    }
+    const parsed = parseStatusUpdate(raw);
     if (parsed) await applyStatusUpdate(instance.organizationId, parsed);
     return { event, handled: true };
   }

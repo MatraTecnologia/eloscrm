@@ -167,6 +167,23 @@ reconciliação com `WhatsappMessage` tem que usar `providerMessageId`, não `pr
 **`wasSentByApi` no exclude não suprime este evento** — ele chega normalmente. Confirmado em
 tráfego real: o filtro fica, e o ✓✓ funciona mesmo assim.
 
+**O mesmo evento carrega a deleção.** "Apagar para todos" não tem envelope próprio: vem como
+`messages_update` com `state: "Deleted"`, `type: "DeletedMessage"` e `event.Type: "Deleted"` — o
+resto idêntico ao recibo, `MessageIDs` incluso. Capturado em 2026-08-04.
+
+Antes de ser tratado, o efeito era pior do que ignorar: `STATE_TO_STATUS` não conhecia `deleted`,
+`parseStatusUpdate` devolvia `null` e a rota respondia `handled: true`. O evento era reconhecido e
+descartado calado, e o CRM seguia exibindo o que o lead tinha apagado no celular.
+
+**A política escolhida é ocultar, não destruir**: `deletedAt` marca a linha, o conteúdo continua no
+banco e quem para de servi-lo é a API — esconder só no front deixaria o texto viajando no JSON. O
+registro da negociação não deveria depender de um clique no celular do lead, e ocultar é reversível;
+destruir não é. Se um dia a política mudar para eliminação de verdade, o gancho é o mesmo campo.
+
+Dois lugares que a deleção alcança e não são óbvios: a **prévia da conversa** (`lastMessageText`
+guarda uma cópia do texto, e precisa ser recalculada) e o **bloco de citação** de um reply que
+aponte para a mensagem apagada.
+
 ### 2.7 Mídia expira em 2 dias
 
 Da spec de `/message/download`: *"mantemos as mídias no nosso storage por 2 dias. Após 2 dias, elas
@@ -818,4 +835,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 10:01 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 10:51 (-03)

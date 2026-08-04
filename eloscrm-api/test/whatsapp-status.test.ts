@@ -10,6 +10,7 @@ vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => ({}) })
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let orgId = "";
+let cookie = "";
 let instanceId = "";
 let conversationId = "";
 const SECRET = `segredo-status-${stamp}`;
@@ -18,7 +19,7 @@ const CHATID = `554398414904@s.whatsapp.net`;
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ orgId } = await signUpWithOrg(app, `status-${stamp}@eloscrm.test`, `status-${stamp}`));
+  ({ orgId, cookie } = await signUpWithOrg(app, `status-${stamp}@eloscrm.test`, `status-${stamp}`));
   const instance = await prisma.uazapiInstance.create({
     data: {
       organizationId: orgId,
@@ -87,6 +88,16 @@ const recibo = (state: string, ids: string[], extra: Record<string, unknown> = {
 
 const post = (body: Record<string, unknown>) =>
   app.inject({ method: "POST", url: `/webhooks/uazapi/${instanceId}/${SECRET}`, payload: body });
+
+// a thread pela API, que é onde se vê o que o front realmente recebe
+const listarMensagens = async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: `/v1/whatsapp/conversations/${conversationId}/messages`,
+    headers: { cookie },
+  });
+  return res.json();
+};
 
 describe("recibos de entrega e leitura", () => {
   it("marca como entregue a mensagem endereçada pelo id do provedor", async () => {
@@ -195,5 +206,105 @@ describe("recibos de entrega e leitura", () => {
   it("recibo sem MessageIDs não quebra o webhook", async () => {
     const res = await post(recibo("Read", []));
     expect(res.statusCode).toBe(200);
+  });
+});
+
+// Payload real de 2026-08-04: "apagar para todos" vem no MESMO messages_update dos recibos.
+const delecao = (ids: string[]) => ({
+  ...recibo("Deleted", ids),
+  type: "DeletedMessage",
+});
+
+describe("mensagem apagada no WhatsApp", () => {
+  it("marca como apagada e para de servir o conteúdo", async () => {
+    const msg = await criarMensagem("DEL1", { text: "esta some", direction: "inbound" });
+
+    const res = await post(delecao(["DEL1"]));
+    expect(res.statusCode).toBe(200);
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(salvo.deletedAt).not.toBeNull();
+    // o registro fica no banco — quem esconde é a API, ao serializar
+    expect(salvo.text).toBe("esta some");
+  });
+
+  it("some com o texto na resposta da API, não só na tela", async () => {
+    await criarMensagem("DEL2", { text: "conteúdo apagado", direction: "inbound" });
+    await post(delecao(["DEL2"]));
+
+    const { items } = await listarMensagens();
+    const apagada = items.find((m: { quotedId: string | null; deletedAt: string | null }) => m.deletedAt);
+    expect(apagada.text).toBeNull();
+    expect(apagada.mediaThumb).toBeNull();
+    expect(apagada.mediaUrl).toBeNull();
+  });
+
+  it("limpa a prévia da conversa quando a última mensagem é apagada", async () => {
+    await criarMensagem("DEL3", { text: "última", direction: "inbound" });
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageText: "última" },
+    });
+
+    await post(delecao(["DEL3"]));
+
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    // sem isto a lista continuaria mostrando o texto que a thread já não mostra
+    expect(conversa.lastMessageText).toBeNull();
+  });
+
+  it("desconta do não lido — conversa não fica acesa por mensagem que sumiu", async () => {
+    await criarMensagem("DEL4", { direction: "inbound" });
+
+    // a conversa nasce com 3 no beforeEach
+    await post(delecao(["DEL4"]));
+
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    expect(conversa.unreadCount).toBe(2);
+  });
+
+  it("reconhece a deleção pelo event.Type quando `state` não vem", async () => {
+    const msg = await criarMensagem("DEL5", { direction: "inbound" });
+    // a mesma leitura de dupla fonte que causou o incidente do 422: os dois caminhos precisam valer
+    const { state: _state, ...semState } = delecao(["DEL5"]);
+
+    await post(semState);
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(salvo.deletedAt).not.toBeNull();
+  });
+
+  it("não apaga mensagem de outra organização", async () => {
+    const outra = await signUpWithOrg(app, `del-b-${stamp}@eloscrm.test`, `del-b-${stamp}`);
+    const outraInstancia = await prisma.uazapiInstance.create({
+      data: {
+        organizationId: outra.orgId,
+        remoteId: `remote-del-b-${stamp}`,
+        name: "del-b",
+        tokenEnc: "x.y.z",
+        tokenHash: hashToken(`tok-del-b-${stamp}`),
+        webhookSecret: `secret-del-b-${stamp}`,
+      },
+    });
+    const outraConversa = await prisma.conversation.create({
+      data: { organizationId: outra.orgId, instanceId: outraInstancia.id, chatid: CHATID },
+    });
+    const alheia = await prisma.whatsappMessage.create({
+      data: {
+        organizationId: outra.orgId,
+        conversationId: outraConversa.id,
+        providerId: "owner:DELX",
+        providerMessageId: "DELX",
+        direction: "inbound",
+        type: "text",
+        status: "sent",
+        sentAt: new Date(),
+      },
+    });
+
+    await post(delecao(["DELX"]));
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: alheia.id } });
+    expect(salvo.deletedAt).toBeNull();
   });
 });

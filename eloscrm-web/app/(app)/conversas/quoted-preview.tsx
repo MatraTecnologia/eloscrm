@@ -23,7 +23,11 @@ export const QuotedPreview = ({
 }) => {
   const thumb = quoted.mediaThumb ? `data:image/jpeg;base64,${quoted.mediaThumb}` : null;
   const autor = quoted.direction === "outbound" ? "Você" : (quoted.senderName ?? "Contato");
-  const resumo = quoted.text?.trim() || whatsappMessageTypeLabels[quoted.type];
+  // citada que foi apagada não vira "Mensagem" pelo rótulo do tipo: quem responde precisa saber
+  // que o original sumiu, não que era um texto qualquer
+  const resumo = quoted.deletedAt
+    ? "Mensagem apagada"
+    : quoted.text?.trim() || whatsappMessageTypeLabels[quoted.type];
 
   return (
     <div

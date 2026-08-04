@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Check, CheckCheck, Clock, CornerUpLeft, FileText, Mic, TriangleAlert } from "lucide-react";
+import { Ban, Check, CheckCheck, Clock, CornerUpLeft, FileText, Mic, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -121,12 +121,13 @@ export const MessageBubble = ({
   highlight?: boolean;
 }) => {
   const mine = message.direction === "outbound";
-  const temMidia = message.type !== "text" && message.type !== "unsupported";
+  const apagada = !!message.deletedAt;
+  const temMidia = !apagada && message.type !== "text" && message.type !== "unsupported";
   const citada = message.quoted;
 
   // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
   // ou que falhou, e a API recusaria de qualquer forma
-  const responder = onReply && message.providerMessageId && (
+  const responder = onReply && !apagada && message.providerMessageId && (
     <Button
       variant="ghost"
       size="icon"
@@ -150,33 +151,44 @@ export const MessageBubble = ({
           highlight && "ring-primary ring-offset-background ring-2 ring-offset-2",
         )}
       >
-        {citada &&
-          (onJumpTo ? (
-            <button type="button" className="w-full text-left" onClick={() => onJumpTo(citada.id)}>
-              <QuotedPreview quoted={citada} mine={mine} className="hover:brightness-95" />
-            </button>
-          ) : (
-            <QuotedPreview quoted={citada} mine={mine} />
-          ))}
-
-        {/* a citação é resolvida no banco inteiro, não só no lote: sem conteúdo aqui, a original foi
-            apagada ou é anterior à integração */}
-        {!citada && message.quotedId && (
-          <span className="border-l-2 py-1 pl-2 text-xs italic opacity-60">
-            Mensagem respondida não disponível
+        {apagada ? (
+          // a linha fica para a thread não abrir buraco, mas nada do conteúdo chega aqui: a API
+          // deixa de servi-lo quando o remetente apaga para todos
+          <span className="flex items-center gap-1.5 italic opacity-70">
+            <Ban className="size-3.5 shrink-0" />
+            Mensagem apagada
           </span>
-        )}
+        ) : (
+          <>
+            {citada &&
+              (onJumpTo ? (
+                <button type="button" className="w-full text-left" onClick={() => onJumpTo(citada.id)}>
+                  <QuotedPreview quoted={citada} mine={mine} className="hover:brightness-95" />
+                </button>
+              ) : (
+                <QuotedPreview quoted={citada} mine={mine} />
+              ))}
 
-        {temMidia && <MediaContent message={message} />}
+            {/* a citação é resolvida no banco inteiro, não só no lote: sem conteúdo aqui, a original
+                foi apagada ou é anterior à integração */}
+            {!citada && message.quotedId && (
+              <span className="border-l-2 py-1 pl-2 text-xs italic opacity-60">
+                Mensagem respondida não disponível
+              </span>
+            )}
 
-        {message.mediaError && (
-          <span className="text-xs opacity-70">Mídia indisponível: {message.mediaError}</span>
-        )}
+            {temMidia && <MediaContent message={message} />}
 
-        {message.text && <span className="break-words whitespace-pre-wrap">{message.text}</span>}
+            {message.mediaError && (
+              <span className="text-xs opacity-70">Mídia indisponível: {message.mediaError}</span>
+            )}
 
-        {message.type === "unsupported" && !message.text && (
-          <span className="text-xs italic opacity-70">Mensagem não suportada</span>
+            {message.text && <span className="break-words whitespace-pre-wrap">{message.text}</span>}
+
+            {message.type === "unsupported" && !message.text && (
+              <span className="text-xs italic opacity-70">Mensagem não suportada</span>
+            )}
+          </>
         )}
 
         <span className="flex items-center justify-end gap-1 text-[11px] opacity-70">

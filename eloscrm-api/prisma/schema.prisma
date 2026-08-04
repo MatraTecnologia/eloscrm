@@ -573,6 +573,11 @@ model WhatsappMessage {
   senderLid  String?
   senderName String?
 
+  // "apagar para todos" no WhatsApp. O conteúdo continua gravado — quem some com ele é a API, que
+  // não o serializa; a linha fica para a thread não abrir buraco e para o registro não depender de
+  // um clique no celular do lead.
+  deletedAt DateTime?
+
   mediaStatus   WhatsappMediaStatus @default(none)
   mediaKey      String?
   mediaMime     String?

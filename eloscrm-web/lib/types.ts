@@ -363,6 +363,8 @@ export type WhatsappQuoted = {
   text: string | null;
   senderName: string | null;
   mediaThumb: string | null;
+  // apagada no WhatsApp: a API não manda o conteúdo, só o marcador
+  deletedAt: string | null;
 };
 
 export type WhatsappMessage = {
@@ -378,6 +380,8 @@ export type WhatsappMessage = {
   // id da citada no provedor; com `quoted` nulo, a original está fora do que foi carregado
   quotedId: string | null;
   quoted: WhatsappQuoted | null;
+  // "apagar para todos": a linha continua na thread, o conteúdo não vem da API
+  deletedAt: string | null;
   senderName: string | null;
   sentByApi: boolean;
   sentAt: string;

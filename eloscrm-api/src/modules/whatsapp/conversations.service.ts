@@ -87,9 +87,22 @@ const quotedSelect = {
   text: true,
   senderName: true,
   mediaThumb: true,
+  deletedAt: true,
 } satisfies Prisma.WhatsappMessageSelect;
 
 type QuotedPreview = Prisma.WhatsappMessageGetPayload<{ select: typeof quotedSelect }>;
+
+/**
+ * O conteúdo de uma mensagem apagada não sai daqui.
+ *
+ * Esconder no front não bastaria: o texto viajaria no JSON e apareceria em qualquer inspetor. A
+ * linha continua no banco — a decisão foi preservar o registro da negociação e ocultar na tela,
+ * não destruir o dado — mas a API se comporta como se o conteúdo não existisse.
+ */
+const hideDeleted = <T extends { deletedAt: Date | null }>(message: T) =>
+  message.deletedAt
+    ? { ...message, text: null, mediaThumb: null, mediaFilename: null, mediaWaveform: null }
+    : message;
 
 /**
  * Resolve as citadas do lote de uma vez — uma query, não uma por bolha.
@@ -107,7 +120,7 @@ const loadQuoted = async (conversationId: string, messages: WhatsappMessage[]) =
     where: { conversationId, providerMessageId: { in: ids } },
     select: quotedSelect,
   });
-  return new Map(found.map((m) => [m.providerMessageId!, m]));
+  return new Map(found.map((m) => [m.providerMessageId!, hideDeleted(m)]));
 };
 
 /**
@@ -116,8 +129,9 @@ const loadQuoted = async (conversationId: string, messages: WhatsappMessage[]) =
  * recarregar a página ganha URL nova.
  */
 const serializeMessage = async (message: WhatsappMessage, quoted?: Map<string, QuotedPreview>) => {
-  const media = await resolveMediaUrl(message);
-  const { mediaKey: _key, mediaTempUrl: _tmp, ...rest } = message;
+  // apagada nem chega a assinar URL: o arquivo continua no R2, mas ninguém recebe link para ele
+  const media = message.deletedAt ? null : await resolveMediaUrl(message);
+  const { mediaKey: _key, mediaTempUrl: _tmp, ...rest } = hideDeleted(message);
   return {
     ...rest,
     mediaUrl: media?.url ?? null,

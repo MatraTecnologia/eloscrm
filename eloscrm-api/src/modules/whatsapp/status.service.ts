@@ -30,24 +30,53 @@ export type ParsedStatusUpdate = {
   providerMessageIds: string[];
 };
 
-export const parseStatusUpdate = (body: Record<string, unknown>): ParsedStatusUpdate | null => {
-  // `event` aqui é OBJETO (payload), não o nome do evento — foi o que derrubou a API com 422
+/** `event` aqui é OBJETO (payload), não o nome do evento — foi o que derrubou a API com 422. */
+const payloadOf = (body: Record<string, unknown>) => {
   const event = body.event;
   if (!event || typeof event !== "object" || Array.isArray(event)) return null;
-  const data = event as Record<string, unknown>;
+  return event as Record<string, unknown>;
+};
 
-  const rawState =
+const stateOf = (body: Record<string, unknown>, data: Record<string, unknown>) =>
+  (
     (typeof body.state === "string" ? body.state : null) ??
-    (typeof data.Type === "string" ? data.Type : null);
-  const status = STATE_TO_STATUS[(rawState ?? "").toLowerCase()];
-  if (!status) return null;
+    (typeof data.Type === "string" ? data.Type : null) ??
+    ""
+  ).toLowerCase();
 
-  const ids = Array.isArray(data.MessageIDs)
+const messageIdsOf = (data: Record<string, unknown>) =>
+  Array.isArray(data.MessageIDs)
     ? data.MessageIDs.filter((id): id is string => typeof id === "string" && id.length > 0)
     : [];
+
+export const parseStatusUpdate = (body: Record<string, unknown>): ParsedStatusUpdate | null => {
+  const data = payloadOf(body);
+  if (!data) return null;
+
+  const status = STATE_TO_STATUS[stateOf(body, data)];
+  if (!status) return null;
+
+  const ids = messageIdsOf(data);
   if (ids.length === 0) return null;
 
   return { status, providerMessageIds: ids };
+};
+
+/**
+ * "Apagar para todos" chega no MESMO `messages_update` dos recibos, com `state: "Deleted"`
+ * (`type: "DeletedMessage"`, `event.Type: "Deleted"`) e os ids no `MessageIDs`. Observado em
+ * tráfego real em 2026-08-04 — a spec da uazapi não documenta.
+ *
+ * Antes disso, `parseStatusUpdate` devolvia null aqui e a rota respondia `handled: true`: o evento
+ * era reconhecido e descartado calado, e o CRM seguia exibindo o que o lead tinha apagado.
+ */
+export const parseDeletion = (body: Record<string, unknown>): string[] | null => {
+  const data = payloadOf(body);
+  if (!data) return null;
+  if (stateOf(body, data) !== "deleted") return null;
+
+  const ids = messageIdsOf(data);
+  return ids.length > 0 ? ids : null;
 };
 
 /**
@@ -97,4 +126,66 @@ export const applyStatusUpdate = async (orgId: string, parsed: ParsedStatusUpdat
   }
 
   return { updated: afetadas.length };
+};
+
+/**
+ * Marca as mensagens como apagadas e conserta o que a conversa guardava sobre elas.
+ *
+ * Dois estados derivados dependem do conteúdo e ficariam mentindo:
+ *
+ * - `lastMessageText` guarda uma **cópia** do texto, então a lista de conversas continuaria
+ *   mostrando o que a thread já não mostra. É recalculado lendo a última mensagem de novo — a
+ *   prévia não guarda de qual mensagem veio, então comparar strings seria adivinhação.
+ * - `unreadCount` contaria uma mensagem que não existe mais para o corretor: a conversa apareceria
+ *   como pendente e abrir não revelaria nada. O piso em zero é proteção contra descontar algo já
+ *   lido — o contador é um número, não uma marca por mensagem, então essa correção é aproximada
+ *   por natureza; errar para baixo é melhor que deixar a conversa acesa para sempre.
+ */
+export const applyDeletion = async (orgId: string, providerMessageIds: string[]) => {
+  const afetadas = await prisma.whatsappMessage.findMany({
+    where: {
+      organizationId: orgId,
+      providerMessageId: { in: providerMessageIds },
+      deletedAt: null,
+    },
+    select: { id: true, conversationId: true, direction: true },
+  });
+  if (afetadas.length === 0) return { deleted: 0 };
+
+  await prisma.whatsappMessage.updateMany({
+    where: { id: { in: afetadas.map((m) => m.id) } },
+    data: { deletedAt: new Date() },
+  });
+
+  for (const conversationId of new Set(afetadas.map((m) => m.conversationId))) {
+    const [conversa, ultima] = await Promise.all([
+      prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { unreadCount: true },
+      }),
+      prisma.whatsappMessage.findFirst({
+        where: { conversationId },
+        orderBy: { sentAt: "desc" },
+        select: { sentAt: true, text: true, deletedAt: true },
+      }),
+    ]);
+    if (!conversa || !ultima) continue;
+
+    // só o que o lead mandou entrou no contador; o que sai daqui nunca entrou
+    const recebidasApagadas = afetadas.filter(
+      (m) => m.conversationId === conversationId && m.direction === WhatsappDirection.inbound,
+    ).length;
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        lastMessageAt: ultima.sentAt,
+        // apagada não devolve texto nem para a prévia: é o mesmo conteúdo que a thread esconde
+        lastMessageText: ultima.deletedAt ? null : ultima.text,
+        unreadCount: Math.max(0, conversa.unreadCount - recebidasApagadas),
+      },
+    });
+  }
+
+  return { deleted: afetadas.length };
 };
