@@ -216,10 +216,34 @@ export const formatAuditValue = (
   return String(value);
 };
 
-// tamanho de arquivo em pt-BR: 1,4 MB e não 1.4 MB
-export const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} KB`;
-  return `${(kb / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
+
+/**
+ * Tamanho de arquivo em pt-BR: 1,4 MB e não 1.4 MB. Espelha `formatBytes` da API, que escreve o
+ * mesmo texto nas mensagens de erro de mídia — os dois lados precisam dizer "29,4 MB" igual.
+ *
+ * Bytes saem inteiros (não existe meio byte); daí para cima, uma casa decimal. O arredondamento é
+ * conferido depois de escolher a unidade, senão 1048000 bytes viraria "1024,0 KB".
+ */
+export const formatFileSize = (bytes: number | null | undefined) => {
+  if (bytes == null || !Number.isFinite(bytes)) return "—";
+
+  const negative = bytes < 0;
+  let value = Math.abs(bytes);
+  let unit = 0;
+
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  if (Number(value.toFixed(unit === 0 ? 0 : 1)) >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+
+  const formatted = value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  });
+  return `${negative ? "-" : ""}${formatted} ${BYTE_UNITS[unit]}`;
 };

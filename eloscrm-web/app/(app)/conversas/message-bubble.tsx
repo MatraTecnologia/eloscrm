@@ -3,16 +3,10 @@
 import { format, parseISO } from "date-fns";
 import { Check, CheckCheck, Clock, CornerUpLeft, FileText, Mic, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatFileSize } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { QuotedPreview } from "./quoted-preview";
-
-const tamanho = (bytes: number | null) => {
-  if (!bytes) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
 
 const duracao = (segundos: number | null) => {
   if (!segundos) return null;
@@ -108,7 +102,7 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
       <FileText className="size-5 shrink-0" />
       <span className="min-w-0">
         <span className="block truncate text-sm">{message.mediaFilename ?? "Arquivo"}</span>
-        <span className="text-xs opacity-70">{tamanho(message.mediaSize) ?? "—"}</span>
+        <span className="text-xs opacity-70">{formatFileSize(message.mediaSize)}</span>
       </span>
     </a>
   );
