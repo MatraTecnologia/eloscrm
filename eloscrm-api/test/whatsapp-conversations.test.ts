@@ -124,6 +124,39 @@ describe("GET /v1/whatsapp/conversations", () => {
   });
 });
 
+describe("GET /v1/whatsapp/conversations/counts", () => {
+  it("conta por aba: todas são as não arquivadas", async () => {
+    // o beforeEach cria uma com unreadCount 2
+    await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId, chatid: `lida-c-${stamp}@s.whatsapp.net`, unreadCount: 0 },
+    });
+    await prisma.conversation.create({
+      data: {
+        organizationId: orgId,
+        instanceId,
+        chatid: `arq-c-${stamp}@s.whatsapp.net`,
+        unreadCount: 5,
+        archivedAt: new Date(),
+      },
+    });
+
+    const counts = (await get("/v1/whatsapp/conversations/counts")).json();
+    expect(counts).toEqual({ all: 2, unread: 1, archived: 1 });
+  });
+
+  it("não conta conversa de outra imobiliária", async () => {
+    const counts = (await get("/v1/whatsapp/conversations/counts", cookieB)).json();
+    expect(counts).toEqual({ all: 0, unread: 0, archived: 0 });
+  });
+
+  it("`counts` não é lido como id de conversa", async () => {
+    // a rota curinga `/:id` capturaria a palavra se fosse registrada antes
+    const res = await get("/v1/whatsapp/conversations/counts");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveProperty("all");
+  });
+});
+
 describe("GET /v1/whatsapp/conversations/:id/messages", () => {
   it("devolve em ordem cronológica, do mais antigo para o mais novo", async () => {
     await criarMensagem({ text: "primeira", sentAt: new Date("2026-08-01T10:00:00Z") });

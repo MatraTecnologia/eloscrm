@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useConversationCounts } from "@/lib/queries/conversations";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/types";
 
@@ -24,6 +25,19 @@ type Props = {
 
 const titulo = (c: Conversation) => c.client?.name ?? c.contactName ?? c.waName ?? c.phone ?? "Sem nome";
 
+/**
+ * Contagem ao lado do nome da aba.
+ *
+ * Zero não vira badge: um "0" ao lado de "Não lidas" ocupa espaço para dizer que não há nada, e a
+ * ausência já diz isso. `undefined` é a contagem ainda carregando.
+ */
+const Contagem = ({ valor }: { valor: number | undefined }) =>
+  valor ? (
+    <span className="bg-muted-foreground/15 rounded-full px-1.5 text-[11px] leading-4 tabular-nums">
+      {valor > 99 ? "99+" : valor}
+    </span>
+  ) : null;
+
 export const ConversationList = ({
   conversations,
   isLoading,
@@ -33,7 +47,10 @@ export const ConversationList = ({
   onBusca,
   filtro,
   onFiltro,
-}: Props) => (
+}: Props) => {
+  const { data: counts } = useConversationCounts();
+
+  return (
   <div className="flex h-full flex-col border-r">
     <div className="flex flex-col gap-2 border-b p-3">
       <div className="relative">
@@ -47,14 +64,17 @@ export const ConversationList = ({
       </div>
       <Tabs value={filtro} onValueChange={onFiltro}>
         <TabsList className="w-full">
-          <TabsTrigger value="todas" className="flex-1">
+          <TabsTrigger value="todas" className="flex-1 gap-1.5">
             Todas
+            <Contagem valor={counts?.all} />
           </TabsTrigger>
-          <TabsTrigger value="nao-lidas" className="flex-1">
+          <TabsTrigger value="nao-lidas" className="flex-1 gap-1.5">
             Não lidas
+            <Contagem valor={counts?.unread} />
           </TabsTrigger>
-          <TabsTrigger value="arquivadas" className="flex-1">
+          <TabsTrigger value="arquivadas" className="flex-1 gap-1.5">
             Arquivadas
+            <Contagem valor={counts?.archived} />
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -114,4 +134,5 @@ export const ConversationList = ({
       ))}
     </div>
   </div>
-);
+  );
+};

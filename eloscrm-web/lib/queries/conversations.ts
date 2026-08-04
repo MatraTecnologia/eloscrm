@@ -31,6 +31,23 @@ export const useConversations = (filters: ConversationFilters = {}) => {
   });
 };
 
+/** Contagem por aba. A listagem é paginada, então o tamanho da página nunca responde "quantas". */
+export const useConversationCounts = () => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), "counts"],
+    queryFn: async () => {
+      const { data } = await api.get<{ all: number; unread: number; archived: number }>(
+        "/whatsapp/conversations/counts",
+      );
+      return data;
+    },
+    enabled: !!org?.id,
+    // acompanha o intervalo da lista: o número ao lado da aba não pode ficar atrás dela
+    refetchInterval: 10_000,
+  });
+};
+
 export const useConversation = (id: string | null) => {
   const { data: org } = useActiveOrganization();
   return useQuery({

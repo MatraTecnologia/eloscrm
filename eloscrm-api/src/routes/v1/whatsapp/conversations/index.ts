@@ -30,6 +30,9 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     return service.list(request.orgId!, query);
   });
 
+  // antes de `/:id`: registrada depois, a rota curinga capturaria "counts" como id de conversa
+  app.get("/counts", async (request) => service.counts(request.orgId!));
+
   app.get("/:id", async (request) => {
     const { id } = request.params as { id: string };
     return service.getById(request.orgId!, id);

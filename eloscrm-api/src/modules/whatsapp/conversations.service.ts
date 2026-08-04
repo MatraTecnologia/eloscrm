@@ -67,6 +67,23 @@ export const list = async (orgId: string, query: ListConversationsQuery) => {
   return { items, nextCursor: items.length === query.limit ? items.at(-1)?.id : undefined };
 };
 
+/**
+ * Contagem por aba da lista.
+ *
+ * Em rota própria porque a listagem é paginada (`take`), então o número de itens devolvidos nunca
+ * responde "quantas existem". "Todas" conta as **não arquivadas** — é o que a aba mostra.
+ */
+export const counts = async (orgId: string) => {
+  const [all, unread, archived] = await Promise.all([
+    prisma.conversation.count({ where: { organizationId: orgId, archivedAt: null } }),
+    prisma.conversation.count({
+      where: { organizationId: orgId, archivedAt: null, unreadCount: { gt: 0 } },
+    }),
+    prisma.conversation.count({ where: { organizationId: orgId, archivedAt: { not: null } } }),
+  ]);
+  return { all, unread, archived };
+};
+
 export const getById = async (orgId: string, id: string) => {
   const conversation = await prisma.conversation.findFirst({
     where: { id, organizationId: orgId },
