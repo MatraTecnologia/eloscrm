@@ -80,6 +80,18 @@ const post = (body: Record<string, unknown>) =>
   app.inject({ method: "POST", url: `/webhooks/uazapi/${instanceId}/${SECRET}`, payload: body });
 
 describe("ingestão de mensagens", () => {
+  it("normaliza o telefone: `chat.phone` vem com máscara, não com dígitos", async () => {
+    // formato real observado em 2026-08-04 — a spec dizia "já normalizado, só dígitos", e não é
+    await post(evento({ messageid: "MASK1", type: "text", text: "oi", content: "oi" }, {
+      phone: "+55 43 9841-4904",
+    }));
+
+    const conversa = await prisma.conversation.findFirstOrThrow({ where: { organizationId: orgId } });
+    // guardar com máscara faz o número virar destino de envio e quebra a busca por dígitos
+    expect(conversa.phone).toBe("554398414904");
+    expect(conversa.phoneKey).toBe("4398414904");
+  });
+
   it("cria conversa e mensagem a partir do envelope real", async () => {
     const res = await post(
       evento({ messageid: "M1", type: "text", messageType: "Conversation", text: "oi", content: "oi" }),

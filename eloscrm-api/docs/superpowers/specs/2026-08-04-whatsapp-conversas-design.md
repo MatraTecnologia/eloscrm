@@ -54,13 +54,19 @@ O `connectionDataOf` atual lê `body.instance` e não serve — a fase 2 precisa
 "sender":     "226070083190831@lid",            // identificador opaco: NÃO é telefone
 "sender_pn":  "554391834229@s.whatsapp.net",    // o telefone resolvido
 "chatid":     "554391834229@s.whatsapp.net",
-"chat.phone": "554391834229"                    // já normalizado, só dígitos
+"chat.phone": "+55 43 9841-4904"                // ⚠️ COM máscara — ver abaixo
 ```
 
 O WhatsApp migrou para **LID** (identificador que não revela o número). Casar lead por `sender`
-nunca funcionaria. A fonte para matching é `chat.phone` (só dígitos, pronto) com `sender_pn` de
-reserva. Guardar o LID mesmo assim: é o que identifica a pessoa de forma estável se ela trocar de
-número.
+nunca funcionaria. A fonte para matching é `chat.phone`, com `sender_pn` de reserva. Guardar o LID
+mesmo assim: é o que identifica a pessoa de forma estável se ela trocar de número.
+
+⚠️ **`chat.phone` NÃO vem normalizado.** Esta seção afirmou o contrário até 2026-08-04, quando o
+tráfego mostrou `+55 43 9841-4904` — com `+`, espaços e hífen. O erro se propagava em silêncio
+porque `phoneKey` descarta não-dígitos e continuava casando: o sintoma real era
+`conversation.phone` virar **destino de envio** (`/send/text` e `/message/react` recebem
+`number: conversation.phone`) e a busca por dígitos deixar de casar. A uazapi aceitou o número
+mascarado, o que atrasou a descoberta. Hoje a ingestão guarda só os dígitos.
 
 ### 2.3 Campos de `message` que importam
 
@@ -904,4 +910,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:49 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:53 (-03)

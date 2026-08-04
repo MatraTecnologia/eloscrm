@@ -13,6 +13,12 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 
 const str = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
 
+/** Telefone do provedor chega em formatos diferentes conforme o campo; só os dígitos são estáveis. */
+const digits = (value: string | null | undefined) => {
+  const onlyDigits = (value ?? "").replace(/\D/g, "");
+  return onlyDigits.length > 0 ? onlyDigits : null;
+};
+
 const int = (value: unknown) => {
   const n = typeof value === "string" ? Number(value) : value;
   return typeof n === "number" && Number.isFinite(n) ? Math.trunc(n) : null;
@@ -89,8 +95,11 @@ export const parseConversation = (body: Record<string, unknown>): ParsedConversa
   const chatid = str(chat.wa_chatid) ?? str(message.chatid);
   if (!chatid) return null;
 
-  // `chat.phone` já vem só com dígitos; sender_pn é o JID e precisa perder o sufixo
-  const phone = str(chat.phone) ?? str(message.sender_pn)?.split("@")[0] ?? null;
+  // `chat.phone` **não** vem normalizado: observado como `+55 43 9841-4904` em 2026-08-04, com
+  // máscara e espaços. Guardar assim faz o número virar destino de envio (`/send/text`,
+  // `/message/react` recebem `number: conversation.phone`) e quebra a busca por dígitos. O JID do
+  // `sender_pn` é a fonte confiável; do `chat.phone` só interessam os dígitos.
+  const phone = digits(str(chat.phone)) ?? digits(str(message.sender_pn)?.split("@")[0]) ?? null;
 
   return {
     chatid,
