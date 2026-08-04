@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConversations } from "@/lib/queries/conversations";
+import type { WhatsappMessage } from "@/lib/types";
 import { MessageThread } from "@/app/(app)/conversas/message-thread";
 import { MessageComposer } from "@/app/(app)/conversas/message-composer";
 
@@ -16,6 +18,7 @@ import { MessageComposer } from "@/app/(app)/conversas/message-composer";
  */
 export const WhatsappTab = ({ clientId }: { clientId: string }) => {
   const { data, isLoading } = useConversations({ clientId });
+  const [respondendo, setRespondendo] = useState<WhatsappMessage | null>(null);
   const conversa = data?.items[0];
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
@@ -42,8 +45,12 @@ export const WhatsappTab = ({ clientId }: { clientId: string }) => {
   return (
     <Card className="overflow-hidden p-0">
       <CardContent className="flex h-[32rem] flex-col p-0">
-        <MessageThread conversationId={conversa.id} />
-        <MessageComposer conversationId={conversa.id} />
+        <MessageThread conversationId={conversa.id} onReply={setRespondendo} />
+        <MessageComposer
+          conversationId={conversa.id}
+          replyTo={respondendo}
+          onCancelReply={() => setRespondendo(null)}
+        />
       </CardContent>
     </Card>
   );

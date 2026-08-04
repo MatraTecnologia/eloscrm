@@ -5,6 +5,7 @@ import { MessageSquare } from "lucide-react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useConversation, useConversations, useMarkRead } from "@/lib/queries/conversations";
+import type { WhatsappMessage } from "@/lib/types";
 import { ConversationHeader } from "./conversation-header";
 import { ConversationList } from "./conversation-list";
 import { MessageComposer } from "./message-composer";
@@ -15,6 +16,13 @@ export default function ConversasPage() {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
   const [selecionada, setSelecionada] = useState<string | null>(null);
+  const [respondendo, setRespondendo] = useState<WhatsappMessage | null>(null);
+
+  // trocar de conversa descarta a citação: ela aponta para uma mensagem que não está mais na tela
+  const selecionar = (id: string) => {
+    setSelecionada(id);
+    setRespondendo(null);
+  };
 
   const { data, isLoading } = useConversations({
     q: busca.trim() || undefined,
@@ -46,7 +54,7 @@ export default function ConversasPage() {
           conversations={data?.items}
           isLoading={isLoading && !!org}
           selectedId={selecionada}
-          onSelect={setSelecionada}
+          onSelect={selecionar}
           busca={busca}
           onBusca={setBusca}
           filtro={filtro}
@@ -57,8 +65,12 @@ export default function ConversasPage() {
           {conversa ? (
             <>
               <ConversationHeader conversation={conversa} />
-              <MessageThread conversationId={conversa.id} />
-              <MessageComposer conversationId={conversa.id} />
+              <MessageThread conversationId={conversa.id} onReply={setRespondendo} />
+              <MessageComposer
+                conversationId={conversa.id}
+                replyTo={respondendo}
+                onCancelReply={() => setRespondendo(null)}
+              />
             </>
           ) : (
             <Empty className="m-auto">

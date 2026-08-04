@@ -9,6 +9,7 @@ import type {
   NurtureReason,
   PropertyStatus,
   LeadTemperature,
+  WhatsappMessageType,
 } from "./types";
 
 export const clientSourceLabels: Record<ClientSource, string> = {
@@ -51,6 +52,25 @@ export const nurtureReasonLabels: Record<NurtureReason, string> = {
   COMPROU_COM_OUTRO: "Comprou com outro",
   SO_PESQUISANDO: "Só pesquisando",
   OUTRO: "Outro motivo",
+};
+
+// Resumo de uma mensagem quando não há texto para mostrar — citação de mídia, prévia da conversa.
+// "Mensagem" nos casos que sempre trazem texto: o rótulo só aparece quando o texto falta.
+export const whatsappMessageTypeLabels: Record<WhatsappMessageType, string> = {
+  text: "Mensagem",
+  image: "Foto",
+  video: "Vídeo",
+  gif: "GIF",
+  audio: "Áudio",
+  ptt: "Mensagem de voz",
+  document: "Documento",
+  sticker: "Figurinha",
+  location: "Localização",
+  contact: "Contato",
+  reaction: "Reação",
+  poll: "Enquete",
+  system: "Aviso",
+  unsupported: "Mensagem",
 };
 
 // Telefone é persistido em E.164 (+5543998414904) e só formatado na exibição/digitação.

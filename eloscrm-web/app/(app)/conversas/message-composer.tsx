@@ -2,15 +2,25 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Send, TriangleAlert } from "lucide-react";
+import { Send, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useSendMessage } from "@/lib/queries/conversations";
 import type { ApiError } from "@/lib/api";
+import type { WhatsappMessage } from "@/lib/types";
 import { toast } from "sonner";
+import { QuotedPreview } from "./quoted-preview";
 
-export const MessageComposer = ({ conversationId }: { conversationId: string }) => {
+export const MessageComposer = ({
+  conversationId,
+  replyTo,
+  onCancelReply,
+}: {
+  conversationId: string;
+  replyTo?: WhatsappMessage | null;
+  onCancelReply?: () => void;
+}) => {
   const [texto, setTexto] = useState("");
   const [bloqueio, setBloqueio] = useState<string | null>(null);
   const send = useSendMessage();
@@ -20,12 +30,13 @@ export const MessageComposer = ({ conversationId }: { conversationId: string }) 
     if (!valor || send.isPending) return;
 
     send.mutate(
-      { conversationId, text: valor },
+      { conversationId, text: valor, replyToId: replyTo?.id },
       {
         // limpa só no sucesso: se falhar, o texto continua no campo para reenviar
         onSuccess: () => {
           setTexto("");
           setBloqueio(null);
+          onCancelReply?.();
         },
         onError: (err) => {
           // o interceptor do axios rejeita já com o envelope { code, message } da API, não com Error
@@ -59,12 +70,33 @@ export const MessageComposer = ({ conversationId }: { conversationId: string }) 
         </Alert>
       )}
 
+      {replyTo && (
+        <div className="flex items-center gap-2">
+          <QuotedPreview quoted={replyTo} className="bg-muted min-w-0 flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Cancelar resposta"
+            className="size-8 shrink-0"
+            onClick={onCancelReply}
+          >
+            <X />
+          </Button>
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         <Textarea
           rows={1}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
+            // Esc desiste da citação sem apagar o que já foi escrito
+            if (e.key === "Escape" && replyTo) {
+              e.preventDefault();
+              onCancelReply?.();
+              return;
+            }
             // Enter envia, Shift+Enter quebra linha — como em qualquer mensageiro
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

@@ -354,14 +354,30 @@ export type Conversation = {
   createdAt: string;
 };
 
+// Prévia da mensagem citada num reply — vem resolvida pela API, sem URL de mídia assinada.
+export type WhatsappQuoted = {
+  id: string;
+  providerMessageId: string | null;
+  direction: "inbound" | "outbound";
+  type: WhatsappMessageType;
+  text: string | null;
+  senderName: string | null;
+  mediaThumb: string | null;
+};
+
 export type WhatsappMessage = {
   id: string;
   providerId: string;
+  // id puro no provedor; nulo enquanto o envio não foi confirmado — e é o que torna a mensagem citável
+  providerMessageId: string | null;
   direction: "inbound" | "outbound";
   type: WhatsappMessageType;
   rawType: string | null;
   status: WhatsappMessageStatus;
   text: string | null;
+  // id da citada no provedor; com `quoted` nulo, a original está fora do que foi carregado
+  quotedId: string | null;
+  quoted: WhatsappQuoted | null;
   senderName: string | null;
   sentByApi: boolean;
   sentAt: string;

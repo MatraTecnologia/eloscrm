@@ -73,7 +73,8 @@ número.
 | `messageTimestamp` | `1785817572632` | **milissegundos**, não segundos |
 | `content` | `{ text, contextInfo }` | objeto, não string |
 | `wasSentByApi` | `true` | distingue envio nosso de envio pelo celular |
-| `quoted`, `reaction`, `vote`, `edited` | `""` | resposta, reação, enquete, edição |
+| `quoted` | `""`, ou o `messageid` da citada | resposta — ver §2.9 |
+| `reaction`, `vote`, `edited` | `""` | reação, enquete, edição |
 
 ### 2.4 A uazapi tem um CRM embutido — vamos ignorá-lo
 
@@ -183,6 +184,35 @@ deste sistema onde a falha é irreversível — todo o resto se recupera com um 
 
 O CRM guarda com o nono dígito; o JID veio sem. São a mesma pessoa e **não casam** por comparação
 direta. Pior: `Client.phone` é `z.string().optional()` sem normalização e **sem índice**.
+
+### 2.9 Reply: `quoted` é o caminho curto, `contextInfo` é o longo
+
+Capturado em 2026-08-04 (um "reply teste" citando um gif):
+
+```jsonc
+{ "messageType": "ExtendedTextMessage",       // texto simples vira Extended quando é resposta
+  "quoted": "3B09D7A381576117BDF6",           // messageid PURO da citada, sem o prefixo do owner
+  "content": { "text": "reply teste",
+    "contextInfo": { "stanzaID": "3B09D7A381576117BDF6",   // o mesmo valor de `quoted`
+                     "participant": "53176141132007@lid",  // LID do autor, não telefone
+                     "quotedMessage": { "videoMessage": { … } },  // a citada INTEIRA, com thumbnail
+                     "quotedType": 0 } } }
+```
+
+Três coisas que decidem o design:
+
+- **`message.quoted` já entrega o que interessa.** É o `messageid` puro — a mesma forma que
+  `providerMessageId` guarda —, então a citada é reencontrada com um `findMany` por
+  `providerMessageId`, sem tocar em `contextInfo`. Ler o objeto aninhado só duplicaria, no banco,
+  conteúdo que já está na linha da mensagem original.
+- **`quotedMessage` traz a mídia da citada de novo**, `JPEGThumbnail` incluso — em um único reply a
+  um gif, ~9 KB de base64 repetido. Persistir isso engordaria a tabela sem entregar nada novo.
+- **`messageType` muda para `ExtendedTextMessage`** num texto que, sem citação, viria como
+  `Conversation`. Mais um motivo para ramificar por `type`/`mediaType` e nunca por `messageType`.
+
+No envio, o campo é `replyid` (documentado, em `CommonSendOptions`), e recebe o mesmo `messageid`
+puro. A resposta de `/send/text` devolve `messageid`, então mensagem enviada pelo CRM também é
+citável — o reply funciona nas duas direções.
 
 ---
 
@@ -788,4 +818,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 09:27 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 10:01 (-03)

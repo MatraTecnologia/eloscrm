@@ -76,14 +76,54 @@ export const getById = async (orgId: string, id: string) => {
 };
 
 /**
+ * Prévia da mensagem citada num reply. Sem `mediaUrl`: o bloco de citação mostra a miniatura que já
+ * está no banco e o rótulo do tipo, então assinar uma URL por citação seria trabalho jogado fora.
+ */
+const quotedSelect = {
+  id: true,
+  providerMessageId: true,
+  direction: true,
+  type: true,
+  text: true,
+  senderName: true,
+  mediaThumb: true,
+} satisfies Prisma.WhatsappMessageSelect;
+
+type QuotedPreview = Prisma.WhatsappMessageGetPayload<{ select: typeof quotedSelect }>;
+
+/**
+ * Resolve as citadas do lote de uma vez — uma query, não uma por bolha.
+ *
+ * `quotedId` guarda o `messageid` puro do provedor (é o que vem em `message.quoted`), e é por
+ * `providerMessageId` que a mensagem original é reencontrada. Citada fora do lote carregado ou
+ * anterior à integração simplesmente não aparece no mapa: o front distingue pelo `quotedId` que
+ * continua na resposta.
+ */
+const loadQuoted = async (conversationId: string, messages: WhatsappMessage[]) => {
+  const ids = [...new Set(messages.flatMap((m) => (m.quotedId ? [m.quotedId] : [])))];
+  if (ids.length === 0) return new Map<string, QuotedPreview>();
+
+  const found = await prisma.whatsappMessage.findMany({
+    where: { conversationId, providerMessageId: { in: ids } },
+    select: quotedSelect,
+  });
+  return new Map(found.map((m) => [m.providerMessageId!, m]));
+};
+
+/**
  * A URL da mídia é resolvida aqui e vai junto da mensagem: assinar é computação local, sem I/O,
  * então embutir sai mais barato que o front pedir uma por bolha. O TTL é curto — o front que
  * recarregar a página ganha URL nova.
  */
-const serializeMessage = async (message: WhatsappMessage) => {
+const serializeMessage = async (message: WhatsappMessage, quoted?: Map<string, QuotedPreview>) => {
   const media = await resolveMediaUrl(message);
   const { mediaKey: _key, mediaTempUrl: _tmp, ...rest } = message;
-  return { ...rest, mediaUrl: media?.url ?? null, mediaSource: media?.source ?? null };
+  return {
+    ...rest,
+    mediaUrl: media?.url ?? null,
+    mediaSource: media?.source ?? null,
+    quoted: (message.quotedId ? quoted?.get(message.quotedId) : null) ?? null,
+  };
 };
 
 export const listMessages = async (orgId: string, id: string, query: ListMessagesQuery) => {
@@ -99,10 +139,11 @@ export const listMessages = async (orgId: string, id: string, query: ListMessage
   // o cursor da próxima página é a mensagem mais antiga deste lote — capturado antes de inverter,
   // porque depender da ordem de avaliação com um `reverse()` que muta o array é convite a bug
   const maisAntiga = messages.at(-1)?.id;
+  const quoted = await loadQuoted(id, messages);
 
   return {
     // desc na query para pegar as mais recentes; asc na resposta porque a thread lê de cima
-    items: await Promise.all([...messages].reverse().map(serializeMessage)),
+    items: await Promise.all([...messages].reverse().map((m) => serializeMessage(m, quoted))),
     nextBefore: messages.length === query.limit ? maisAntiga : undefined,
   };
 };
@@ -149,6 +190,22 @@ export const sendText = async (
     throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar mensagens");
   }
 
+  // a citada precisa ser da mesma conversa: para a uazapi o `replyid` é só uma string, então sem
+  // esse escopo um id chutado responderia mensagem de outro chat
+  let replyid: string | undefined;
+  if (data.replyToId) {
+    const alvo = await prisma.whatsappMessage.findFirst({
+      where: { id: data.replyToId, conversationId },
+      select: { providerMessageId: true },
+    });
+    if (!alvo) throw notFound("Mensagem citada não encontrada");
+    // mensagem ainda em `pending` (ou falha de envio) não tem id no provedor e não dá para citar
+    if (!alvo.providerMessageId) {
+      throw conflict("MESSAGE_NOT_REPLIABLE", "Esta mensagem ainda não pode ser respondida");
+    }
+    replyid = alvo.providerMessageId;
+  }
+
   const local = await prisma.whatsappMessage.create({
     data: {
       organizationId: orgId,
@@ -159,6 +216,8 @@ export const sendText = async (
       type: WhatsappMessageType.text,
       status: WhatsappMessageStatus.pending,
       text: data.text,
+      // mesma forma do que a ingestão grava: o messageid puro do provedor
+      quotedId: replyid ?? null,
       sentByApi: true,
       sentById: actor.id,
       sentAt: new Date(),
@@ -171,9 +230,12 @@ export const sendText = async (
   const result = await instanceClient(config, conversation.instance.tokenEnc).send.text({
     number: destino,
     text: data.text,
+    ...(replyid ? { replyid } : {}),
   });
 
   if (!result.success) {
+    // `quotedId` fica: a bolha marcada como falha já mostra o texto que o corretor escreveu, e a
+    // citação é parte da mesma tentativa. Limpar deixaria a bolha de erro respondendo ao nada.
     await prisma.whatsappMessage.update({
       where: { id: local.id },
       data: { status: WhatsappMessageStatus.failed },
@@ -195,7 +257,7 @@ export const sendText = async (
     data: { lastMessageAt: updated.sentAt, lastMessageText: updated.text },
   });
 
-  return serializeMessage(updated);
+  return serializeMessage(updated, await loadQuoted(conversationId, [updated]));
 };
 
 /**

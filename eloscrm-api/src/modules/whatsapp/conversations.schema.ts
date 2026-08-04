@@ -18,6 +18,9 @@ export const listMessagesQuerySchema = z.object({
 
 export const sendMessageSchema = z.object({
   text: z.string().trim().min(1).max(4096),
+  // id da NOSSA mensagem (cuid), não o do provedor: o serviço resolve o `replyid` a partir dele e,
+  // no caminho, confere que a citada é da mesma conversa
+  replyToId: z.string().min(1).optional(),
 });
 
 export const createClientFromConversationSchema = z.object({

@@ -133,6 +133,26 @@ describe("GET /v1/whatsapp/conversations/:id/messages", () => {
     expect(items.map((m: { text: string }) => m.text)).toEqual(["primeira", "segunda"]);
   });
 
+  it("resolve a prévia da mensagem citada pelo id do provedor", async () => {
+    await criarMensagem({ providerMessageId: "ORIG1", text: "quanto custa?", senderName: "Fulano" });
+    await criarMensagem({ text: "R$ 450 mil", quotedId: "ORIG1" });
+
+    const { items } = (await get(`/v1/whatsapp/conversations/${conversationId}/messages`)).json();
+    const resposta = items.find((m: { quotedId: string | null }) => m.quotedId === "ORIG1");
+    expect(resposta.quoted.text).toBe("quanto custa?");
+    expect(resposta.quoted.senderName).toBe("Fulano");
+    // a prévia não assina URL de mídia: quem cita já tem a miniatura no próprio registro
+    expect(resposta.quoted).not.toHaveProperty("mediaUrl");
+  });
+
+  it("citada fora do alcance devolve quoted nulo, sem derrubar a thread", async () => {
+    await criarMensagem({ text: "respondendo algo antigo", quotedId: "ANTES-DA-INTEGRACAO" });
+
+    const { items } = (await get(`/v1/whatsapp/conversations/${conversationId}/messages`)).json();
+    expect(items[0].quotedId).toBe("ANTES-DA-INTEGRACAO");
+    expect(items[0].quoted).toBeNull();
+  });
+
   it("nunca expõe a chave do R2 nem a URL temporária cruas", async () => {
     await criarMensagem({
       type: "image",
@@ -220,6 +240,53 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
     });
   });
 
+  it("responde citando: manda replyid ao provedor e guarda o vínculo", async () => {
+    await conectar();
+    const citada = await criarMensagem({ providerMessageId: "CITADA1", text: "tem garagem?" });
+
+    const res = await enviar({ text: "Tem, para dois carros.", replyToId: citada.id });
+    expect(res.statusCode).toBe(201);
+    // o front manda o nosso cuid; quem traduz para o id do provedor é o serviço
+    expect(remote.send.text).toHaveBeenCalledWith({
+      number: "554399990000",
+      text: "Tem, para dois carros.",
+      replyid: "CITADA1",
+    });
+    expect(res.json().quoted.text).toBe("tem garagem?");
+  });
+
+  it("não deixa citar mensagem de outra conversa", async () => {
+    await conectar();
+    const outra = await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId, chatid: `outra-${seq++}@s.whatsapp.net` },
+    });
+    const alheia = await prisma.whatsappMessage.create({
+      data: {
+        organizationId: orgId,
+        conversationId: outra.id,
+        providerId: `owner:ALHEIA${seq++}`,
+        providerMessageId: `ALHEIA${seq}`,
+        direction: "inbound",
+        type: "text",
+        status: "sent",
+        sentAt: new Date(),
+      },
+    });
+
+    const res = await enviar({ text: "citando o chat errado", replyToId: alheia.id });
+    expect(res.statusCode).toBe(404);
+    expect(remote.send.text).not.toHaveBeenCalled();
+  });
+
+  it("recusa citar mensagem que ainda não tem id no provedor", async () => {
+    await conectar();
+    const pendente = await criarMensagem({ providerMessageId: null, status: "pending" });
+
+    const res = await enviar({ text: "citando pendente", replyToId: pendente.id });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("MESSAGE_NOT_REPLIABLE");
+  });
+
   it("atualiza a prévia da conversa na lista", async () => {
     await conectar();
     await enviar({ text: "prévia nova" });
@@ -231,7 +298,8 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
     await conectar();
     remote.send.text.mockResolvedValue({ success: false, error: { status: 500, error: "boom" } });
 
-    const res = await enviar({ text: "não vai sair" });
+    const citada = await criarMensagem({ providerMessageId: "FALHA1" });
+    const res = await enviar({ text: "não vai sair", replyToId: citada.id });
     expect(res.statusCode).toBe(502);
 
     // a mensagem não some entre o clique e o erro — o corretor vê o que tentou mandar
@@ -239,6 +307,8 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
       where: { conversationId, text: "não vai sair" },
     });
     expect(msg.status).toBe("failed");
+    // a citação também fica: a bolha de erro mostra a tentativa inteira, não metade dela
+    expect(msg.quotedId).toBe("FALHA1");
   });
 
   it("bloqueio do WhatsApp tem código próprio, distinto de falha da conexão", async () => {

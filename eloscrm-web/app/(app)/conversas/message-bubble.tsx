@@ -1,9 +1,11 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Check, CheckCheck, Clock, FileText, Mic, TriangleAlert } from "lucide-react";
+import { Check, CheckCheck, Clock, CornerUpLeft, FileText, Mic, TriangleAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
+import { QuotedPreview } from "./quoted-preview";
 
 const tamanho = (bytes: number | null) => {
   if (!bytes) return null;
@@ -112,18 +114,50 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
   );
 };
 
-export const MessageBubble = ({ message }: { message: WhatsappMessage }) => {
+export const MessageBubble = ({
+  message,
+  onReply,
+}: {
+  message: WhatsappMessage;
+  onReply?: (message: WhatsappMessage) => void;
+}) => {
   const mine = message.direction === "outbound";
   const temMidia = message.type !== "text" && message.type !== "unsupported";
 
+  // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
+  // ou que falhou, e a API recusaria de qualquer forma
+  const responder = onReply && message.providerMessageId && (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Responder"
+      // invisível até o hover, mas continua na ordem de tabulação: quem navega por teclado
+      // encontra o botão pelo foco
+      className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+      onClick={() => onReply(message)}
+    >
+      <CornerUpLeft className="size-3.5" />
+    </Button>
+  );
+
   return (
-    <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
+    <div className={cn("group flex items-center gap-1", mine ? "justify-end" : "justify-start")}>
+      {mine && responder}
       <div
         className={cn(
           "flex max-w-[75%] flex-col gap-1 rounded-lg px-3 py-2 text-sm",
           mine ? "bg-primary text-primary-foreground" : "bg-muted",
         )}
       >
+        {message.quoted && <QuotedPreview quoted={message.quoted} mine={mine} />}
+
+        {/* citada fora do lote carregado (ou anterior à integração): o vínculo existe, o conteúdo não */}
+        {!message.quoted && message.quotedId && (
+          <span className="border-l-2 py-1 pl-2 text-xs italic opacity-60">
+            Mensagem respondida não disponível
+          </span>
+        )}
+
         {temMidia && <MediaContent message={message} />}
 
         {message.mediaError && (
@@ -141,6 +175,7 @@ export const MessageBubble = ({ message }: { message: WhatsappMessage }) => {
           <StatusIcon message={message} />
         </span>
       </div>
+      {!mine && responder}
     </div>
   );
 };

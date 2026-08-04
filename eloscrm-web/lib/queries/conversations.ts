@@ -121,10 +121,19 @@ export const useLinkClient = () =>
 export const useSendMessage = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ conversationId, text }: { conversationId: string; text: string }) => {
+    mutationFn: async ({
+      conversationId,
+      text,
+      replyToId,
+    }: {
+      conversationId: string;
+      text: string;
+      // id da nossa mensagem citada; a API resolve o id do provedor a partir dele
+      replyToId?: string;
+    }) => {
       const { data } = await api.post<WhatsappMessage>(
         `/whatsapp/conversations/${conversationId}/messages`,
-        { text },
+        { text, replyToId },
       );
       return data;
     },

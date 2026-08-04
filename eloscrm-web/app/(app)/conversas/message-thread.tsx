@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMessages } from "@/lib/queries/conversations";
+import type { WhatsappMessage } from "@/lib/types";
 import { MessageBubble } from "./message-bubble";
 
 const rotuloDoDia = (iso: string) => {
@@ -18,7 +19,13 @@ const rotuloDoDia = (iso: string) => {
   return format(data, "d 'de' MMMM", { locale: ptBR });
 };
 
-export const MessageThread = ({ conversationId }: { conversationId: string }) => {
+export const MessageThread = ({
+  conversationId,
+  onReply,
+}: {
+  conversationId: string;
+  onReply?: (message: WhatsappMessage) => void;
+}) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useMessages(conversationId);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -72,7 +79,7 @@ export const MessageThread = ({ conversationId }: { conversationId: string }) =>
               {dia}
             </span>
           )}
-          <MessageBubble message={message} />
+          <MessageBubble message={message} onReply={onReply} />
         </div>
       ))}
 
