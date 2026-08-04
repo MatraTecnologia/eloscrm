@@ -605,24 +605,78 @@ Mesma linha da fase 1: Postgres real, uazapi mockada (`vi.mock`).
 
 Cada uma fecha com `lint` + `typecheck` + `test` verdes.
 
-**Fase 1 — telefone.** `phoneKey` em `Client`, índice, normalização no service, backfill. Sem isso
-nada casa. *Independente do resto: pode ir para produção sozinha.*
+### Fase 0 — investigação ✅ concluída
 
-**Fase 2 — ingestão.** `bullmq` + `REDIS_URL` + `src/lib/queue.ts`, Redis no `docker-compose`, models,
-`messages` no webhook registrado, fila `whatsapp-message`, matching. Sem UI: verificável por teste e
-pelo banco.
+- [x] Envelope de `messages` capturado em tráfego real (§2.1)
+- [x] `sender` é LID, matching vai por `chat.phone` (§2.2)
+- [x] Sete tipos de mensagem mapeados, com as cinco armadilhas (§2.5)
+- [x] `messages_update` capturado; bug do `422` corrigido (§2.6)
+- [x] `wasSentByApi` confirmado: fica no exclude, não suprime o status (§2.6)
+- [x] `WEBHOOK_EVENTS` assina `connection`, `messages`, `messages_update`
 
-**Fase 3 — mídia.** `messages.download` na lib, fila `whatsapp-media`, cópia para o R2 e o
-resolvedor de URL. O formato já está observado (§2.5) — não há captura pendente.
+### Fase 1 — telefone ✅ concluída
 
-**Fase 4 — leitura no web.** Inbox, thread, painel do lead, aba na ficha. Já entrega valor sem envio.
+- [x] `src/lib/phone.ts` com `phoneKey()` (DDD + últimos 8 dígitos)
+- [x] `Client.phoneKey` + `@@index([organizationId, phoneKey])`
+- [x] Normalização na escrita — **create e update**
+- [x] `findClientsByPhoneKey` no repo, para a fase 2 usar
+- [x] Backfill (`scripts/backfill-phone-key.ts`), idempotente e com dry-run
+- [x] Testes: nono dígito, máscara, DDD preservado, colisão fixo/celular, telefone vazio
 
-**Fase 5 — envio.** Composer, `send.text`/`send.media`, status, tratamento de capping.
+*Independente do resto: pode ir para produção sozinha.*
 
-**Fase 6 — ações de CRM.** Criar lead, escolher lead, adicionar ao funil.
+**Divergência do planejado:** a derivação ficou no **repo**, não no service. `createClient` e
+`updateClientById` são os dois únicos pontos que escrevem `phone`; deixar na camada de cima abriria
+espaço para um caminho novo gravar telefone sem chave — e o sintoma seria o lead não casar com a
+conversa, em silêncio.
 
-**Fase 7 — validação real e docs.** Conversa de ponta a ponta com número de verdade; registrar
-formatos novos observados (mídia, áudio, resposta, reação) aqui e no `CLAUDE.md`.
+**Deploy:** exige `prisma db push` **e** rodar o backfill com `--apply`. Sem o backfill, todo lead
+já existente fica com chave nula e nunca casa.
+
+### Fase 2 — ingestão
+
+- [ ] `bullmq` + `REDIS_URL` + `src/lib/queue.ts` (com `enqueue` inline sem Redis)
+- [ ] `redis:7-alpine` no `docker-compose.yml` da raiz
+- [ ] Models `Conversation` e `WhatsappMessage`
+- [ ] Extrator do envelope `messages` (§2.1) — separado do `connectionDataOf`
+- [ ] Fila `whatsapp-message`: conversa, mensagem, idempotência por `providerId`
+- [ ] Matching com `Client` por `phoneKey`, sem auto-vincular quando ambíguo
+
+### Fase 3 — mídia
+
+- [ ] `messages.download` na lib
+- [ ] Metadados e `JPEGThumbnail` gravados já na ingestão
+- [ ] Fila `whatsapp-media`: URL temporária → R2 → `mediaKey`
+- [ ] Resolvedor de URL da §7.2
+
+### Fase 4 — status (`messages_update`)
+
+- [ ] Reconciliação em lote por `providerMessageId` (`MessageIDs` é array)
+- [ ] `IsFromMe` string e `Timestamp` em segundos tratados (§2.6)
+- [ ] `WhatsappMessage.status` refletindo `Delivered`/`Read`
+
+### Fase 5 — leitura no web
+
+- [ ] Inbox: lista + thread
+- [ ] Bolhas por tipo, incluindo `ptt` (onda) e `gif` (laço)
+- [ ] Painel do lead e aba na ficha do cliente
+
+### Fase 6 — envio
+
+- [ ] Composer, `send.text`/`send.media`
+- [ ] Status otimista (`pending` antes da chamada)
+- [ ] Erro de capping com tratamento próprio (§8)
+
+### Fase 7 — ações de CRM
+
+- [ ] Criar lead a partir da conversa (`source: WHATSAPP`)
+- [ ] Escolher lead quando o telefone é ambíguo
+- [ ] Adicionar ao funil (pipeline + estágio)
+
+### Fase 8 — validação real e docs
+
+- [ ] Conversa de ponta a ponta com número de verdade
+- [ ] Formatos novos observados registrados aqui e no `CLAUDE.md`
 
 ---
 
@@ -650,4 +704,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:21 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:27 (-03)

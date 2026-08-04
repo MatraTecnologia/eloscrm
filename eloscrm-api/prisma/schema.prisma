@@ -204,6 +204,10 @@ model Client {
   name           String
   email          String?
   phone          String?
+  // DDD + últimos 8 dígitos de `phone`, derivado em src/lib/phone.ts. Existe porque o telefone é
+  // guardado com máscara e 11 dígitos, e o WhatsApp entrega 10 (o nono dígito) — sem esta chave,
+  // conversa e lead nunca casam. Escrita só pelo repo, junto de `phone`.
+  phoneKey       String?
   source         ClientSource @default(OUTROS)
   notes          String?
   // notes segue sendo o recado curto; description é o texto do perfil do lead
@@ -227,6 +231,7 @@ model Client {
 
   @@index([organizationId])
   @@index([organizationId, status, nurtureUntil])
+  @@index([organizationId, phoneKey])
 }
 
 model Property {

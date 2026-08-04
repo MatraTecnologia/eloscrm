@@ -1,4 +1,5 @@
 import type { ClientStatus, NurtureReason, Prisma } from "../../generated/prisma/client.js";
+import { phoneKey } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
 import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from "./clients.schema.js";
 
@@ -25,11 +26,25 @@ export const listClients = (orgId: string, filters: ListClientsQuery) => {
 export const findClient = (orgId: string, id: string) =>
   prisma.client.findFirst({ where: { id, organizationId: orgId } });
 
+/**
+ * `phoneKey` é derivado, nunca informado: mora aqui, e não no service, porque estes são os dois
+ * únicos pontos que escrevem `phone` — deixar a derivação na camada de cima abriria espaço para um
+ * caminho novo gravar telefone sem chave, e o lead simplesmente não casaria com a conversa.
+ *
+ * `phone` ausente no PATCH (`undefined`) não mexe na chave; `phone` limpo (`null`/vazio) zera.
+ */
+const withPhoneKey = <T extends { phone?: string | null }>(data: T) =>
+  "phone" in data ? { ...data, phoneKey: phoneKey(data.phone) } : data;
+
 export const createClient = (orgId: string, data: CreateClientInput) =>
-  prisma.client.create({ data: { ...data, organizationId: orgId } });
+  prisma.client.create({ data: { ...withPhoneKey(data), organizationId: orgId } });
 
 export const updateClientById = (id: string, data: UpdateClientInput) =>
-  prisma.client.update({ where: { id }, data });
+  prisma.client.update({ where: { id }, data: withPhoneKey(data) });
+
+/** Usado pela conversa do WhatsApp para achar o lead do número (§6 do spec de conversas). */
+export const findClientsByPhoneKey = (orgId: string, key: string) =>
+  prisma.client.findMany({ where: { organizationId: orgId, phoneKey: key } });
 
 export const deleteClientById = (id: string) =>
   prisma.client.delete({ where: { id } });

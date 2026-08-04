@@ -80,6 +80,52 @@ describe("clients", () => {
     expect(gone.json().error.code).toBe("NOT_FOUND");
   });
 
+  // phoneKey é o que liga a conversa de WhatsApp ao lead. Se parar de ser derivado na escrita, a
+  // integração quebra em silêncio: o número chega e o CRM acha que é gente nova.
+  describe("phoneKey derivado do telefone", () => {
+    const criar = (payload: Record<string, unknown>) =>
+      app.inject({ method: "POST", url: "/v1/clients", headers: { cookie }, payload });
+
+    it("é gravado no create, no formato que casa com o JID do WhatsApp", async () => {
+      const res = await criar({ name: `Lead Fone ${stamp}`, phone: "(43) 99183-4229" });
+      expect(res.statusCode).toBe(201);
+      const saved = await prisma.client.findUniqueOrThrow({ where: { id: res.json().id } });
+      expect(saved.phoneKey).toBe("4391834229");
+    });
+
+    it("acompanha a troca de telefone no update", async () => {
+      const { id } = (await criar({ name: `Lead Troca ${stamp}`, phone: "(43) 99812-4470" })).json();
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/clients/${id}`,
+        headers: { cookie },
+        payload: { phone: "(11) 98765-4321" },
+      });
+      const saved = await prisma.client.findUniqueOrThrow({ where: { id } });
+      expect(saved.phoneKey).toBe("1187654321");
+    });
+
+    it("não é tocado por PATCH que não mexe no telefone", async () => {
+      const { id } = (await criar({ name: `Lead Nome ${stamp}`, phone: "(43) 99630-2277" })).json();
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/clients/${id}`,
+        headers: { cookie },
+        payload: { name: `Renomeado ${stamp}` },
+      });
+      const saved = await prisma.client.findUniqueOrThrow({ where: { id } });
+      expect(saved.phoneKey).toBe("4396302277");
+    });
+
+    it("fica nulo quando não há telefone utilizável", async () => {
+      const semFone = (await criar({ name: `Lead Sem Fone ${stamp}` })).json();
+      expect((await prisma.client.findUniqueOrThrow({ where: { id: semFone.id } })).phoneKey).toBeNull();
+
+      const curto = (await criar({ name: `Lead Curto ${stamp}`, phone: "3324-1234" })).json();
+      expect((await prisma.client.findUniqueOrThrow({ where: { id: curto.id } })).phoneKey).toBeNull();
+    });
+  });
+
   it("não vaza cliente entre organizações (cross-tenant → 404)", async () => {
     const created = await app.inject({
       method: "POST",
