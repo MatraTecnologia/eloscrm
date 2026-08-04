@@ -1,4 +1,4 @@
-# Conversas de WhatsApp no CRM — Spec de Design + Plano
+# Conversas de WhatsApp no CRM — Spec de Design + Plano ✅ concluído
 
 > Fase 2 da integração. A fase 1 entregou o ciclo de vida da instância
 > ([spec](./2026-08-03-whatsapp-uazapi-design.md)); esta entrega a **conversa**: ingerir mensagens,
@@ -6,6 +6,9 @@
 
 Estado de referência: commit `a605441` (`main`), árvore limpa.
 Escopo confirmado: **bidirecional** — o corretor conversa pelo CRM, não só lê.
+
+**Todas as 8 fases entregues** (2026-08-04), validadas com número real. A §2 continua sendo a
+referência do que a spec da uazapi não documenta — releia antes de mexer em ingestão.
 
 ---
 
@@ -804,10 +807,26 @@ Quando há candidatos, escolher aparece **antes** de criar.
 então a tela de conversas exibiria telefone errado com frequência. Agora o número completo manda no
 corte e a heurística do "9" vale só durante a digitação.
 
-### Fase 8 — validação real e docs
+### Fase 8 — validação real e docs ✅ concluída
 
-- [ ] Conversa de ponta a ponta com número de verdade
-- [ ] Formatos novos observados registrados aqui e no `CLAUDE.md`
+- [x] Conversa de ponta a ponta com número de verdade
+- [x] Formatos novos observados registrados aqui e no `CLAUDE.md`
+
+O tráfego real, depois das sete fases, ainda entregou três coisas que a spec da uazapi não
+documenta — e cada uma virou funcionalidade:
+
+- **Reply** (§2.9): `message.quoted` traz o `messageid` puro da citada. Responder citando, com salto
+  para a mensagem original.
+- **Deleção** (§2.6): "apagar para todos" vem no mesmo `messages_update` dos recibos. Antes de ser
+  tratado, o efeito era pior que ignorar — o evento era reconhecido e descartado calado, e o CRM
+  seguia exibindo o que o lead tinha apagado.
+- **Vídeo de 29,4 MB**: o teto de 25 MB fora dimensionado supondo o limite antigo de 16 MB do
+  WhatsApp. O upload passou a ser por stream, o teto virou política de retenção (100 MB), e a falha
+  de mídia deixou de ficar muda.
+
+**Plano concluído.** A continuação está em
+[`automação de leads`](./2026-08-04-automacao-de-leads-design.md): criar lead e negócio sozinho e
+distribuir entre os corretores.
 
 ---
 
@@ -835,4 +854,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 10:51 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 11:07 (-03)

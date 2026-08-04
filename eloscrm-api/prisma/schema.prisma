@@ -98,6 +98,7 @@ model Organization {
 
   // uma imobiliária conecta no máximo um número de WhatsApp
   uazapiInstance UazapiInstance?
+  leadAutomation LeadAutomation?
   conversations  Conversation[]
   whatsappMessages WhatsappMessage[]
 
@@ -627,4 +628,49 @@ model UazapiInstanceLog {
   createdAt DateTime @default(now())
 
   @@index([instanceId, createdAt])
+}
+
+enum LeadAssignStrategy {
+  // menos negócios abertos; empate resolve por lastAssignedAt
+  LEAST_OPEN
+}
+
+/// Automação de entrada de leads: o que acontece sozinho quando alguém desconhecido escreve.
+/// As três chaves são independentes de propósito — criar lead sem distribuir é configuração
+/// legítima de quem ainda não confia na roleta.
+model LeadAutomation {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  autoCreateClient Boolean @default(false)
+
+  autoCreateDeal Boolean @default(false)
+  // sem relação declarada, como Deal.ownerId: quem garante que o estágio é do funil e que ambos são
+  // da organização é o service, no PUT. Funil apagado com a chave ligada não cria negócio.
+  pipelineId     String?
+  stageId        String?
+
+  autoAssign Boolean            @default(false)
+  strategy   LeadAssignStrategy @default(LEAST_OPEN)
+
+  members   LeadAutomationMember[]
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+}
+
+/// Quem participa da roleta. A elegibilidade real é a interseção disto com `Member` no momento da
+/// atribuição — `ownerId` não tem chave estrangeira, e corretor que sai da imobiliária precisa parar
+/// de receber sem ninguém lembrar de limpar esta tabela.
+model LeadAutomationMember {
+  id           String         @id @default(cuid())
+  automationId String
+  automation   LeadAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  userId       String
+  active       Boolean        @default(true)
+  // desempate enquanto as cargas são iguais — sem isto, com todos em zero, o primeiro da lista
+  // receberia todos os leads até alguém acumular carga
+  lastAssignedAt DateTime?
+
+  @@unique([automationId, userId])
 }
