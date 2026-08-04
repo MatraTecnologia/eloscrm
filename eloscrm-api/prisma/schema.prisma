@@ -22,6 +22,7 @@ model User {
   invitations   Invitation[]
 
   uazapiInstanceLogs UazapiInstanceLog[]
+  whatsappMessages   WhatsappMessage[]
 
   @@unique([email])
   @@map("user")
@@ -97,6 +98,8 @@ model Organization {
 
   // uma imobiliária conecta no máximo um número de WhatsApp
   uazapiInstance UazapiInstance?
+  conversations  Conversation[]
+  whatsappMessages WhatsappMessage[]
 
   @@unique([slug])
   @@map("organization")
@@ -226,6 +229,7 @@ model Client {
   nurturedAt    DateTime?
   deals          Deal[]
   activities     Activity[]
+  conversations  Conversation[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -458,10 +462,143 @@ model UazapiInstance {
   // preenchido quando a instância some do provedor; a partir daí só resta remover e recriar
   remoteDeletedAt      DateTime?
 
-  logs UazapiInstanceLog[]
+  logs          UazapiInstanceLog[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum WhatsappDirection {
+  inbound
+  outbound
+}
+
+// Espelha `mediaType` da uazapi, não `type`: é `mediaType` que separa gif de vídeo e nota de voz de
+// áudio comum, e as duas distinções mudam como a bolha é renderizada.
+enum WhatsappMessageType {
+  text
+  image
+  video
+  gif
+  audio
+  ptt
+  document
+  sticker
+  location
+  contact
+  reaction
+  poll
+  system
+  unsupported
+}
+
+enum WhatsappMessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+// A mensagem existe antes do arquivo estar no R2: a uazapi só guarda a mídia por 2 dias, então ela
+// é copiada em segundo plano e a bolha usa o thumbnail embutido enquanto isso.
+enum WhatsappMediaStatus {
+  none
+  pending
+  ready
+  failed
+}
+
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instanceId     String
+  instance       UazapiInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  // 554391834229@s.whatsapp.net
+  chatid   String
+  phone    String?
+  // casa com Client.phoneKey; ver src/lib/phone.ts
+  phoneKey String?
+  // identificador opaco do WhatsApp: sobrevive à troca de número, mas não revela o telefone
+  lid      String?
+  isGroup  Boolean @default(false)
+
+  waName      String?
+  contactName String?
+  photoUrl    String?
+
+  // opcional de propósito: a conversa chega antes de existir lead, e é o corretor quem decide criar
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  lastMessageAt   DateTime?
+  lastMessageText String?
+  unreadCount     Int       @default(0)
+  archivedAt      DateTime?
+
+  messages  WhatsappMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([instanceId, chatid])
+  @@index([organizationId, lastMessageAt])
+  @@index([organizationId, phoneKey])
+}
+
+model WhatsappMessage {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // `message.id` da uazapi (owner:messageid) — chave de idempotência do webhook
+  providerId String
+  // `message.messageid` puro: é por ele que messages_update endereça as mensagens em lote
+  providerMessageId String?
+
+  direction WhatsappDirection
+  type      WhatsappMessageType
+  // messageType bruto (ImageMessage, Conversation…): guardado para diagnóstico, não para ramificar
+  rawType   String?
+  status    WhatsappMessageStatus @default(sent)
+
+  text       String?
+  quotedId   String?
+  reactionTo String?
+  sentByApi  Boolean @default(false)
+  senderLid  String?
+  senderName String?
+
+  mediaStatus   WhatsappMediaStatus @default(none)
+  mediaKey      String?
+  mediaMime     String?
+  mediaSize     Int?
+  mediaFilename String?
+  mediaDuration Int?
+  mediaWidth    Int?
+  mediaHeight   Int?
+  // JPEGThumbnail em base64, direto do webhook: preview instantâneo, sem chamada externa
+  mediaThumb    String?
+  mediaWaveform String?
+  // ponte enquanto o upload para o R2 não terminou; a uazapi expira em ~2 dias
+  mediaTempUrl       String?
+  mediaTempExpiresAt DateTime?
+  mediaError         String?
+
+  // quem enviou pelo CRM; nulo em mensagem recebida ou enviada pelo celular
+  sentById String?
+  sentBy   User?  @relation(fields: [sentById], references: [id], onDelete: SetNull)
+
+  sentAt    DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([conversationId, providerId])
+  @@index([conversationId, sentAt])
+  @@index([organizationId, providerMessageId])
 }
 
 model UazapiInstanceLog {

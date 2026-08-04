@@ -633,14 +633,25 @@ conversa, em silêncio.
 **Deploy:** exige `prisma db push` **e** rodar o backfill com `--apply`. Sem o backfill, todo lead
 já existente fica com chave nula e nunca casa.
 
-### Fase 2 — ingestão
+### Fase 2 — ingestão ✅ concluída
 
-- [ ] `bullmq` + `REDIS_URL` + `src/lib/queue.ts` (com `enqueue` inline sem Redis)
-- [ ] `redis:7-alpine` no `docker-compose.yml` da raiz
-- [ ] Models `Conversation` e `WhatsappMessage`
-- [ ] Extrator do envelope `messages` (§2.1) — separado do `connectionDataOf`
-- [ ] Fila `whatsapp-message`: conversa, mensagem, idempotência por `providerId`
-- [ ] Matching com `Client` por `phoneKey`, sem auto-vincular quando ambíguo
+- [x] `bullmq` + `ioredis` + `REDIS_URL` + `src/lib/queue.ts` (com `enqueue` inline sem Redis)
+- [x] `redis:7-alpine` no `docker-compose.yml` da raiz
+- [x] Models `Conversation` e `WhatsappMessage`
+- [x] Extrator do envelope `messages` (`message-envelope.ts`), separado do `connectionDataOf`
+- [x] Fila `whatsapp-message`: conversa, mensagem, idempotência por `providerId`
+- [x] Metadados de mídia e `JPEGThumbnail` já gravados aqui (o download fica para a fase 3)
+- [x] Matching com `Client` por `phoneKey`, sem auto-vincular quando ambíguo
+- [x] 11 testes com os payloads reais capturados (texto, imagem, gif, ptt)
+
+**Notas de implementação:**
+
+- `msgpackr-extract` (build nativo que vem com o `bullmq`) foi marcado `false` em
+  `pnpm-workspace.yaml`: serve só para acelerar serialização, e o `msgpackr` cai no caminho em JS.
+  Nenhum script de terceiro roda na instalação.
+- `ioredis` precisou ser declarado explicitamente — o `bullmq` não o traz sozinho.
+- O upsert da conversa **não** toca em `clientId`: o vínculo é decisão do corretor e não pode ser
+  desfeito por um evento chegando.
 
 ### Fase 3 — mídia
 
@@ -704,4 +715,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:27 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:48 (-03)

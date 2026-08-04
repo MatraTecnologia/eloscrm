@@ -1,4 +1,7 @@
 allowBuilds:
   '@prisma/engines': true
   esbuild: true
+  # build nativo opcional do msgpackr (dependência do bullmq): serve só para acelerar a
+  # serialização. Sem ele o msgpackr usa o caminho em JS, e nenhum script de terceiro roda aqui.
+  msgpackr-extract: false
   prisma: true

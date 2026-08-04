@@ -42,6 +42,9 @@ export const env = createEnv({
     // volta, e o corpo cru dos webhooks). Vazio = desligado. Ferramenta de diagnóstico: serve para
     // descobrir o formato real do envelope, que a spec da uazapi não documenta.
     UAZAPI_DEBUG_LOG: z.string().trim().min(1).optional(),
+    // Fila das conversas de WhatsApp. Sem ela o processamento é inline — o que mantém teste e CI
+    // sem infra, mas em produção devolve o problema que a fila existe para resolver.
+    REDIS_URL: z.string().trim().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

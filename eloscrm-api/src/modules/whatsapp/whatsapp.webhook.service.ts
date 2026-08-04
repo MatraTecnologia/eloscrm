@@ -7,12 +7,11 @@ import {
 import { hashToken } from "../../lib/crypto.js";
 import { httpError } from "../../lib/http-error.js";
 import { applyInstanceSnapshot, eventForTransition, parseStatus, str } from "../../lib/uazapi/snapshot.js";
+import { enqueueMessageEvent } from "./ingest.service.js";
 import * as repo from "./whatsapp.repo.js";
 import { connectionDataOf, eventNameOf, type WebhookBody } from "./whatsapp.schema.js";
 
-// Só o que muda estado local. Assinar mais eventos sem tratá-los encheria o log de ruído — e o
-// registro do webhook na uazapi pede exatamente esta lista.
-const HANDLED_EVENTS = new Set(["connection"]);
+const HANDLED_EVENTS = new Set(["connection", "messages"]);
 
 const constantTimeEquals = (a: string, b: string) => {
   const bufA = Buffer.from(a);
@@ -80,6 +79,18 @@ export const process = async (
   // retentativa em /webhook/errors por um evento que nós deliberadamente ignoramos. `event: null`
   // significa envelope irreconhecível — a rota loga, para o sintoma aparecer no nosso log.
   if (!event || !HANDLED_EVENTS.has(event)) return { event, handled: false };
+
+  if (event === "messages") {
+    // só enfileira: persistir e baixar mídia aqui dentro faria a uazapi esperar e acumular
+    // retentativa. Sem REDIS_URL o enqueue processa inline, que é o modo de teste e CI.
+    await enqueueMessageEvent({
+      instanceId: instance.id,
+      organizationId: instance.organizationId,
+      body: body as Record<string, unknown>,
+    });
+    return { event, handled: true };
+  }
+
   await handleConnection(instance, connectionDataOf(body), receivedAt);
   return { event, handled: true };
 };
