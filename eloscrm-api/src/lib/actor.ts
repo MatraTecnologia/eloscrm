@@ -7,3 +7,9 @@ export const actorOf = (request: FastifyRequest): Actor => ({
   id: request.user!.id,
   name: request.user!.name,
 });
+
+/**
+ * Autor do que ninguém clicou. O histórico exibe `actorName`, então "Automação" é o que o corretor
+ * lê; o id vazio vira `null` no `recordAudit` e nunca é confundido com um usuário de verdade.
+ */
+export const AUTOMATION_ACTOR: Actor = { id: "", name: "Automação" };

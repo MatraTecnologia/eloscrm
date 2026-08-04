@@ -274,16 +274,40 @@ gestor abrisse a tela e salvasse. Quem sai da roleta vira `active: false`, não 
 **Leitura liberada a qualquer membro, escrita só para gestor.** O corretor tem o direito de saber
 como os leads são distribuídos; decidir quem recebe é que é decisão de gestão.
 
-### Fase 2 — motor de atribuição
-- [ ] `assignment.service.ts`: carga por `ownerId`, desempate, interseção com `Member`
-- [ ] transação com `FOR UPDATE`, e `lastAssignedAt` gravado na mesma
-- [ ] herança de dono do lead existente (§2.3), que não passa pela roleta
-- [ ] testes 3b, 6, 7, 8, 9
+### Fase 2 — motor de atribuição ✅ concluída
+- [x] `assignment.service.ts`: carga por `ownerId`, desempate, interseção com `Member`
+- [x] transação com `FOR UPDATE`, e `lastAssignedAt` gravado na mesma
+- [x] herança de dono do lead existente (§2.3), que não passa pela roleta
+- [x] 11 testes (3b, 6, 7, 8, 9 inclusos)
 
-### Fase 3 — gatilho na ingestão
-- [ ] chamada após `linkClientIfUnambiguous`, com catch que não derruba o webhook
-- [ ] criação de lead, negócio e dono, com auditoria em nome de "Automação"
-- [ ] testes 1, 2, 3, 4, 5, 10, 11
+**O teste de concorrência precisou ser refeito para valer alguma coisa.** A primeira versão disparava
+duas atribuições em paralelo e checava que eram diferentes — e passava **com o `FOR UPDATE`
+removido**, ou seja, não testava nada: duas chamadas não chegam a se sobrepor. A versão que ficou
+dispara **seis** de uma vez para três corretores e exige `[2, 2, 2]`. Sem o lock, o resultado medido
+é `[0, 0, 6]`: as seis transações leem a mesma carga e o mesmo `lastAssignedAt`, escolhem o mesmo
+corretor, e a distribuição sai exatamente tão torta quanto a roleta existe para evitar.
+
+Vale o registro porque é o teste mais fácil de escrever errado do projeto: concorrência que não
+concorre passa sempre, e dá a impressão de cobertura onde não há nenhuma.
+
+### Fase 3 — gatilho na ingestão ✅ concluída
+- [x] chamada após `linkClientIfUnambiguous`, com catch que não derruba o webhook
+- [x] criação de lead, negócio e dono, com auditoria em nome de "Automação"
+- [x] 11 testes (1, 2, 3, 4, 5, 10, 11 inclusos)
+
+**`linkClientIfUnambiguous` passou a devolver o que decidiu.** A automação precisa da diferença
+entre "não achei ninguém" e "achei demais": no primeiro caso ela cria o lead, no segundo tem de
+ficar quieta. Antes a função não contava nem uma coisa nem outra.
+
+**O ator sintético grava `actorId` nulo.** `AUTOMATION_ACTOR` tem id vazio e `recordAudit` converte
+para `null` — o histórico exibe só `actorName`, e uma string vazia na coluna se passaria por
+usuário. A timeline do lead diz "Automação criou".
+
+**O catch do ingest esconde bugs de teste, não só de produção.** O teste "funil apagado não impede a
+mensagem de entrar" passava **com a checagem do estágio removida**: `deals.create` lançava, o catch
+engolia, e o resultado observável era idêntico. Foi preciso um segundo teste chamando
+`applyToConversation` **direto**, sem a rede de proteção, para distinguir tratado de estourado.
+Segundo caso do dia em que o teste óbvio não testava nada — ver Fase 2.
 
 ### Fase 4 — tela
 - [ ] `settings/automacoes` com os três blocos e a carga por corretor
@@ -315,4 +339,4 @@ aberto — o enum existe para elas, o código não.
 
 ---
 
-> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-04 11:14 (-03)
+> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-04 11:56 (-03)

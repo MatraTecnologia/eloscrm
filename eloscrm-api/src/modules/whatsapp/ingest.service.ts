@@ -1,6 +1,7 @@
 import { WhatsappDirection } from "../../generated/prisma/client.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
 import { findClientsByPhoneKey } from "../clients/clients.repo.js";
+import { applyToConversation } from "../lead-automation/apply.service.js";
 import * as repo from "./conversations.repo.js";
 import { enqueueMediaJob } from "./media.service.js";
 import { parseConversation, parseMessage } from "./message-envelope.js";
@@ -19,17 +20,26 @@ export type MessageJob = {
  * **Não vincula quando há mais de um candidato.** A chave é DDD + últimos 8 dígitos, e fixo e
  * celular do mesmo número colidem nela — atribuir a conversa ao lead errado é pior do que deixar o
  * corretor escolher. Também não sobrescreve vínculo existente: uma vez ligado, quem desfaz é gente.
+ *
+ * Devolve o que decidiu porque a automação precisa saber a diferença entre "não achei ninguém" e
+ * "achei demais": no primeiro caso ela cria o lead, no segundo tem de ficar quieta.
  */
 const linkClientIfUnambiguous = async (
   orgId: string,
   conversationId: string,
   phoneKey: string | null,
-  alreadyLinked: boolean,
-) => {
-  if (alreadyLinked || !phoneKey) return;
+  linkedClientId: string | null,
+): Promise<{ clientId: string | null; ambiguous: boolean }> => {
+  if (linkedClientId) return { clientId: linkedClientId, ambiguous: false };
+  if (!phoneKey) return { clientId: null, ambiguous: false };
+
   const candidates = await findClientsByPhoneKey(orgId, phoneKey);
-  if (candidates.length !== 1) return;
+  if (candidates.length !== 1) {
+    return { clientId: null, ambiguous: candidates.length > 1 };
+  }
+
   await repo.linkClient(conversationId, candidates[0]!.id);
+  return { clientId: candidates[0]!.id, ambiguous: false };
 };
 
 export const processMessageEvent = async (job: MessageJob) => {
@@ -49,12 +59,24 @@ export const processMessageEvent = async (job: MessageJob) => {
     incrementUnread: parsedMessage.direction === WhatsappDirection.inbound,
   });
 
-  await linkClientIfUnambiguous(
+  const vinculo = await linkClientIfUnambiguous(
     job.organizationId,
     conversation.id,
     parsedChat.phoneKey,
-    Boolean(conversation.clientId),
+    conversation.clientId,
   );
+
+  // Criar lead, pôr no funil e escolher o dono, se a imobiliária tiver pedido. O catch segue a
+  // mesma regra do enqueue de mídia: automação que falha não pode virar 5xx no webhook, senão a
+  // uazapi reentrega uma mensagem já gravada — e é a mensagem que importa.
+  await applyToConversation({
+    orgId: job.organizationId,
+    conversationId: conversation.id,
+    clientId: vinculo.clientId,
+    ambiguous: vinculo.ambiguous,
+    suggestedName: parsedChat.suggestedName,
+    phone: parsedChat.phone,
+  }).catch(() => undefined);
 
   // fila separada: a uazapi apaga a mídia em 2 dias, então o download é urgente — mas não pode
   // atrasar nem derrubar o registro da mensagem, que já está salva.

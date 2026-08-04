@@ -2,6 +2,7 @@ import type { Actor } from "../../lib/actor.js";
 import { forbidden, httpError, notFound } from "../../lib/http-error.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import { prisma } from "../../lib/prisma.js";
+import { openDealsByOwner } from "./assignment.service.js";
 import * as repo from "./lead-automation.repo.js";
 import type { UpdateLeadAutomationInput } from "./lead-automation.schema.js";
 
@@ -11,22 +12,6 @@ const requireManager = async (orgId: string, actor: Actor) => {
   if (!(await isOrgManager(orgId, actor.id))) {
     throw forbidden("Só o dono ou um gestor da imobiliária pode configurar a automação de leads");
   }
-};
-
-/**
- * Negócios abertos por corretor — o critério da roleta, e o número que a tela mostra ao lado de cada
- * um. "Aberto" é estágio que não é ganho nem perdido: negócio encerrado não ocupa a agenda de
- * ninguém, e contá-lo faria a distribuição punir quem vende.
- */
-export const openDealsByOwner = async (orgId: string) => {
-  const rows = await prisma.deal.groupBy({
-    by: ["ownerId"],
-    where: { organizationId: orgId, stage: { isWon: false, isLost: false } },
-    _count: { _all: true },
-  });
-  return new Map(
-    rows.flatMap((row) => (row.ownerId ? [[row.ownerId, row._count._all] as const] : [])),
-  );
 };
 
 /**

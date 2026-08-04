@@ -45,7 +45,9 @@ export const recordAudit = async (input: {
       entityType: input.entityType,
       entityId: input.entityId,
       action: input.action,
-      actorId: input.actor.id,
+      // id vazio é o ator sintético da automação: a coluna guarda null, não uma string que nunca
+      // vai casar com um usuário
+      actorId: input.actor.id || null,
       actorName: input.actor.name,
       // Changes usa `unknown` em from/to pra aceitar qualquer valor normalizado; a coluna é Json
       changes: input.changes as Prisma.InputJsonValue | undefined,
