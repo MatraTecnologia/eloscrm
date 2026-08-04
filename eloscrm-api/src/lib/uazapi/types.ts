@@ -346,6 +346,23 @@ export interface UazapiErrorPayload {
   raw?: unknown
 }
 
+export interface DownloadMessageParams {
+  id: string
+  return_link?: boolean
+  return_base64?: boolean
+  generate_mp3?: boolean
+  transcribe?: boolean
+  openai_apikey?: string
+  download_quoted?: boolean
+}
+
+export interface DownloadMessageResponse {
+  fileURL?: string
+  mimetype?: string
+  base64Data?: string
+  transcription?: string
+}
+
 export interface FindMessagesParams {
   id?: string
   chatid?: string

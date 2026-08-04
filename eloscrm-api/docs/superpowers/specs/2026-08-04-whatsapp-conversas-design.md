@@ -653,12 +653,26 @@ já existente fica com chave nula e nunca casa.
 - O upsert da conversa **não** toca em `clientId`: o vínculo é decisão do corretor e não pode ser
   desfeito por um evento chegando.
 
-### Fase 3 — mídia
+### Fase 3 — mídia ✅ concluída
 
-- [ ] `messages.download` na lib
-- [ ] Metadados e `JPEGThumbnail` gravados já na ingestão
-- [ ] Fila `whatsapp-media`: URL temporária → R2 → `mediaKey`
-- [ ] Resolvedor de URL da §7.2
+- [x] `messages.download` na lib
+- [x] Metadados e `JPEGThumbnail` gravados já na ingestão (feito na fase 2)
+- [x] Fila `whatsapp-media`: URL temporária → R2 → `mediaKey`
+- [x] Resolvedor de URL da §7.2, com os três estágios
+- [x] Teto de 25 MB aplicado **antes** do download, pelo `fileLength` do webhook
+- [x] 10 testes, incluindo upload real no R2 e leitura do conteúdo de volta
+
+**Notas de implementação:**
+
+- O download é endereçado por `providerMessageId` (o id puro), não pelo `providerId` — este último
+  carrega o prefixo `owner:` do id interno da uazapi. **A confirmar contra a API real na fase 8**;
+  os testes travam o comportamento, mas o formato aceito pelo endpoint não foi observado.
+- `mediaTempUrl` recebe validade de **36 h**, menor que as ~48 h do provedor: entregar ao front um
+  link que já morreu é pior do que dizer que a mídia ainda não está pronta.
+- Falha de download marca `mediaStatus = failed` e **preserva a mensagem** — o texto e a legenda
+  continuam na conversa.
+- Extensão sai do `fileName` quando existe, senão do mimetype; `audio/ogg; codecs=opus` precisa
+  perder o parâmetro antes do lookup.
 
 ### Fase 4 — status (`messages_update`)
 
@@ -715,4 +729,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:48 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:58 (-03)

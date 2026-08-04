@@ -2,6 +2,7 @@ import { WhatsappDirection } from "../../generated/prisma/client.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
 import { findClientsByPhoneKey } from "../clients/clients.repo.js";
 import * as repo from "./conversations.repo.js";
+import { enqueueMediaJob } from "./media.service.js";
 import { parseConversation, parseMessage } from "./message-envelope.js";
 
 export const MESSAGE_QUEUE = "whatsapp-message";
@@ -54,6 +55,10 @@ export const processMessageEvent = async (job: MessageJob) => {
     parsedChat.phoneKey,
     Boolean(conversation.clientId),
   );
+
+  // fila separada: a uazapi apaga a mídia em 2 dias, então o download é urgente — mas não pode
+  // atrasar nem derrubar o registro da mensagem, que já está salva
+  if (parsedMessage.hasMedia) await enqueueMediaJob({ messageId: message.id });
 
   return { messageId: message.id, conversationId: conversation.id };
 };
