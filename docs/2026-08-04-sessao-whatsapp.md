@@ -2,7 +2,7 @@
 
 Registro do que foi feito, decidido e descoberto numa sessão que começou com uma pasta de código
 importado que não compilava e terminou com conversas reais chegando no CRM. **23 commits**, de
-`95682b6` a `e3753a8`, na `main` (7 já enviados; 16 locais).
+`95682b6` a `e3753a8`, na `main`.
 
 Docs de design: [`fase 1`](../eloscrm-api/docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md) ·
 [`fase 2`](../eloscrm-api/docs/superpowers/specs/2026-08-04-whatsapp-conversas-design.md)
