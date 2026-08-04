@@ -23,6 +23,8 @@ services:
 
   # Fila das conversas de WhatsApp (BullMQ). Sem ele a API sobe e processa o webhook inline —
   # bom para teste e CI, ruim em produção, onde download de mídia travaria a resposta.
+  # Mesma regra do Postgres acima: se já houver um Redis local na 6379, não suba este serviço —
+  # `docker compose up -d postgres` sobe só o banco.
   redis:
     image: redis:7-alpine
     container_name: eloscrm-redis
