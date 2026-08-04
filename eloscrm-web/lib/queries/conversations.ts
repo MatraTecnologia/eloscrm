@@ -72,6 +72,22 @@ export const useMarkRead = () =>
     await api.post(`/whatsapp/conversations/${id}/read`);
   });
 
+export const useSendMessage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ conversationId, text }: { conversationId: string; text: string }) => {
+      const { data } = await api.post<WhatsappMessage>(
+        `/whatsapp/conversations/${conversationId}/messages`,
+        { text },
+      );
+      return data;
+    },
+    // a thread refaz a busca e a mensagem aparece com o status que o servidor gravou; não há
+    // otimismo local porque o envio pode ser recusado pelo próprio WhatsApp
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+};
+
 export const useArchiveConversation = () =>
   useConversationMutation(async ({ id, archived }: { id: string; archived: boolean }) => {
     await api.post(`/whatsapp/conversations/${id}/${archived ? "archive" : "unarchive"}`);

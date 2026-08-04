@@ -79,6 +79,16 @@ export const uazapiError = (err: UazapiErrorPayload) => {
   if (err.error_source === "network" || err.error_source === "timeout") {
     return httpError(504, "UAZAPI_UNAVAILABLE", "O servidor de WhatsApp não respondeu");
   }
+  // Bloqueio do próprio WhatsApp (capping de conversas novas, timelock). Não é falha da conexão
+  // nem nossa: o corretor precisa ver isso como limite da plataforma, com o Diagnóstico a um clique.
+  if (err.error_source === "whatsapp_server") {
+    return httpError(
+      422,
+      "WHATSAPP_BLOCKED",
+      message,
+      err.provider_code ? { providerCode: err.provider_code } : undefined,
+    );
+  }
   // 503 do /instance/connect é capacidade temporária, não falha: a uazapi manda Retry-After
   if (err.status === 503) {
     const retryAfter = (err.raw as { retry_after?: number } | undefined)?.retry_after;

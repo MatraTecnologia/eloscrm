@@ -718,11 +718,24 @@ Processado **fora da fila**: é um `updateMany` por lote de ids, sem chamada ext
 - O separador de dia é derivado no `useMemo`, comparando com o item anterior — acumular estado
   durante o render é erro de lint (`react-hooks/immutability`) e de correção.
 
-### Fase 6 — envio
+### Fase 6 — envio de texto ✅ concluída
 
-- [ ] Composer, `send.text`/`send.media`
-- [ ] Status otimista (`pending` antes da chamada)
-- [ ] Erro de capping com tratamento próprio (§8)
+- [x] `POST /conversations/:id/messages` com `send.text`
+- [x] Mensagem gravada como `pending` **antes** da chamada, `sent`/`failed` depois
+- [x] Erro de capping com código próprio (`422 WHATSAPP_BLOCKED`) e `providerCode`
+- [x] Composer com Enter para enviar, Shift+Enter para quebrar linha
+- [x] Bloqueio do WhatsApp vira alerta explicativo com link para o Diagnóstico, não um toast
+- [x] 6 testes de envio, incluindo instância desconectada e isolamento entre organizações
+
+**Envio de mídia ficou de fora** e vira item próprio. Não é só ligar `send.media`: o arquivo do
+corretor precisa chegar até a uazapi, e as duas saídas têm custo — base64 no corpo (pesado) ou subir
+ao R2 e passar uma presigned de curta duração para o provedor baixar. A segunda parece melhor e
+reaproveita o storage, mas é trabalho de uma fase, não de um parágrafo. Texto cobre o atendimento.
+
+**Sem otimismo local no front.** A mensagem só aparece depois que o servidor confirma — porque o
+envio pode ser recusado pelo próprio WhatsApp, e mostrar uma bolha que depois some é pior do que
+esperar. O `pending` no banco existe para o caso oposto: o provedor demorar e a mensagem já estar
+registrada.
 
 ### Fase 7 — ações de CRM
 
@@ -761,4 +774,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 03:24 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 07:52 (-03)

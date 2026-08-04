@@ -14,5 +14,10 @@ export const listMessagesQuerySchema = z.object({
   before: z.string().optional(),
 });
 
+export const sendMessageSchema = z.object({
+  text: z.string().trim().min(1).max(4096),
+});
+
+export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;

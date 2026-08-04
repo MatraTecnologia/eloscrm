@@ -7,6 +7,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { useConversation, useConversations, useMarkRead } from "@/lib/queries/conversations";
 import { ConversationHeader } from "./conversation-header";
 import { ConversationList } from "./conversation-list";
+import { MessageComposer } from "./message-composer";
 import { MessageThread } from "./message-thread";
 
 export default function ConversasPage() {
@@ -54,6 +55,7 @@ export default function ConversasPage() {
             <>
               <ConversationHeader conversation={conversa} />
               <MessageThread conversationId={conversa.id} />
+              <MessageComposer conversationId={conversa.id} />
             </>
           ) : (
             <Empty className="m-auto">

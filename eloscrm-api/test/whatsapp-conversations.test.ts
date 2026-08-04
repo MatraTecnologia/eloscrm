@@ -3,9 +3,10 @@ import type { FastifyInstance } from "fastify";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
-import { hashToken } from "../src/lib/crypto.js";
+import { encryptToken, hashToken } from "../src/lib/crypto.js";
 
-vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => ({}) }));
+const remote = { send: { text: vi.fn() } };
+vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => remote }));
 
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
@@ -24,7 +25,8 @@ beforeAll(async () => {
       organizationId: orgId,
       remoteId: `remote-conv-${stamp}`,
       name: "conv",
-      tokenEnc: "x.y.z",
+      // cifrado de verdade: o envio descriptografa antes de falar com a uazapi
+      tokenEnc: encryptToken(`tok-conv-${stamp}`),
       tokenHash: hashToken(`tok-conv-${stamp}`),
       webhookSecret: `secret-conv-${stamp}`,
     },
@@ -175,6 +177,100 @@ describe("GET /v1/whatsapp/conversations/:id/messages", () => {
   it("não lê mensagens de conversa de outra organização", async () => {
     const res = await get(`/v1/whatsapp/conversations/${conversationId}/messages`, cookieB);
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe("POST /v1/whatsapp/conversations/:id/messages", () => {
+  const enviar = (payload: Record<string, unknown>, c = cookie) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/whatsapp/conversations/${conversationId}/messages`,
+      headers: { cookie: c },
+      payload,
+    });
+
+  const conectar = () =>
+    prisma.uazapiInstance.update({ where: { id: instanceId }, data: { status: "connected" } });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    remote.send.text.mockResolvedValue({
+      success: true,
+      data: { id: "554391834229:ENVIADA1", messageid: "ENVIADA1", status: "Pending" },
+    });
+  });
+
+  it("envia e guarda o id que a uazapi devolveu", async () => {
+    await conectar();
+    const res = await enviar({ text: "Bom dia! Já retorno com os valores." });
+    expect(res.statusCode).toBe(201);
+
+    const body = res.json();
+    expect(body.direction).toBe("outbound");
+    expect(body.status).toBe("sent");
+    expect(body.providerId).toBe("554391834229:ENVIADA1");
+    expect(body.text).toBe("Bom dia! Já retorno com os valores.");
+
+    expect(remote.send.text).toHaveBeenCalledWith({
+      number: "554399990000",
+      text: "Bom dia! Já retorno com os valores.",
+    });
+  });
+
+  it("atualiza a prévia da conversa na lista", async () => {
+    await conectar();
+    await enviar({ text: "prévia nova" });
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    expect(conversa.lastMessageText).toBe("prévia nova");
+  });
+
+  it("falha do provedor deixa a mensagem na thread, marcada como failed", async () => {
+    await conectar();
+    remote.send.text.mockResolvedValue({ success: false, error: { status: 500, error: "boom" } });
+
+    const res = await enviar({ text: "não vai sair" });
+    expect(res.statusCode).toBe(502);
+
+    // a mensagem não some entre o clique e o erro — o corretor vê o que tentou mandar
+    const msg = await prisma.whatsappMessage.findFirstOrThrow({
+      where: { conversationId, text: "não vai sair" },
+    });
+    expect(msg.status).toBe("failed");
+  });
+
+  it("bloqueio do WhatsApp tem código próprio, distinto de falha da conexão", async () => {
+    await conectar();
+    remote.send.text.mockResolvedValue({
+      success: false,
+      error: {
+        status: 400,
+        error: "blocked",
+        error_source: "whatsapp_server",
+        provider_code: 463,
+        message_ptbr: "Limite de novas conversas atingido",
+      },
+    });
+
+    const res = await enviar({ text: "primeira mensagem para este número" });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("WHATSAPP_BLOCKED");
+    expect(res.json().error.message).toBe("Limite de novas conversas atingido");
+    expect(res.json().error.details).toEqual({ providerCode: 463 });
+  });
+
+  it("recusa envio com a instância desconectada, sem chamar a uazapi", async () => {
+    await prisma.uazapiInstance.update({ where: { id: instanceId }, data: { status: "disconnected" } });
+
+    const res = await enviar({ text: "oi" });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("INSTANCE_NOT_CONNECTED");
+    expect(remote.send.text).not.toHaveBeenCalled();
+  });
+
+  it("valida texto vazio (422) e não atravessa organização (404)", async () => {
+    await conectar();
+    expect((await enviar({ text: "   " })).statusCode).toBe(422);
+    expect((await enviar({ text: "oi" }, cookieB)).statusCode).toBe(404);
   });
 });
 

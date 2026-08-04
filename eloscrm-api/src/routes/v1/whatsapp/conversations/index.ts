@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { actorOf } from "../../../../lib/actor.js";
 import {
   listConversationsQuerySchema,
   listMessagesQuerySchema,
+  sendMessageSchema,
 } from "../../../../modules/whatsapp/conversations.schema.js";
 import * as service from "../../../../modules/whatsapp/conversations.service.js";
 import { authGuard } from "../../../../plugins/auth-guard.js";
@@ -30,6 +32,13 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     const { id } = request.params as { id: string };
     const query = listMessagesQuerySchema.parse(request.query);
     return service.listMessages(request.orgId!, id, query);
+  });
+
+  app.post("/:id/messages", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const data = sendMessageSchema.parse(request.body);
+    const message = await service.sendText(request.orgId!, id, data, actorOf(request));
+    return reply.status(201).send(message);
   });
 
   app.post("/:id/read", async (request) => {

@@ -1,8 +1,22 @@
-import type { Prisma, WhatsappMessage } from "../../generated/prisma/client.js";
-import { notFound } from "../../lib/http-error.js";
+import { randomUUID } from "node:crypto";
+import {
+  UazapiInstanceStatus,
+  WhatsappDirection,
+  WhatsappMessageStatus,
+  WhatsappMessageType,
+  type Prisma,
+  type WhatsappMessage,
+} from "../../generated/prisma/client.js";
+import type { Actor } from "../../lib/actor.js";
+import { conflict, notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import { resolveMediaUrl } from "./media.service.js";
-import type { ListConversationsQuery, ListMessagesQuery } from "./conversations.schema.js";
+import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
+import type {
+  ListConversationsQuery,
+  ListMessagesQuery,
+  SendMessageInput,
+} from "./conversations.schema.js";
 
 const conversationSelect = {
   id: true,
@@ -103,6 +117,81 @@ export const mediaUrl = async (orgId: string, messageId: string) => {
   const media = await resolveMediaUrl(message);
   if (!media) throw notFound("Mídia indisponível");
   return media;
+};
+
+/**
+ * Envia texto pela conversa.
+ *
+ * A mensagem é gravada como `pending` **antes** da chamada à uazapi e só então atualizada: se o
+ * provedor demorar, ela já está na thread, e não some entre o clique e a resposta. Com
+ * `wasSentByApi` no exclude do webhook, o envio não volta como evento — então não há duplicata a
+ * conciliar, e o `providerId` definitivo vem da própria resposta do envio.
+ */
+export const sendText = async (
+  orgId: string,
+  conversationId: string,
+  data: SendMessageInput,
+  actor: Actor,
+) => {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, organizationId: orgId },
+    include: { instance: true },
+  });
+  if (!conversation) throw notFound("Conversa não encontrada");
+  if (conversation.instance.remoteDeletedAt) {
+    throw conflict("INSTANCE_REMOTE_DELETED", "A conexão de WhatsApp não existe mais no servidor");
+  }
+  if (conversation.instance.status !== UazapiInstanceStatus.connected) {
+    throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar mensagens");
+  }
+
+  const local = await prisma.whatsappMessage.create({
+    data: {
+      organizationId: orgId,
+      conversationId,
+      // placeholder até a uazapi devolver o id real; a unique é por (conversa, providerId)
+      providerId: `local:${randomUUID()}`,
+      direction: WhatsappDirection.outbound,
+      type: WhatsappMessageType.text,
+      status: WhatsappMessageStatus.pending,
+      text: data.text,
+      sentByApi: true,
+      sentById: actor.id,
+      sentAt: new Date(),
+    },
+  });
+
+  const config = requireIntegration();
+  // grupo é endereçado pelo chatid (@g.us); conversa individual, pelo número em dígitos
+  const destino = conversation.isGroup ? conversation.chatid : (conversation.phone ?? conversation.chatid);
+  const result = await instanceClient(config, conversation.instance.tokenEnc).send.text({
+    number: destino,
+    text: data.text,
+  });
+
+  if (!result.success) {
+    await prisma.whatsappMessage.update({
+      where: { id: local.id },
+      data: { status: WhatsappMessageStatus.failed },
+    });
+    throw uazapiError(result.error);
+  }
+
+  const updated = await prisma.whatsappMessage.update({
+    where: { id: local.id },
+    data: {
+      providerId: result.data.id ?? local.providerId,
+      providerMessageId: result.data.messageid ?? null,
+      status: WhatsappMessageStatus.sent,
+    },
+  });
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: updated.sentAt, lastMessageText: updated.text },
+  });
+
+  return serializeMessage(updated);
 };
 
 export const archive = async (orgId: string, id: string, archived: boolean) => {
