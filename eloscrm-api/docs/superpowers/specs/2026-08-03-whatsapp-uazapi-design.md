@@ -81,7 +81,7 @@ segredo revogável por imobiliária, e a rota já sabe de quem é o evento antes
 
 Defesa em profundidade: **quando** o corpo traz `token`, comparamos `hashToken(body.token)` com o
 `tokenHash` armazenado — URL certa + token errado = `401`. A conferência é condicional de propósito;
-ver §5.1 sobre o envelope.
+ver §4.2 sobre o envelope.
 
 **2.3 — Processamento inline, sem fila.**
 O `matra-notification-manager` enfileira em BullMQ; o elosCRM não tem Redis nem BullMQ, e adicionar
@@ -248,7 +248,7 @@ atualiza via botão **Sincronizar**.
 
 ---
 
-### 5.1 O envelope do webhook — confirmado no tráfego real
+### 4.2 O envelope do webhook — confirmado no tráfego real
 
 > **Resolvido em 2026-08-03.** Capturado via `UAZAPI_DEBUG_LOG` com a integração no ar
 > (`user-agent: uazapiGO-Webhook/1.0`, uazapiGO v2.1.1, entrega por túnel). O restante desta seção
@@ -258,13 +258,24 @@ atualiza via botão **Sincronizar**.
 ```jsonc
 {
   "BaseUrl": "https://….uazapi.com",
-  "EventType": "connection",          // confirmado: é este o nome, não `event` nem `type`
-  "token": "…",                        // presente em 5/5 eventos observados
-  "instanceName": "…",
-  "owner": "55…@s.whatsapp.net",      // ⚠️ no TOPO do envelope, fora de `instance`
-  "instance": { "name": "…", "status": "…", "qrcode": "…" }
+  "EventType": "connection",     // confirmado: é este o nome, não `event` nem `type`
+  "token": "…",                   // presente em todos os eventos observados
+  "instanceName": "matra",
+  "owner": "554391834229",       // ⚠️ no TOPO, fora de `instance`; número puro, sem @s.whatsapp.net
+  "instance": { "name": "matra", "status": "connected" }
 }
 ```
+
+O conteúdo de `instance` varia por estado, e é **enxuto**:
+
+| Estado | Campos em `instance` |
+|---|---|
+| `connecting` | `name`, `status`, `qrcode` |
+| `connected` | `name`, `status` |
+| `disconnected` | `name`, `status`, `lastDisconnect`, `lastDisconnectReason` |
+
+`profileName`, `profilePicUrl`, `isBusiness` e `plataform` **nunca chegam por webhook** — só por
+`GET /instance/status` (o botão Sincronizar). Ver §4.3.
 
 Duas consequências práticas:
 
@@ -280,7 +291,35 @@ Duas consequências práticas:
 Como `token` vem sempre, a conferência do hash (defesa em profundidade) está de fato ativa em
 produção.
 
-### 5.2 Por que o receptor continua tolerante
+### 4.3 Perfil só aparece depois de sincronizar — em aberto
+
+Ciclo observado (criar → conectar → ler QR → conectado), com a conexão real:
+
+```
+POST /instance/create        →  instância criada
+POST /webhook                →  webhook registrado
+POST /instance/connect       →  QR devolvido
+  webhook connection: connecting  (instance: name, status, qrcode)
+  webhook connection: connected   (instance: name, status)   ← nada de perfil
+GET  /instance/status        →  aqui vêm profileName, profilePicUrl, isBusiness, plataform
+```
+
+Ou seja: **entre conectar e alguém clicar em Sincronizar, a tela mostra "Conectado" sem foto e sem
+nome de perfil** — cai no fallback `instance.name` do cabeçalho. O estado não está errado, só
+incompleto, e o `refetchInterval` do web passa de 3s para 30s justamente ao conectar, então nada o
+completa sozinho.
+
+Duas saídas, não decididas:
+
+1. **Sync automático no handler do webhook** ao entrar em `connected`. Completa o perfil sem
+   intervenção, mas põe uma chamada HTTP à uazapi dentro do caminho de resposta do webhook, que
+   hoje é só banco e responde em milissegundos.
+2. **Sync no front** quando `status === "connected" && !profileName`. Mantém o webhook barato e
+   resolve para quem está com a tela aberta — que é exatamente quem acabou de ler o QR.
+
+A (2) parece melhor pelo custo, mas deixa o perfil vazio para quem conectou e fechou a aba.
+
+### 4.4 Por que o receptor continua tolerante
 
 **A spec da uazapi não documenta o corpo entregue.** `paths/webhooks-e-sse/webhook.yaml` (282 linhas)
 descreve só a *configuração* do webhook: não há bloco `callbacks` nem exemplo de payload recebido. As
@@ -309,7 +348,7 @@ Por isso o receptor é deliberadamente tolerante:
 - Envelope sem evento reconhecível → `request.log.warn` + `200`. O aviso aparece no **nosso** log,
   não só no dashboard de erros da uazapi.
 
-**Como capturar o corpo real** (foi assim que a §5.1 foi resolvida). Aponte `UAZAPI_DEBUG_LOG` para
+**Como capturar o corpo real** (foi assim que a §4.2 foi resolvida). Aponte `UAZAPI_DEBUG_LOG` para
 um arquivo (ex: `logs/uazapi.jsonl`) e a API grava, em JSONL, o corpo cru de cada webhook — antes do
 `parse` e antes de autenticar, para que um envelope recusado também apareça — mais tudo que sai para
 a uazapi e tudo que volta (`UazapiClientConfig.onTrace`). Valores de token/segredo saem redigidos e
@@ -317,7 +356,7 @@ headers seguem allowlist de valor; as **chaves** ficam, que é exatamente o que 
 Vazio = desligado, e `logs/` está no `.gitignore`.
 
 **Apertar o `webhookBodySchema` agora seria troca ruim.** O formato está confirmado para a v2.1.1,
-mas exigir `EventType` e `token` devolve o modo de falha que a §5.2 descreve: uma mudança do
+mas exigir `EventType` e `token` devolve o modo de falha que a §4.4 descreve: uma mudança do
 provedor derrubaria todo evento em silêncio, e o ganho seria nenhum — o schema tolerante já aplica o
 envelope real corretamente. A tolerância custa três campos opcionais; a rigidez custa a integração.
 
@@ -438,7 +477,7 @@ revisão de segurança marca como bug.
 
 ```
 1. params: { instanceId: cuid, secret: string }
-2. body (zod loose, todos os campos opcionais — ver §5.1)
+2. body (zod loose, todos os campos opcionais — ver §4.2)
 3. instância = findUnique(instanceId)          ausente -> 401 (não 404: não enumerar ids)
 4. timingSafeEqual(secret, instance.webhookSecret)     divergiu -> 401
 5. body.token presente e hash divergiu                 -> 401   (ausente: segue)
@@ -602,9 +641,8 @@ envio pelo CRM (`send.text`/`send.media` já estão na lib), campanhas, `proxy`,
 
 ## 13. Estado da execução
 
-Fases 1 a 4 **implementadas e verdes** (`lint` + `typecheck` + `test` na API, `lint` + `typecheck` +
-`build` no web). Suíte da API em 36 arquivos / 205 testes, sendo 20 novos em `test/whatsapp.test.ts`
-e 6 em `test/crypto.test.ts`.
+Fases 1 a 5 **concluídas**. `lint` + `typecheck` + `test` verdes na API (37 arquivos / 222 testes),
+`lint` + `typecheck` + `build` verdes no web.
 
 Divergências do que este spec previa, todas deliberadas:
 
@@ -616,20 +654,17 @@ Divergências do que este spec previa, todas deliberadas:
 - **`eventForTransition` não precisou mudar** para `hibernated`: o fallback já devolve
   `status_changed`, que é o evento correto.
 
-**Fase 5 é a que fecha o contrato do webhook — não é formalidade.** Falta o teste de ponta a ponta
-contra a uazapi real (criar instância, ler o QR num aparelho, confirmar que o evento chega e muda o
-estado sozinho). Exige `UAZAPI_ADMIN_TOKEN` e um túnel em `PUBLIC_API_URL`; nenhum dos dois está no
-`.env` de dev.
+**Fase 5 rodou contra a uazapi real** (2026-08-04, uazapiGO v2.1.1, entrega por túnel ngrok): criar
+instância → registrar webhook → conectar → ler o QR num aparelho → `connected` chegando por webhook,
+sem intervenção. Também exercitados `disconnect` e `delete`. O que ela revelou está na §4.2
+(envelope, com `owner` fora de `instance` — bug real que nenhuma leitura da spec pegaria) e na §4.3
+(perfil só chega por sync).
 
-O ponto que só ela resolve é o da §5.1: **o formato do corpo entregue pela uazapi nunca foi
-observado**. O receptor foi feito tolerante justamente para não quebrar em silêncio enquanto isso
-não acontece, mas tolerância não é confirmação. Ao rodar a fase 5, capturar um corpo real (o
-`log.warn` do receptor já imprime as chaves quando o envelope não é reconhecido) e registrar o
-formato aqui e no `CLAUDE.md` da API.
+Verificado antes, sem credenciais: a tela no navegador nos estados "sem instância" e "conectado"
+(cabeçalho, telefone formatado, abas, histórico com labels em pt-BR), a degradação em `503` quando a
+integração não está configurada, e os três envelopes candidatos aceitos pelo receptor.
 
-O que **foi** verificado sem essas credenciais: a tela renderizada no navegador nos estados "sem
-instância" e "conectado" (header, telefone formatado a partir do JID, abas, histórico com labels em
-pt-BR), a degradação em `503` quando a integração não está configurada, e os três envelopes
-candidatos aceitos pelo receptor (testes em `test/whatsapp.test.ts`).
+**Em aberto**, nenhum bloqueante: a decisão da §4.3 (perfil vazio até sincronizar), o rate limit do
+receptor (§11) e a rotação de `webhookSecret`.
 
-> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-03 23:03 (-03)
+> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-04 00:12 (-03)

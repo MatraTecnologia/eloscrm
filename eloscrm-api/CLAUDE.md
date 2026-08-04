@@ -114,14 +114,20 @@ há rate limit** — o projeto não tem `@fastify/rate-limit`.
 **Envelope do webhook (confirmado no tráfego real da v2.1.1, 2026-08-03):**
 
 ```jsonc
-{ "BaseUrl": "…", "EventType": "connection", "token": "…", "instanceName": "…",
-  "owner": "55…@s.whatsapp.net",              // no TOPO, fora de `instance`
-  "instance": { "name": "…", "status": "…", "qrcode": "…" } }
+{ "BaseUrl": "…", "EventType": "connection", "token": "…", "instanceName": "matra",
+  "owner": "554391834229",                    // no TOPO, fora de `instance`; número puro, SEM @s.whatsapp.net
+  "instance": { "name": "matra", "status": "connected" } }
 ```
 
 ⚠️ **`owner` fica fora de `instance`.** `applyInstanceSnapshot` lê `data.owner`, e `data` é
 `body.instance` — sem trazer o campo do topo (é o que `connectionDataOf` faz), `ownerJid` nunca seria
 preenchido por webhook e a tela mostraria "Número ainda não identificado" numa instância conectada.
+
+**O webhook manda pouco; o resto só vem por sync.** `instance` traz apenas `name` + `status` (mais
+`qrcode` em `connecting`, e `lastDisconnect`/`lastDisconnectReason` em `disconnected`).
+`profileName`, `profilePicUrl`, `isBusiness` e `plataform` **não chegam por webhook** — só por
+`GET /instance/status`, ou seja, pelo botão Sincronizar. Ao conectar, a tela fica correta no status
+mas sem foto nem nome de perfil até alguém sincronizar.
 
 **O `webhookBodySchema` continua tolerante de propósito**: aceita `EventType`/`event`/`type`, não
 exige campo nenhum e confere o hash do token só quando ele vem. A spec da uazapi **não** documenta o
@@ -186,4 +192,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 - WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 23:03 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:12 (-03)
