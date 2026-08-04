@@ -121,6 +121,18 @@ derrubaria todos os eventos em silêncio, e o sintoma só apareceria em `/webhoo
 Envelope irreconhecível vira `request.log.warn`. **Não aperte esse schema sem antes capturar um corpo
 real** — e, quando capturar, registre-o aqui.
 
+**Trilha bruta para diagnóstico: `UAZAPI_DEBUG_LOG`.** Aponte para um arquivo (ex:
+`logs/uazapi.jsonl`) e a API passa a gravar, em JSONL, tudo que sai para a uazapi, tudo que volta e
+o **corpo cru de cada webhook** — este último antes do `parse` e antes de autenticar, que é
+justamente quando o corpo interessa. Vazio = no-op; `logs/` está no `.gitignore`.
+
+Os *valores* de `token`/`admintoken`/`apikey`/`webhookSecret` saem redigidos como
+`<redigido len=N>`, e a URL de webhook perde o último segmento — mas **as chaves permanecem**, que é
+o que revela o formato do envelope. Não relaxe essa redação para "ver o token": ele está cifrado no
+banco exatamente para não existir em claro em lugar nenhum.
+
+É ferramenta de investigação, não o logger da aplicação: ligue enquanto apura, desligue depois.
+
 **`UazapiInstanceLog.payload` não sai pela API.** Ele guarda resposta bruta da uazapi para
 diagnóstico e pode conter URL de webhook (que termina no `webhookSecret`) ou campo novo que ninguém
 revisou. `repo.listLogs` usa `select` explícito sem ele — não troque por um `findMany` cru.
@@ -153,4 +165,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 - WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 21:59 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-03 23:03 (-03)

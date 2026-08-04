@@ -62,7 +62,11 @@ export const uazapi = (): UazapiClient => {
   return _client
 }
 
-export type { UazapiClientConfig, RequestOptions } from './client.js'
+export type {
+  UazapiClientConfig,
+  RequestOptions,
+  UazapiTraceEntry,
+} from './client.js'
 export type { UazapiAdminApi } from './admin.js'
 export type { UazapiInstanceApi } from './instance.js'
 export type { UazapiWebhookApi } from './webhook.js'

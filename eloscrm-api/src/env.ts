@@ -38,6 +38,10 @@ export const env = createEnv({
     // para BETTER_AUTH_URL só serve em produção: em dev ele é localhost e a uazapi não alcança —
     // ali é preciso um túnel (cloudflared/ngrok) apontado aqui, senão o status só muda via sync.
     PUBLIC_API_URL: z.url().trim().optional(),
+    // Caminho de um arquivo JSONL com a trilha bruta da integração (o que sai para a uazapi, o que
+    // volta, e o corpo cru dos webhooks). Vazio = desligado. Ferramenta de diagnóstico: serve para
+    // descobrir o formato real do envelope, que a spec da uazapi não documenta.
+    UAZAPI_DEBUG_LOG: z.string().trim().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

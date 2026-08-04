@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { debugLog } from "../../../lib/debug-log.js";
 import { webhookBodySchema, webhookParamsSchema } from "../../../modules/whatsapp/whatsapp.schema.js";
 import * as webhook from "../../../modules/whatsapp/whatsapp.webhook.service.js";
 
@@ -13,10 +14,19 @@ import * as webhook from "../../../modules/whatsapp/whatsapp.webhook.service.js"
 const uazapiWebhookRoutes = async (app: FastifyInstance) => {
   app.post("/:instanceId/:secret", async (request) => {
     const { instanceId, secret } = webhookParamsSchema.parse(request.params);
-    const body = webhookBodySchema.parse(request.body);
 
+    // Antes do parse e antes de autenticar: se o corpo vier num formato que o schema recusa, ou se
+    // a autenticação falhar, é exatamente aí que precisamos ver o que chegou.
+    debugLog("webhook.received", {
+      instanceId,
+      headers: request.headers,
+      body: request.body,
+    });
+
+    const body = webhookBodySchema.parse(request.body);
     const instance = await webhook.authenticate(instanceId, secret, body.token);
     const result = await webhook.process(instance, body, new Date());
+    debugLog("webhook.processed", { instanceId, event: result.event, handled: result.handled });
 
     // O envelope da uazapi não está na spec (ver webhookBodySchema). Se um dia chegar num formato
     // que não reconhecemos, o sintoma seria a conexão parar de atualizar sozinha — silencioso

@@ -1,8 +1,13 @@
 import { env } from "../../env.js";
 import { httpError } from "../../lib/http-error.js";
 import { decryptToken } from "../../lib/crypto.js";
-import { createUazapiClient, type UazapiClient } from "../../lib/uazapi/index.js";
+import { debugLog } from "../../lib/debug-log.js";
+import { createUazapiClient, type UazapiClient, type UazapiTraceEntry } from "../../lib/uazapi/index.js";
 import type { UazapiErrorPayload } from "../../lib/uazapi/types.js";
+
+// A lib não conhece arquivo nem env — recebe o tracer e chama. Mantém o cliente HTTP reutilizável e
+// o diagnóstico como decisão desta aplicação.
+const onTrace = (entry: UazapiTraceEntry) => debugLog("uazapi", { ...entry });
 
 export type IntegrationConfig = {
   baseUrl: string;
@@ -32,11 +37,11 @@ export const requireIntegration = (): IntegrationConfig => {
 };
 
 export const adminClient = (config: IntegrationConfig): UazapiClient =>
-  createUazapiClient({ baseURL: config.baseUrl, adminToken: config.adminToken });
+  createUazapiClient({ baseURL: config.baseUrl, adminToken: config.adminToken, onTrace });
 
 /** Só para o token recém-criado, que ainda não passou pelo banco. Fora disso use instanceClient. */
 export const tokenClient = (config: IntegrationConfig, token: string): UazapiClient =>
-  createUazapiClient({ baseURL: config.baseUrl, token });
+  createUazapiClient({ baseURL: config.baseUrl, token, onTrace });
 
 export const instanceClient = (config: IntegrationConfig, tokenEnc: string): UazapiClient => {
   let token: string;
@@ -50,7 +55,7 @@ export const instanceClient = (config: IntegrationConfig, tokenEnc: string): Uaz
       "Não foi possível ler o token da instância. Remova e conecte o WhatsApp novamente.",
     );
   }
-  return createUazapiClient({ baseURL: config.baseUrl, token });
+  return createUazapiClient({ baseURL: config.baseUrl, token, onTrace });
 };
 
 export const webhookUrl = (config: IntegrationConfig, instanceId: string, secret: string) =>

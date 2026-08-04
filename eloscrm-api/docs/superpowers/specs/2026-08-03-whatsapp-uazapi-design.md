@@ -277,7 +277,14 @@ Por isso o receptor é deliberadamente tolerante:
 - Envelope sem evento reconhecível → `request.log.warn` + `200`. O aviso aparece no **nosso** log,
   não só no dashboard de erros da uazapi.
 
-Quando um corpo real for capturado (fase 5), registrar o formato aqui e no `CLAUDE.md` da API.
+**Como capturar o corpo real.** Aponte `UAZAPI_DEBUG_LOG` para um arquivo (ex: `logs/uazapi.jsonl`)
+e a API grava, em JSONL, o corpo cru de cada webhook — antes do `parse` e antes de autenticar, para
+que um envelope recusado também apareça — mais tudo que sai para a uazapi e tudo que volta
+(`UazapiClientConfig.onTrace`). Valores de token/segredo saem redigidos; as **chaves** ficam, que é
+exatamente o que resolve a dúvida desta seção. Vazio = desligado, e `logs/` está no `.gitignore`.
+
+Com o formato em mãos, registrá-lo aqui e no `CLAUDE.md` da API — e só então considerar apertar
+`webhookBodySchema`.
 
 ## 5. `src/lib/crypto.ts` (novo)
 
@@ -590,4 +597,4 @@ instância" e "conectado" (header, telefone formatado a partir do JID, abas, his
 pt-BR), a degradação em `503` quando a integração não está configurada, e os três envelopes
 candidatos aceitos pelo receptor (testes em `test/whatsapp.test.ts`).
 
-> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-03 21:59 (-03)
+> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-03 23:03 (-03)

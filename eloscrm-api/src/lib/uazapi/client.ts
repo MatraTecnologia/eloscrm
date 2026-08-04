@@ -6,12 +6,21 @@ import axios, {
 
 import type { Result, UazapiErrorPayload } from './types.js'
 
+export interface UazapiTraceEntry {
+  direction: 'request' | 'response' | 'error'
+  method?: string
+  path?: string
+  status?: number
+  body?: unknown
+}
+
 export interface UazapiClientConfig {
   baseURL: string
   adminToken?: string
   token?: string
   timeoutMs?: number
   headers?: Record<string, string>
+  onTrace?: (entry: UazapiTraceEntry) => void
 }
 
 export interface RequestOptions {
@@ -31,7 +40,7 @@ export const createHttp = (config: UazapiClientConfig): AxiosInstance => {
     throw new Error('uazapi: baseURL é obrigatório')
   }
 
-  return axios.create({
+  const http = axios.create({
     baseURL: normalizeBaseURL(config.baseURL),
     timeout: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     headers: {
@@ -40,6 +49,44 @@ export const createHttp = (config: UazapiClientConfig): AxiosInstance => {
       ...config.headers,
     },
   })
+
+  const trace = config.onTrace
+  if (trace) {
+    http.interceptors.request.use(req => {
+      trace({
+        direction: 'request',
+        method: req.method?.toUpperCase(),
+        path: req.url,
+        body: req.data,
+      })
+      return req
+    })
+    http.interceptors.response.use(
+      res => {
+        trace({
+          direction: 'response',
+          method: res.config.method?.toUpperCase(),
+          path: res.config.url,
+          status: res.status,
+          body: res.data,
+        })
+        return res
+      },
+      (error: unknown) => {
+        const err = error instanceof AxiosError ? error : null
+        trace({
+          direction: 'error',
+          method: err?.config?.method?.toUpperCase(),
+          path: err?.config?.url,
+          status: err?.response?.status ?? 0,
+          body: err?.response?.data ?? { message: (error as Error)?.message },
+        })
+        return Promise.reject(error)
+      },
+    )
+  }
+
+  return http
 }
 
 const buildAuthHeaders = (

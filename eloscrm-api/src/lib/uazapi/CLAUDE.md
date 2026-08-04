@@ -89,6 +89,14 @@ await uazapi().send.text(
 
 `RequestOptions` aceita `token`, `adminToken`, `signal`, `headers` — todos sobrescrevem a config do cliente apenas para aquela chamada.
 
+### Trace opcional (`onTrace`)
+
+`UazapiClientConfig.onTrace` recebe cada requisição e cada resposta/erro (`direction`, `method`, `path`, `status`, `body`). Serve para diagnóstico externo — a lib não conhece arquivo, env nem redação de segredo; quem passa o callback decide o que fazer. Ausente, nenhum interceptor é registrado. Consumidor atual: `src/modules/whatsapp/whatsapp.gateway.ts`, que liga em `src/lib/debug-log.ts`.
+
+```typescript
+createUazapiClient({ baseURL, token, onTrace: entry => myLogger(entry) })
+```
+
 ## `hibernated` é o quarto estado, não um detalhe
 
 `InstanceStatus` tem **quatro** valores: `disconnected | connecting | connected | hibernated`. O último entrou na v2.1.1 (sessão pausada com credenciais preservadas) e precisa existir em três lugares ao mesmo tempo — `types.ts`, o `STATUS_MAP` de `snapshot.ts` e o enum `UazapiInstanceStatus` do Prisma. Se faltar em qualquer um deles, `parseStatus` devolve `null`, `applyInstanceSnapshot` não escreve `status` e **o estado local congela no anterior**: a tela segue mostrando "conectado" para um número que parou de atender. Já aconteceu na importação inicial desta lib.
