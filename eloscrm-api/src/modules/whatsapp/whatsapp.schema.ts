@@ -46,11 +46,20 @@ export const webhookParamsSchema = z.object({
  * derrubaria todos os eventos em silêncio, e o sintoma só apareceria em `/webhook/errors` da uazapi.
  * A autenticação de verdade é o segredo de 32 bytes na URL; o hash do token é defesa em
  * profundidade e só é conferido quando o campo vem.
+ *
+ * ⚠️ Foi exatamente isso que aconteceu: tipar `event` como string derrubou **todo**
+ * `messages_update` com 422 durante horas, sem sintoma nenhum do nosso lado. Em `messages_update`,
+ * `event` é o **payload** (objeto com `MessageIDs`, `Chat`, `Sender`) e `type` é o **subtipo**
+ * (`ReadReceipt`) — não sinônimos de `EventType`, como o resto deste schema supunha. Campo novo
+ * aqui entra permissivo; o custo de errar para o lado rígido é perder eventos calado.
  */
 export const webhookBodySchema = z.looseObject({
   EventType: z.string().min(1).optional(),
-  event: z.string().min(1).optional(),
+  // string quando é o nome do evento; objeto quando é o payload do messages_update
+  event: z.union([z.string(), z.looseObject({})]).optional(),
   type: z.string().min(1).optional(),
+  // messages_update: "Delivered" | "Read"
+  state: z.string().optional(),
   token: z.string().min(1).optional(),
   // objeto na forma do matra-notification-manager, string (id) na forma do webhook_event.yaml
   instance: z.union([z.string(), z.looseObject({})]).optional(),
@@ -61,7 +70,13 @@ export const webhookBodySchema = z.looseObject({
   BaseUrl: z.string().optional(),
 });
 
-export const eventNameOf = (body: WebhookBody) => body.EventType ?? body.event ?? body.type ?? null;
+/** `event`/`type` só valem como nome do evento quando são string — ver o aviso acima. */
+export const eventNameOf = (body: WebhookBody): string | null => {
+  if (body.EventType) return body.EventType;
+  if (typeof body.event === "string") return body.event;
+  if (typeof body.type === "string") return body.type;
+  return null;
+};
 
 /**
  * O payload da conexão vem em `instance` (objeto) ou em `data`, conforme a forma do envelope.

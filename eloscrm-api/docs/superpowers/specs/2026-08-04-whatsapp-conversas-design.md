@@ -123,7 +123,50 @@ do `/message/download`.
 chars. Preview instantâneo, sem requisição nenhuma — e os metadados (nome, tamanho, duração,
 dimensões, páginas) vêm junto, então a bolha nasce completa.
 
-### 2.6 Mídia expira em 2 dias
+### 2.6 `messages_update` — o ✓✓, e o bug que ele revelou
+
+```jsonc
+{
+  "EventType": "messages_update",
+  "type": "ReadReceipt",          // subtipo
+  "state": "Delivered",           // ou "Read" — é o status que interessa
+  "token": "…", "owner": "…", "instanceName": "…",
+  "event": {                      // ⚠️ OBJETO, não string
+    "MessageIDs": ["ACDBFDADC9802B7379B245CBBAA0A170", "…"],
+    "Chat": "554398414904@s.whatsapp.net",
+    "Sender": "…", "sender_pn": "…", "sender_lid": "…@lid",
+    "IsFromMe": "False",          // ⚠️ string, não booleano
+    "IsGroup": "False",
+    "Timestamp": "1785820620",    // ⚠️ SEGUNDOS — messageTimestamp era ms
+    "Type": "Delivered"
+  }
+}
+```
+
+**Este evento derrubou a API por horas com `422`, em silêncio.** O `webhookBodySchema` tipava
+`event` como `string` — porque nas outras formas de envelope `event` era sinônimo de `EventType`.
+Aqui é o payload. O Zod rejeitava, o errorHandler devolvia 422, e o único sintoma ficava em
+`/webhook/errors` da uazapi: 10 entregas falhadas que ninguém veria sem procurar.
+
+É a profecia do próprio plano se cumprindo — "rejeitar o corpo derrubaria todos os eventos em
+silêncio" — só que contra o nosso schema, não contra uma mudança do provedor. Corrigido: `event`
+aceita string **ou** objeto, e `eventNameOf` só usa `event`/`type` como nome quando são string.
+
+**Três armadilhas para a fase de status:**
+
+1. **`MessageIDs` é array** — um evento atualiza N mensagens (observados 1, 3, 11 e 12). O update é
+   em lote, não por mensagem.
+2. **`IsFromMe` é a string `"False"`**, não booleano. `if (event.IsFromMe)` é sempre verdadeiro.
+3. **`Timestamp` está em segundos**, enquanto `messageTimestamp` de `messages` está em
+   milissegundos. Mesmo provedor, mesma conversa, unidades diferentes.
+
+Os ids em `MessageIDs` são o `messageid` puro, **sem** o prefixo `owner:` do `message.id` — a
+reconciliação com `WhatsappMessage` tem que usar `providerMessageId`, não `providerId`.
+
+**`wasSentByApi` no exclude não suprime este evento** — ele chega normalmente. Confirmado em
+tráfego real: o filtro fica, e o ✓✓ funciona mesmo assim.
+
+### 2.7 Mídia expira em 2 dias
 
 Da spec de `/message/download`: *"mantemos as mídias no nosso storage por 2 dias. Após 2 dias, elas
 são removidas na limpeza automática e o link retornado deixa de ficar disponível."*
@@ -131,7 +174,7 @@ são removidas na limpeza automática e o link retornado deixa de ficar disponí
 Consequência dura: **se não baixarmos na ingestão, o áudio que o lead mandou some.** É a única parte
 deste sistema onde a falha é irreversível — todo o resto se recupera com um sync.
 
-### 2.7 Telefone: o nono dígito quebra o matching
+### 2.8 Telefone: o nono dígito quebra o matching
 
 | Origem | Formato | Exemplo |
 |---|---|---|
@@ -192,7 +235,7 @@ mensagem, o corretor lê e **então** decide criar o lead. Amarrar conversa a le
 lead para todo número que escreve — inclusive engano e spam.
 
 **3.5 — Mídia no R2, com a URL temporária da uazapi cobrindo o intervalo.**
-O destino final é o R2 privado (§2.6 — em 2 dias o link da uazapi morre). Mas o corretor não pode
+O destino final é o R2 privado (§2.7 — em 2 dias o link da uazapi morre). Mas o corretor não pode
 esperar o upload para ver a foto que acabou de chegar.
 
 Então a mensagem tem **três estágios de exibição**, em ordem de precedência:
@@ -430,7 +473,7 @@ baixa a fileURL e sobe ao R2 privado
 Falha esgotadas as tentativas: `mediaStatus = failed` + `mediaError`. A mensagem continua na
 conversa, marcada como mídia indisponível — **nunca sumir com a mensagem por causa do anexo**.
 
-Sem retry indefinido: passados os 2 dias não há o que buscar (§2.6). O limite de tamanho (sugestão:
+Sem retry indefinido: passados os 2 dias não há o que buscar (§2.7). O limite de tamanho (sugestão:
 20 MB) é aplicado **antes de baixar**, com o `content.fileLength` que já veio no webhook — arquivo
 acima do teto vira `failed` com motivo, e a bolha ainda mostra nome, tamanho e miniatura.
 
@@ -607,4 +650,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:12 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:21 (-03)

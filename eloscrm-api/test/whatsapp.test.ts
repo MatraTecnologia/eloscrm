@@ -117,7 +117,7 @@ describe("POST /v1/whatsapp/instance", () => {
     expect(JSON.stringify(body)).not.toContain(TOKEN);
 
     const [call] = remote.webhook.upsert.mock.calls;
-    expect(call[0].events).toEqual(["connection"]);
+    expect(call[0].events).toEqual(["connection", "messages", "messages_update"]);
     expect(call[0].excludeMessages).toEqual(["wasSentByApi"]);
     expect(call[0].url).toContain(`/webhooks/uazapi/${body.id}/`);
   });
@@ -303,6 +303,30 @@ describe("POST /webhooks/uazapi/:instanceId/:secret", () => {
     expect(res.statusCode).toBe(200);
     const saved = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
     expect(saved.status).toBe("disconnected");
+  });
+
+  // Regressão real: `event` estava tipado como string, e todo messages_update caía com 422 —
+  // por horas, sem sintoma nenhum do nosso lado (só em /webhook/errors da uazapi).
+  it("aceita messages_update, onde `event` é objeto e `type` é subtipo", async () => {
+    const res = await post(instanceId, secret, {
+      EventType: "messages_update",
+      type: "ReadReceipt",
+      state: "Delivered",
+      token: TOKEN,
+      owner: "554391834229",
+      instanceName: "matra",
+      event: {
+        Chat: "554398414904@s.whatsapp.net",
+        MessageIDs: ["ACDBFDADC9802B7379B245CBBAA0A170"],
+        // a uazapi manda booleano como string e este Timestamp em SEGUNDOS
+        IsFromMe: "False",
+        IsGroup: "False",
+        Timestamp: "1785820620",
+        Type: "Delivered",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ received: true });
   });
 
   it("não rejeita envelope irreconhecível — responde 200 sem gravar", async () => {
