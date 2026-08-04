@@ -23,6 +23,11 @@ export const sendMessageSchema = z.object({
   replyToId: z.string().min(1).optional(),
 });
 
+export const reactSchema = z.object({
+  // vazio remove a reação — é assim que a uazapi modela o "desreagir"
+  emoji: z.string().trim().max(16),
+});
+
 export const createClientFromConversationSchema = z.object({
   // o nome do perfil do WhatsApp é sugestão; o corretor pode corrigir antes de criar
   name: z.string().trim().min(1).max(120),
@@ -33,5 +38,6 @@ export const linkClientSchema = z.object({
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+export type ReactInput = z.infer<typeof reactSchema>;
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;

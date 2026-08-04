@@ -295,6 +295,24 @@ export interface SendMediaParams extends CommonSendOptions {
   thumbnail?: string
 }
 
+export interface ReactToMessageParams {
+  /** chat de destino; aceita o JID completo ou só os dígitos */
+  number: string
+  /** emoji Unicode, ou string vazia para remover */
+  text: string
+  /** messageid puro da mensagem que recebe a reação */
+  id: string
+}
+
+export interface ReactToMessageResponse {
+  id?: string
+  messageid?: string
+  messageType?: string
+  messageTimestamp?: number
+  status?: string
+  content?: unknown
+}
+
 export interface SendPresenceParams {
   number: string
   presence: PresenceType

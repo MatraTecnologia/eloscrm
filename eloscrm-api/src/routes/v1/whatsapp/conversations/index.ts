@@ -5,9 +5,11 @@ import {
   linkClientSchema,
   listConversationsQuerySchema,
   listMessagesQuerySchema,
+  reactSchema,
   sendMessageSchema,
 } from "../../../../modules/whatsapp/conversations.schema.js";
 import * as service from "../../../../modules/whatsapp/conversations.service.js";
+import * as reactions from "../../../../modules/whatsapp/reactions.service.js";
 import { authGuard } from "../../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../../plugins/org-guard.js";
 
@@ -41,6 +43,12 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     const data = sendMessageSchema.parse(request.body);
     const message = await service.sendText(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(message);
+  });
+
+  app.post("/:id/messages/:messageId/reaction", async (request) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const { emoji } = reactSchema.parse(request.body);
+    return reactions.react(request.orgId!, id, messageId, emoji);
   });
 
   app.get("/:id/candidates", async (request) => {

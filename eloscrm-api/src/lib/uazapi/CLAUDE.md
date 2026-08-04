@@ -16,7 +16,7 @@ uazapi/
 ├── instance.ts    # /instance/connect, /status, /reset, /disconnect, /wa_messages_limits (token)
 ├── webhook.ts     # /webhook (get/upsert/delete), /webhook/errors (token)
 ├── send.ts        # /send/text, /send/media, /message/presence (token)
-├── messages.ts    # /message/find (token)
+├── messages.ts    # /message/find, /message/download, /message/react (token)
 ├── proxy.ts       # /proxy-managed/cities, /instance/proxy (GET/POST) (token)
 ├── contacts.ts    # /chat/check, /chat/details, /contacts, /contacts/list (token)
 └── groups.ts      # /group/info, /group/list (GET/POST) (token)
@@ -187,6 +187,8 @@ Todos suportam `CommonSendOptions` (delay, readchat, readmessages, replyid, view
 | Método | Endpoint | Uso |
 |--------|----------|-----|
 | `find(params?)` | `POST /message/find` | Busca paginada com filtros por `id`, `chatid`, `track_*`, `limit`, `offset` |
+| `download(params)` | `POST /message/download` | Baixa a mídia; `return_link: true` devolve `fileURL` temporária (~2 dias) |
+| `react(params)` | `POST /message/react` | Reage com emoji; `text` vazio **remove** a reação |
 
 Útil para verificar status de envios `async: true` (filtrar por `status: 'Failed'`).
 

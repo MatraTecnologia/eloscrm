@@ -77,7 +77,8 @@ número.
 | `content` | `{ text, contextInfo }` | objeto, não string |
 | `wasSentByApi` | `true` | distingue envio nosso de envio pelo celular |
 | `quoted` | `""`, ou o `messageid` da citada | resposta — ver §2.9 |
-| `reaction`, `vote`, `edited` | `""` | reação, enquete, edição |
+| `reaction` | `""`, ou o `messageid` do alvo | reação — ver §2.10 |
+| `vote`, `edited` | `""` | enquete, edição |
 
 ### 2.4 A uazapi tem um CRM embutido — vamos ignorá-lo
 
@@ -233,6 +234,41 @@ Três coisas que decidem o design:
 No envio, o campo é `replyid` (documentado, em `CommonSendOptions`), e recebe o mesmo `messageid`
 puro. A resposta de `/send/text` devolve `messageid`, então mensagem enviada pelo CRM também é
 citável — o reply funciona nas duas direções.
+
+### 2.10 Reação é `messages`, não `messages_update`
+
+Ao contrário da deleção, reagir chega como **mensagem** (`EventType: "messages"`), com
+`type: "reaction"` e `messageType: "ReactionMessage"`. Capturado em 2026-08-04:
+
+```jsonc
+{ "type": "reaction", "messageType": "ReactionMessage",
+  "text": "😮",                          // o emoji fica no `text`
+  "reaction": "3BB79A520BA5309EA53B",    // messageid PURO do alvo
+  "fromMe": false,
+  "content": { "key": { "ID": "3BB79A520BA5309EA53B",
+                        "fromMe": true,  // se o ALVO é nosso, não quem reagiu
+                        "remoteJID": "226070083190831@lid" },
+               "text": "😮", "senderTimestampMS": 1785860645965 } }
+```
+
+**Reação não é mensagem na thread.** O WhatsApp mostra o emoji colado na bolha do alvo; ingerir como
+mensagem enche a conversa de bolhas soltas — que foi exatamente o que aconteceu antes de ser
+tratado, e a bolha ainda caía no ramo de documento do `MediaContent`, virando um bloco "Arquivo".
+Hoje a ingestão desvia antes de criar a mensagem, e `listMessages` filtra `type: reaction` para
+consertar o que já tinha sido ingerido, sem migração.
+
+**Reagir não é escrever**: não mexe em `lastMessageText` nem no não lido.
+
+**`content.key.fromMe` descreve o alvo, não o autor.** Nos dois exemplos capturados ele é o oposto
+de `message.fromMe` — coerente com a limitação que a spec declara em `/message/react`: *"só é
+possível reagir a mensagens enviadas por outros usuários"*. Por isso o botão de reagir não aparece
+em bolha própria. **Não foi testado contra a API real** — se a limitação não valer, soltar é uma
+linha em `reactions.service.ts`.
+
+**Uma reação por pessoa e por mensagem**, garantido pelo provedor: trocar substitui, `text` vazio
+remove. O `@@unique([messageId, authorLid])` espelha isso. `authorLid` colapsa em `me` para tudo que
+sai daqui, **inclusive** o que volta pelo webhook com o LID da própria instância — sem isso, reagir
+pelo celular e pelo CRM criaria duas linhas da mesma pessoa.
 
 ---
 
@@ -854,4 +890,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 11:07 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:36 (-03)

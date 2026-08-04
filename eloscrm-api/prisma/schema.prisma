@@ -599,6 +599,8 @@ model WhatsappMessage {
   sentById String?
   sentBy   User?  @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
+  reactions WhatsappReaction[]
+
   sentAt    DateTime
   createdAt DateTime @default(now())
 
@@ -673,4 +675,30 @@ model LeadAutomationMember {
   lastAssignedAt DateTime?
 
   @@unique([automationId, userId])
+}
+
+/// Reação (emoji) a uma mensagem. **Não** é uma mensagem na thread: o WhatsApp mostra a reação
+/// colada na bolha do alvo, e ingerir como mensagem enche a conversa de bolhas soltas.
+///
+/// O provedor garante uma reação ativa por pessoa e por mensagem — trocar substitui, e emoji vazio
+/// remove. Daí o @@unique.
+model WhatsappReaction {
+  id        String          @id @default(cuid())
+  messageId String
+  message   WhatsappMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  emoji String
+
+  /// Quem reagiu. Para o que sai daqui é sempre `me`, **inclusive** quando a reação foi feita pelo
+  /// celular e voltou pelo webhook com o LID da própria instância — sem colapsar os dois, a mesma
+  /// pessoa criaria duas linhas. Para quem recebe, é o `sender_lid`, o que já serve a grupo sem
+  /// precisar de migração depois.
+  authorLid  String
+  authorName String?
+
+  reactedAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, authorLid])
+  @@index([messageId])
 }

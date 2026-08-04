@@ -1,10 +1,11 @@
-import { WhatsappDirection } from "../../generated/prisma/client.js";
+import { WhatsappDirection, WhatsappMessageType } from "../../generated/prisma/client.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
 import { findClientsByPhoneKey } from "../clients/clients.repo.js";
 import { applyToConversation } from "../lead-automation/apply.service.js";
 import * as repo from "./conversations.repo.js";
 import { enqueueMediaJob } from "./media.service.js";
 import { parseConversation, parseMessage } from "./message-envelope.js";
+import { applyReaction } from "./reactions.service.js";
 
 export const MESSAGE_QUEUE = "whatsapp-message";
 
@@ -48,6 +49,14 @@ export const processMessageEvent = async (job: MessageJob) => {
   if (!parsedChat || !parsedMessage) return { skipped: true as const };
 
   const conversation = await repo.upsertConversation(job.organizationId, job.instanceId, parsedChat);
+
+  // Reação não entra na thread: o WhatsApp a mostra colada na bolha do alvo, e ingerir como
+  // mensagem encheria a conversa de bolhas soltas de emoji. Também não mexe na prévia nem no não
+  // lido — reagir não é escrever.
+  if (parsedMessage.type === WhatsappMessageType.reaction) {
+    return applyReaction(job.organizationId, conversation.id, parsedMessage);
+  }
+
   const message = await repo.createMessageIfNew(job.organizationId, conversation.id, parsedMessage);
 
   // reentrega: a conversa já foi atualizada por esta mensagem, e contar de novo inflaria o não lido

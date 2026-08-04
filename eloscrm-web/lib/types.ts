@@ -367,6 +367,14 @@ export type WhatsappQuoted = {
   deletedAt: string | null;
 };
 
+// Reação a uma mensagem. `authorLid` é chave interna e não sai da API — o que a bolha precisa é o
+// emoji e se foi a imobiliária que reagiu.
+export type WhatsappReaction = {
+  emoji: string;
+  mine: boolean;
+  authorName: string | null;
+};
+
 export type WhatsappMessage = {
   id: string;
   providerId: string;
@@ -382,6 +390,7 @@ export type WhatsappMessage = {
   quoted: WhatsappQuoted | null;
   // "apagar para todos": a linha continua na thread, o conteúdo não vem da API
   deletedAt: string | null;
+  reactions: WhatsappReaction[];
   senderName: string | null;
   sentByApi: boolean;
   sentAt: string;

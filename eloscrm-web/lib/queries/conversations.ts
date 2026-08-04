@@ -143,6 +143,34 @@ export const useSendMessage = () => {
   });
 };
 
+/**
+ * Reage a uma mensagem. Emoji vazio remove — é assim que a uazapi modela o "desreagir".
+ *
+ * Invalida a thread inteira em vez de mexer no cache: o servidor é quem decide se a reação valeu,
+ * e o WhatsApp pode recusar.
+ */
+export const useReactToMessage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      messageId,
+      emoji,
+    }: {
+      conversationId: string;
+      messageId: string;
+      emoji: string;
+    }) => {
+      const { data } = await api.post<{ emoji: string | null }>(
+        `/whatsapp/conversations/${conversationId}/messages/${messageId}/reaction`,
+        { emoji },
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+};
+
 export const useArchiveConversation = () =>
   useConversationMutation(async ({ id, archived }: { id: string; archived: boolean }) => {
     await api.post(`/whatsapp/conversations/${id}/${archived ? "archive" : "unarchive"}`);

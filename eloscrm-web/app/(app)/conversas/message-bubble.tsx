@@ -7,6 +7,7 @@ import { formatFileSize } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { QuotedPreview } from "./quoted-preview";
+import { ReactionPicker } from "./reaction-picker";
 
 const duracao = (segundos: number | null) => {
   if (!segundos) return null;
@@ -112,18 +113,28 @@ export const MessageBubble = ({
   message,
   onReply,
   onJumpTo,
+  onReact,
   highlight,
 }: {
   message: WhatsappMessage;
   onReply?: (message: WhatsappMessage) => void;
   /** leva a thread até a mensagem citada, como o clique na citação do WhatsApp */
   onJumpTo?: (messageId: string) => void;
+  onReact?: (messageId: string, emoji: string) => void;
   highlight?: boolean;
 }) => {
   const mine = message.direction === "outbound";
   const apagada = !!message.deletedAt;
   const temMidia = !apagada && message.type !== "text" && message.type !== "unsupported";
   const citada = message.quoted;
+
+  const minhaReacao = message.reactions.find((r) => r.mine)?.emoji ?? null;
+
+  // O provedor não deixa reagir às próprias mensagens, então o botão nem aparece nelas — melhor que
+  // oferecer e devolver erro. Mensagem sem id no provedor também não tem como ser endereçada.
+  const reagir = onReact && !apagada && !mine && message.providerMessageId && (
+    <ReactionPicker atual={minhaReacao} onPick={(emoji) => onReact(message.id, emoji)} />
+  );
 
   // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
   // ou que falhou, e a API recusaria de qualquer forma
@@ -144,9 +155,11 @@ export const MessageBubble = ({
   return (
     <div className={cn("group flex items-center gap-1", mine ? "justify-end" : "justify-start")}>
       {mine && responder}
+      {mine && reagir}
+      <div className={cn("flex max-w-[75%] flex-col", mine && "items-end")}>
       <div
         className={cn(
-          "flex max-w-[75%] flex-col gap-1 rounded-lg px-3 py-2 text-sm transition-shadow",
+          "flex flex-col gap-1 rounded-lg px-3 py-2 text-sm transition-shadow",
           mine ? "bg-primary text-primary-foreground" : "bg-muted",
           highlight && "ring-primary ring-offset-background ring-2 ring-offset-2",
         )}
@@ -195,8 +208,26 @@ export const MessageBubble = ({
           {format(parseISO(message.sentAt), "HH:mm")}
           <StatusIcon message={message} />
         </span>
+
+      </div>
+
+      {message.reactions.length > 0 && (
+        // pendurado na borda de baixo, como no WhatsApp. Fica na coluna da bolha e não na thread,
+        // então a sobreposição é com a própria bolha — nunca com a mensagem seguinte.
+        <span
+          className="bg-background -mt-2 flex w-fit items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs shadow-sm"
+          title={message.reactions
+            .map((r) => `${r.emoji} ${r.mine ? "Você" : (r.authorName ?? "Contato")}`)
+            .join(", ")}
+        >
+          {message.reactions.map((r) => (
+            <span key={`${r.emoji}-${r.mine}`}>{r.emoji}</span>
+          ))}
+        </span>
+      )}
       </div>
       {!mine && responder}
+      {!mine && reagir}
     </div>
   );
 };

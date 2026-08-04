@@ -6,7 +6,8 @@ import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMessages } from "@/lib/queries/conversations";
+import { useMessages, useReactToMessage } from "@/lib/queries/conversations";
+import type { ApiError } from "@/lib/api";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageBubble } from "./message-bubble";
 
@@ -34,6 +35,7 @@ export const MessageThread = ({
   conversationId: string;
   onReply?: (message: WhatsappMessage) => void;
 }) => {
+  const reagir = useReactToMessage();
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useMessages(conversationId);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,15 @@ export const MessageThread = ({
             message={message}
             onReply={onReply}
             onJumpTo={irAte}
+            onReact={(messageId, emoji) =>
+              reagir.mutate(
+                { conversationId, messageId, emoji },
+                {
+                  onError: (err) =>
+                    toast.error((err as unknown as ApiError).message ?? "Não foi possível reagir"),
+                },
+              )
+            }
             highlight={destacada === message.id}
           />
         </div>

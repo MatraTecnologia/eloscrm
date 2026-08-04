@@ -6,6 +6,8 @@ import type {
   DownloadMessageResponse,
   FindMessagesParams,
   FindMessagesResponse,
+  ReactToMessageParams,
+  ReactToMessageResponse,
   Result,
 } from './types.js'
 
@@ -17,6 +19,19 @@ export const createMessagesApi = (http: AxiosInstance, config: UazapiClientConfi
     request<DownloadMessageResponse, DownloadMessageParams>(http, config, {
       method: 'POST',
       path: '/message/download',
+      auth: 'token',
+      body: params,
+      options,
+    }),
+
+  /** `text` vazio remove a reação — é assim que a uazapi modela o "desreagir". */
+  react: (
+    params: ReactToMessageParams,
+    options?: RequestOptions,
+  ): Promise<Result<ReactToMessageResponse>> =>
+    request<ReactToMessageResponse, ReactToMessageParams>(http, config, {
+      method: 'POST',
+      path: '/message/react',
       auth: 'token',
       body: params,
       options,

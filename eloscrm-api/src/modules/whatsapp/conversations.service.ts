@@ -7,6 +7,7 @@ import {
   WhatsappMessageType,
   type Prisma,
   type WhatsappMessage,
+  type WhatsappReaction,
 } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { conflict, notFound } from "../../lib/http-error.js";
@@ -128,15 +129,26 @@ const loadQuoted = async (conversationId: string, messages: WhatsappMessage[]) =
  * então embutir sai mais barato que o front pedir uma por bolha. O TTL é curto — o front que
  * recarregar a página ganha URL nova.
  */
-const serializeMessage = async (message: WhatsappMessage, quoted?: Map<string, QuotedPreview>) => {
+type MessageWithReactions = WhatsappMessage & { reactions?: WhatsappReaction[] };
+
+const serializeMessage = async (
+  message: MessageWithReactions,
+  quoted?: Map<string, QuotedPreview>,
+) => {
   // apagada nem chega a assinar URL: o arquivo continua no R2, mas ninguém recebe link para ele
   const media = message.deletedAt ? null : await resolveMediaUrl(message);
-  const { mediaKey: _key, mediaTempUrl: _tmp, ...rest } = hideDeleted(message);
+  const { mediaKey: _key, mediaTempUrl: _tmp, reactions, ...rest } = hideDeleted(message);
   return {
     ...rest,
     mediaUrl: media?.url ?? null,
     mediaSource: media?.source ?? null,
     quoted: (message.quotedId ? quoted?.get(message.quotedId) : null) ?? null,
+    // `authorLid` é chave interna e não sai; o que a bolha precisa é o emoji e de quem foi
+    reactions: (reactions ?? []).map((r) => ({
+      emoji: r.emoji,
+      mine: r.authorLid === "me",
+      authorName: r.authorName,
+    })),
   };
 };
 
@@ -144,7 +156,10 @@ export const listMessages = async (orgId: string, id: string, query: ListMessage
   await getById(orgId, id);
 
   const messages = await prisma.whatsappMessage.findMany({
-    where: { conversationId: id },
+    // `type: reaction` é resíduo: reações chegavam como mensagem antes de virarem badge na bolha.
+    // Filtrar aqui conserta a thread do que já foi ingerido, sem migração.
+    where: { conversationId: id, type: { not: WhatsappMessageType.reaction } },
+    include: { reactions: { orderBy: { reactedAt: "asc" } } },
     orderBy: { sentAt: "desc" },
     take: query.limit,
     ...(query.before ? { skip: 1, cursor: { id: query.before } } : {}),
