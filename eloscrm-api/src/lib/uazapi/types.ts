@@ -313,6 +313,32 @@ export interface ReactToMessageResponse {
   content?: unknown
 }
 
+export interface DeleteMessageParams {
+  /** `owner:messageid` ou só o `messageid` */
+  id: string
+}
+
+export interface DeleteMessageResponse {
+  id?: string
+  timestamp?: string
+}
+
+export interface PinMessageParams {
+  id: string
+  /** ausente equivale a `true`, segundo a spec */
+  pin: boolean
+  /** dias: 1, 7 ou 30. Qualquer outro valor o provedor troca por 30 */
+  duration?: number
+}
+
+export interface PinMessageResponse {
+  id?: string
+  messageid?: string
+  messageType?: string
+  messageTimestamp?: number
+  status?: string
+}
+
 export interface SendPresenceParams {
   number: string
   presence: PresenceType

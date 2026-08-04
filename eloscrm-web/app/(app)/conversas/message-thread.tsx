@@ -10,6 +10,7 @@ import { useMessages, useReactToMessage } from "@/lib/queries/conversations";
 import type { ApiError } from "@/lib/api";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageBubble } from "./message-bubble";
+import { PinnedBar } from "./pinned-bar";
 
 const rotuloDoDia = (iso: string) => {
   const data = parseISO(iso);
@@ -23,10 +24,14 @@ const rotuloDoDia = (iso: string) => {
 
 // Teto do "carregar até achar". O limite não é de paciência, é de custo permanente: o
 // `refetchInterval` do `useMessages` refaz TODAS as páginas carregadas a cada 5s, então cada página
-// que o salto abre fica sendo repuxada enquanto a conversa estiver na tela. Três páginas (~120
-// mensagens) cobrem a citação de qualquer conversa em andamento, que é o caso real — ninguém
-// responde uma mensagem de 400 atrás.
-const MAX_PAGINAS = 3;
+// que o salto abre fica sendo repuxada enquanto a conversa estiver na tela.
+//
+// Os dois pontos de entrada têm expectativas opostas, e por isso tetos diferentes:
+// - **citação**: ninguém responde mensagem de 400 atrás; três páginas (~120) cobrem o caso real.
+// - **fixada**: fixar existe justamente para o que ficou longe. Com o mesmo teto, o caminho
+//   principal da barra cairia no aviso de "muito atrás" — a funcionalidade falharia no uso normal.
+const MAX_PAGINAS_CITACAO = 3;
+const MAX_PAGINAS_FIXADA = 12;
 
 export const MessageThread = ({
   conversationId,
@@ -71,17 +76,17 @@ export const MessageThread = ({
    * encontrar. O alvo é sempre mais antigo que a resposta, então a direção é a mesma do
    * "carregar mensagens anteriores".
    */
-  const irAte = async (id: string) => {
+  const irAte = async (id: string, maxPaginas = MAX_PAGINAS_CITACAO) => {
     if (!nodeDe(id)) {
       let achou = false;
       let temMais = hasNextPage;
-      for (let pagina = 0; !achou && temMais && pagina < MAX_PAGINAS; pagina++) {
+      for (let pagina = 0; !achou && temMais && pagina < maxPaginas; pagina++) {
         const r = await fetchNextPage();
         temMais = r.hasNextPage;
         achou = r.data?.pages.some((p) => p.items.some((m) => m.id === id)) ?? false;
       }
       if (!achou) {
-        toast.error("A mensagem respondida está muito atrás nesta conversa");
+        toast.error("Essa mensagem está muito atrás nesta conversa");
         return;
       }
     }
@@ -100,16 +105,25 @@ export const MessageThread = ({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-3 p-4">
-        <Skeleton className="h-12 w-48" />
-        <Skeleton className="ml-auto h-12 w-56" />
-        <Skeleton className="h-20 w-64" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* a barra vem de outra query e já pode estar pronta; escondê-la aqui faria ela piscar */}
+        <PinnedBar conversationId={conversationId} onJumpTo={(id) => irAte(id, MAX_PAGINAS_FIXADA)} />
+        <div className="flex flex-col gap-3 p-4">
+          <Skeleton className="h-12 w-48" />
+          <Skeleton className="ml-auto h-12 w-56" />
+          <Skeleton className="h-20 w-64" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={listaRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PinnedBar
+        conversationId={conversationId}
+        onJumpTo={(id) => irAte(id, MAX_PAGINAS_FIXADA)}
+      />
+      <div ref={listaRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
       {hasNextPage && (
         <Button
           variant="ghost"
@@ -131,6 +145,7 @@ export const MessageThread = ({
           )}
           <MessageBubble
             message={message}
+            conversationId={conversationId}
             onReply={onReply}
             onJumpTo={irAte}
             onReact={(messageId, emoji) =>
@@ -152,6 +167,7 @@ export const MessageThread = ({
       )}
 
       <div ref={fimRef} />
+      </div>
     </div>
   );
 };

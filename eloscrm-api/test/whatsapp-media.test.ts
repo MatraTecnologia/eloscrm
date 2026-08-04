@@ -182,6 +182,7 @@ describe("resolvedor de URL", () => {
   it("pronta → presigned do R2", async () => {
     const resolvido = await resolveMediaUrl({
       mediaStatus: "ready",
+      mediaMime: null,
       mediaKey: "org/a/b/c.jpg",
       mediaFilename: null,
       mediaTempUrl: null,
@@ -194,6 +195,7 @@ describe("resolvedor de URL", () => {
   it("na fila com temporária válida → URL do provedor", async () => {
     const resolvido = await resolveMediaUrl({
       mediaStatus: "pending",
+      mediaMime: null,
       mediaKey: null,
       mediaFilename: null,
       mediaTempUrl: "https://uazapi.test/temp.jpg",
@@ -205,6 +207,7 @@ describe("resolvedor de URL", () => {
   it("temporária vencida → nada, para não entregar link morto", async () => {
     const resolvido = await resolveMediaUrl({
       mediaStatus: "pending",
+      mediaMime: null,
       mediaKey: null,
       mediaFilename: null,
       mediaTempUrl: "https://uazapi.test/temp.jpg",
@@ -216,6 +219,7 @@ describe("resolvedor de URL", () => {
   it("falhou → nada (a UI cai no thumbnail que veio no webhook)", async () => {
     const resolvido = await resolveMediaUrl({
       mediaStatus: "failed",
+      mediaMime: null,
       mediaKey: null,
       mediaFilename: null,
       mediaTempUrl: null,

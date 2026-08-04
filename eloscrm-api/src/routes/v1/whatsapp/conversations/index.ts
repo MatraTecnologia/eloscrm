@@ -4,11 +4,14 @@ import {
   createClientFromConversationSchema,
   linkClientSchema,
   listConversationsQuerySchema,
+  favoriteSchema,
   listMessagesQuerySchema,
+  pinSchema,
   reactSchema,
   sendMessageSchema,
 } from "../../../../modules/whatsapp/conversations.schema.js";
 import * as service from "../../../../modules/whatsapp/conversations.service.js";
+import * as actions from "../../../../modules/whatsapp/message-actions.service.js";
 import * as reactions from "../../../../modules/whatsapp/reactions.service.js";
 import { authGuard } from "../../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../../plugins/org-guard.js";
@@ -51,6 +54,28 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     return reactions.react(request.orgId!, id, messageId, emoji);
   });
 
+  app.get("/:id/pinned", async (request) => {
+    const { id } = request.params as { id: string };
+    return service.pinned(request.orgId!, id);
+  });
+
+  app.post("/:id/messages/:messageId/pin", async (request) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const data = pinSchema.parse(request.body);
+    return actions.pin(request.orgId!, id, messageId, data);
+  });
+
+  app.post("/:id/messages/:messageId/favorite", async (request) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const { favorite } = favoriteSchema.parse(request.body);
+    return actions.favorite(request.orgId!, id, messageId, favorite, actorOf(request));
+  });
+
+  app.delete("/:id/messages/:messageId", async (request) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    return actions.remove(request.orgId!, id, messageId);
+  });
+
   app.get("/:id/candidates", async (request) => {
     const { id } = request.params as { id: string };
     return service.candidates(request.orgId!, id);
@@ -90,9 +115,11 @@ const conversationsRoutes = async (app: FastifyInstance) => {
   });
 
   // a presigned expira em minutos; este endpoint existe para o front renovar sem recarregar a thread
+  // `?download=1` devolve a URL como anexo; sem ele, a URL serve para exibir na bolha
   app.get("/messages/:messageId/media", async (request) => {
     const { messageId } = request.params as { messageId: string };
-    return service.mediaUrl(request.orgId!, messageId);
+    const { download } = request.query as { download?: string };
+    return service.mediaUrl(request.orgId!, messageId, download === "1" || download === "true");
   });
 };
 

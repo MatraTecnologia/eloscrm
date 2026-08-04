@@ -391,6 +391,12 @@ export type WhatsappMessage = {
   // "apagar para todos": a linha continua na thread, o conteúdo não vem da API
   deletedAt: string | null;
   reactions: WhatsappReaction[];
+  // fixar é nativo do WhatsApp e expira; `pinnedUntil` é o que tira da barra do topo sozinho
+  pinnedAt: string | null;
+  pinnedUntil: string | null;
+  // favoritar é marca do CRM, compartilhada pela imobiliária — não vai para o WhatsApp de ninguém
+  favoritedAt: string | null;
+  favoritedById: string | null;
   senderName: string | null;
   sentByApi: boolean;
   sentAt: string;

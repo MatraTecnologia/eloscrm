@@ -599,6 +599,17 @@ model WhatsappMessage {
   sentById String?
   sentBy   User?  @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
+  /// Fixar é nativo do WhatsApp e tem validade (1, 7 ou 30 dias). `pinnedUntil` guarda o fim para a
+  /// barra do topo parar de mostrar sozinha — o provedor não avisa quando expira.
+  pinnedAt    DateTime?
+  pinnedUntil DateTime?
+
+  /// Favoritar **não existe na API da uazapi**: é marca do CRM, compartilhada pela imobiliária, e
+  /// não aparece nas favoritas do WhatsApp de ninguém. `favoritedById` é para a tela dizer de quem
+  /// partiu, já que a marca é da equipe.
+  favoritedAt   DateTime?
+  favoritedById String?
+
   reactions WhatsappReaction[]
 
   sentAt    DateTime
@@ -607,6 +618,9 @@ model WhatsappMessage {
   @@unique([conversationId, providerId])
   @@index([conversationId, sentAt])
   @@index([organizationId, providerMessageId])
+  // a barra de fixadas e o filtro de favoritas leem por conversa, não a thread inteira
+  @@index([conversationId, pinnedUntil])
+  @@index([conversationId, favoritedAt])
 }
 
 model UazapiInstanceLog {

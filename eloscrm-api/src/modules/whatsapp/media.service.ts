@@ -221,19 +221,31 @@ export type ResolvedMedia = { url: string; source: "r2" | "provider" } | null;
  * Onde a mídia está agora. Único ponto que decide — o front recebe URL pronta e não conhece a
  * diferença entre o arquivo definitivo e a ponte temporária.
  */
-export const resolveMediaUrl = async (message: {
-  mediaStatus: WhatsappMediaStatus;
-  mediaKey: string | null;
-  mediaFilename: string | null;
-  mediaTempUrl: string | null;
-  mediaTempExpiresAt: Date | null;
-}): Promise<ResolvedMedia> => {
+export const resolveMediaUrl = async (
+  message: {
+    mediaStatus: WhatsappMediaStatus;
+    mediaKey: string | null;
+    mediaMime: string | null;
+    mediaFilename: string | null;
+    mediaTempUrl: string | null;
+    mediaTempExpiresAt: Date | null;
+  },
+  /**
+   * Força `Content-Disposition: attachment`. Sem isto, foto e vídeo abrem no navegador em vez de
+   * baixar — é o comportamento certo para exibir na bolha, e o errado para o botão "Baixar".
+   */
+  asAttachment = false,
+): Promise<ResolvedMedia> => {
   if (message.mediaStatus === WhatsappMediaStatus.ready && message.mediaKey) {
     const url = await getDownloadUrl(
       R2_PRIVATE_BUCKET,
       message.mediaKey,
       PRESIGNED_TTL_SECONDS,
-      message.mediaFilename ?? undefined,
+      // sem nome no provedor (foto e vídeo raramente têm), um nome derivado do id evita o
+      // navegador salvar como a chave inteira do R2
+      asAttachment
+        ? (message.mediaFilename ?? `arquivo.${extensionFor(message.mediaMime, null)}`)
+        : (message.mediaFilename ?? undefined),
     );
     return { url, source: "r2" };
   }

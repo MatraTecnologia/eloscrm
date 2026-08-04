@@ -171,6 +171,56 @@ export const useReactToMessage = () => {
   });
 };
 
+/** Fixadas ainda válidas, para a barra do topo. Em query própria: a fixada costuma estar longe. */
+export const usePinnedMessages = (conversationId: string | null) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), "pinned", conversationId],
+    queryFn: async () => {
+      const { data } = await api.get<WhatsappMessage[]>(
+        `/whatsapp/conversations/${conversationId}/pinned`,
+      );
+      return data;
+    },
+    enabled: !!org?.id && !!conversationId,
+  });
+};
+
+type AcaoInput = { conversationId: string; messageId: string };
+
+export const usePinMessage = () =>
+  useConversationMutation(
+    async ({ conversationId, messageId, pin, duration }: AcaoInput & { pin: boolean; duration?: 1 | 7 | 30 }) => {
+      await api.post(`/whatsapp/conversations/${conversationId}/messages/${messageId}/pin`, {
+        pin,
+        ...(duration ? { duration } : {}),
+      });
+    },
+  );
+
+export const useFavoriteMessage = () =>
+  useConversationMutation(
+    async ({ conversationId, messageId, favorite }: AcaoInput & { favorite: boolean }) => {
+      await api.post(`/whatsapp/conversations/${conversationId}/messages/${messageId}/favorite`, {
+        favorite,
+      });
+    },
+  );
+
+export const useDeleteMessage = () =>
+  useConversationMutation(async ({ conversationId, messageId }: AcaoInput) => {
+    await api.delete(`/whatsapp/conversations/${conversationId}/messages/${messageId}`);
+  });
+
+/** URL de download com `Content-Disposition: attachment` — a da bolha abre no navegador. */
+export const fetchDownloadUrl = async (messageId: string) => {
+  const { data } = await api.get<{ url: string }>(
+    `/whatsapp/conversations/messages/${messageId}/media`,
+    { params: { download: 1 } },
+  );
+  return data.url;
+};
+
 export const useArchiveConversation = () =>
   useConversationMutation(async ({ id, archived }: { id: string; archived: boolean }) => {
     await api.post(`/whatsapp/conversations/${id}/${archived ? "archive" : "unarchive"}`);

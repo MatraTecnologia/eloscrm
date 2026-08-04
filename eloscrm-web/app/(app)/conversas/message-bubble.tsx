@@ -1,11 +1,23 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Ban, Check, CheckCheck, Clock, CornerUpLeft, FileText, Mic, TriangleAlert } from "lucide-react";
+import {
+  Ban,
+  Check,
+  CheckCheck,
+  Clock,
+  CornerUpLeft,
+  FileText,
+  Mic,
+  Pin,
+  Star,
+  TriangleAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
+import { MessageActions } from "./message-actions";
 import { QuotedPreview } from "./quoted-preview";
 import { ReactionPicker } from "./reaction-picker";
 
@@ -111,12 +123,14 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
 
 export const MessageBubble = ({
   message,
+  conversationId,
   onReply,
   onJumpTo,
   onReact,
   highlight,
 }: {
   message: WhatsappMessage;
+  conversationId: string;
   onReply?: (message: WhatsappMessage) => void;
   /** leva a thread até a mensagem citada, como o clique na citação do WhatsApp */
   onJumpTo?: (messageId: string) => void;
@@ -127,6 +141,7 @@ export const MessageBubble = ({
   const apagada = !!message.deletedAt;
   const temMidia = !apagada && message.type !== "text" && message.type !== "unsupported";
   const citada = message.quoted;
+  const fixada = !!message.pinnedUntil && new Date(message.pinnedUntil) > new Date();
 
   const minhaReacao = message.reactions.find((r) => r.mine)?.emoji ?? null;
 
@@ -138,6 +153,8 @@ export const MessageBubble = ({
 
   // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
   // ou que falhou, e a API recusaria de qualquer forma
+  const acoes = !apagada && <MessageActions conversationId={conversationId} message={message} />;
+
   const responder = onReply && !apagada && message.providerMessageId && (
     <Button
       variant="ghost"
@@ -154,6 +171,7 @@ export const MessageBubble = ({
 
   return (
     <div className={cn("group flex items-center gap-1", mine ? "justify-end" : "justify-start")}>
+      {mine && acoes}
       {mine && responder}
       {mine && reagir}
       <div className={cn("flex max-w-[75%] flex-col", mine && "items-end")}>
@@ -205,6 +223,8 @@ export const MessageBubble = ({
         )}
 
         <span className="flex items-center justify-end gap-1 text-[11px] opacity-70">
+          {fixada && <Pin className="size-3" />}
+          {message.favoritedAt && <Star className="size-3 fill-current" />}
           {format(parseISO(message.sentAt), "HH:mm")}
           <StatusIcon message={message} />
         </span>
@@ -228,6 +248,7 @@ export const MessageBubble = ({
       </div>
       {!mine && responder}
       {!mine && reagir}
+      {!mine && acoes}
     </div>
   );
 };

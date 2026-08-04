@@ -28,6 +28,16 @@ export const reactSchema = z.object({
   emoji: z.string().trim().max(16),
 });
 
+export const pinSchema = z.object({
+  pin: z.boolean(),
+  // o provedor só aceita 1, 7 ou 30 dias; qualquer outro valor ele troca por 30 em silêncio
+  duration: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(30),
+});
+
+export const favoriteSchema = z.object({
+  favorite: z.boolean(),
+});
+
 export const createClientFromConversationSchema = z.object({
   // o nome do perfil do WhatsApp é sugestão; o corretor pode corrigir antes de criar
   name: z.string().trim().min(1).max(120),
@@ -39,5 +49,6 @@ export const linkClientSchema = z.object({
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 export type ReactInput = z.infer<typeof reactSchema>;
+export type PinInput = z.infer<typeof pinSchema>;
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;

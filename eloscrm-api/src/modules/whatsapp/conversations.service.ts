@@ -177,18 +177,42 @@ export const listMessages = async (orgId: string, id: string, query: ListMessage
   };
 };
 
+/**
+ * Mensagens fixadas ainda válidas, para a barra do topo.
+ *
+ * Filtra por `pinnedUntil` porque o provedor **não avisa quando o pin expira**: sem o corte, a
+ * barra mostraria para sempre algo que já saiu do fixado no celular. Vem em rota própria e não na
+ * thread — a fixada costuma estar centenas de mensagens atrás, fora de qualquer lote carregado.
+ */
+export const pinned = async (orgId: string, id: string) => {
+  await getById(orgId, id);
+  const messages = await prisma.whatsappMessage.findMany({
+    where: {
+      conversationId: id,
+      deletedAt: null,
+      pinnedUntil: { gt: new Date() },
+    },
+    include: { reactions: true },
+    orderBy: { pinnedAt: "desc" },
+    take: 5,
+  });
+  return Promise.all(messages.map((m) => serializeMessage(m)));
+};
+
 export const markRead = async (orgId: string, id: string) => {
   await getById(orgId, id);
   await prisma.conversation.update({ where: { id }, data: { unreadCount: 0 } });
   return { ok: true };
 };
 
-export const mediaUrl = async (orgId: string, messageId: string) => {
+export const mediaUrl = async (orgId: string, messageId: string, download = false) => {
   const message = await prisma.whatsappMessage.findFirst({
     where: { id: messageId, organizationId: orgId },
   });
   if (!message) throw notFound("Mensagem não encontrada");
-  const media = await resolveMediaUrl(message);
+  // apagada não devolve arquivo: o objeto continua no R2, mas ninguém recebe link para ele
+  if (message.deletedAt) throw notFound("Mídia indisponível");
+  const media = await resolveMediaUrl(message, download);
   if (!media) throw notFound("Mídia indisponível");
   return media;
 };
