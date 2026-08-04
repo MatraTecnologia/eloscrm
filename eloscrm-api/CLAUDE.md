@@ -198,6 +198,14 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 
 - Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
-- WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
+- WhatsApp/uazapi, instância: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
+- WhatsApp, conversas: `docs/superpowers/specs/2026-08-04-whatsapp-conversas-design.md` — a §2 é o
+  que a spec do provedor **não** documenta (envelope dos webhooks, os sete tipos de mensagem,
+  `messages_update`, reply e deleção). Não confie em memória sobre esses formatos: releia antes de
+  mexer em ingestão.
+- Automação de leads: `docs/superpowers/specs/2026-08-04-automacao-de-leads-design.md`
+- **Débitos em aberto do WhatsApp: `../docs/2026-08-04-debitos-whatsapp.md`** — envio de mídia,
+  retenção/LGPD, rate limit no webhook. São decisões adiadas com o motivo registrado, não bugs;
+  leia antes de propor qualquer um deles como "melhoria óbvia".
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:36 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 12:37 (-03)
