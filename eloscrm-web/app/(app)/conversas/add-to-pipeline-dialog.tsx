@@ -1,8 +1,6 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { Handshake } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -11,52 +9,58 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { useCreateDeal } from "@/lib/queries/deals";
-import { usePipelines } from "@/lib/queries/pipelines";
-import type { ConversationClient } from "@/lib/types";
-import { toast } from "sonner";
+} from '@/components/ui/select'
+import { useCreateDeal } from '@/lib/queries/deals'
+import { usePipelines } from '@/lib/queries/pipelines'
+import type { ConversationClient } from '@/lib/types'
+import { Handshake } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 /** Atalho da conversa para o funil: cria o negócio sem tirar o corretor do atendimento. */
-export const AddToPipelineDialog = ({ client }: { client: ConversationClient }) => {
-  const [open, setOpen] = useState(false);
-  const [titulo, setTitulo] = useState("");
-  const [pipelineId, setPipelineId] = useState("");
-  const [stageId, setStageId] = useState("");
-  const [valor, setValor] = useState("");
+export const AddToPipelineDialog = ({
+  client,
+}: {
+  client: ConversationClient
+}) => {
+  const [open, setOpen] = useState(false)
+  const [titulo, setTitulo] = useState('')
+  const [pipelineId, setPipelineId] = useState('')
+  const [stageId, setStageId] = useState('')
+  const [valor, setValor] = useState('')
 
-  const { data: pipelines } = usePipelines();
-  const criar = useCreateDeal();
+  const { data: pipelines } = usePipelines()
+  const criar = useCreateDeal()
 
-  const pipeline = pipelines?.find((p) => p.id === pipelineId);
+  const pipeline = pipelines?.find(p => p.id === pipelineId)
 
   // preenche ao abrir, não por efeito: sincronizar estado em useEffect quebra a regra de
   // imutabilidade do React e é o padrão que os outros dialogs do projeto já seguem
   const onOpenChange = (next: boolean) => {
     if (next) {
-      const padrao = pipelines?.find((p) => p.isDefault) ?? pipelines?.[0];
-      setPipelineId(padrao?.id ?? "");
+      const padrao = pipelines?.find(p => p.isDefault) ?? pipelines?.[0]
+      setPipelineId(padrao?.id ?? '')
       // o primeiro estágio é onde um negócio novo nasce; sem isto o corretor escolheria duas vezes
-      setStageId(padrao?.stages[0]?.id ?? "");
-      setTitulo(`Atendimento — ${client.name}`);
-      setValor("");
+      setStageId(padrao?.stages[0]?.id ?? '')
+      setTitulo(`Atendimento — ${client.name}`)
+      setValor('')
     }
-    setOpen(next);
-  };
+    setOpen(next)
+  }
 
   const trocarPipeline = (id: string | null) => {
-    setPipelineId(id ?? "");
-    setStageId(pipelines?.find((p) => p.id === id)?.stages[0]?.id ?? "");
-  };
+    setPipelineId(id ?? '')
+    setStageId(pipelines?.find(p => p.id === id)?.stages[0]?.id ?? '')
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -71,23 +75,29 @@ export const AddToPipelineDialog = ({ client }: { client: ConversationClient }) 
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Adicionar ao funil</DialogTitle>
-          <DialogDescription>Cria um negócio para {client.name}.</DialogDescription>
+          <DialogDescription>
+            Cria um negócio para {client.name}.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="deal-titulo">Título</Label>
-            <Input id="deal-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+            <Input
+              id="deal-titulo"
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <Label>Funil</Label>
             <Select value={pipelineId} onValueChange={trocarPipeline}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Escolha o funil" />
               </SelectTrigger>
               <SelectContent>
-                {pipelines?.map((p) => (
+                {pipelines?.map(p => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
                   </SelectItem>
@@ -98,12 +108,12 @@ export const AddToPipelineDialog = ({ client }: { client: ConversationClient }) 
 
           <div className="flex flex-col gap-1.5">
             <Label>Estágio</Label>
-            <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
-              <SelectTrigger>
+            <Select value={stageId} onValueChange={v => setStageId(v ?? '')}>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Escolha o estágio" />
               </SelectTrigger>
               <SelectContent>
-                {pipeline?.stages.map((s) => (
+                {pipeline?.stages.map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
                   </SelectItem>
@@ -118,7 +128,7 @@ export const AddToPipelineDialog = ({ client }: { client: ConversationClient }) 
               id="deal-valor"
               inputMode="decimal"
               value={valor}
-              onChange={(e) => setValor(e.target.value)}
+              onChange={e => setValor(e.target.value)}
               placeholder="450000"
             />
           </div>
@@ -133,23 +143,26 @@ export const AddToPipelineDialog = ({ client }: { client: ConversationClient }) 
                   clientId: client.id,
                   pipelineId,
                   stageId,
-                  value: valor.trim() ? Number(valor.replace(/\D/g, "")) : null,
+                  value: valor.trim() ? Number(valor.replace(/\D/g, '')) : null,
                 },
                 {
                   onSuccess: () => {
-                    toast.success("Negócio criado no funil");
-                    setOpen(false);
+                    toast.success('Negócio criado no funil')
+                    setOpen(false)
                   },
-                  onError: () => toast.error("Não foi possível criar o negócio"),
+                  onError: () =>
+                    toast.error('Não foi possível criar o negócio'),
                 },
               )
             }
-            disabled={!titulo.trim() || !pipelineId || !stageId || criar.isPending}
+            disabled={
+              !titulo.trim() || !pipelineId || !stageId || criar.isPending
+            }
           >
             Criar negócio
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}

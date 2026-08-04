@@ -29,8 +29,11 @@ export default function ConversasPage() {
     if (selecionada) markRead(selecionada);
   }, [selecionada, markRead]);
 
+  // `-m-6` cancela o `p-6` que o layout aplica a todas as páginas: o inbox é a única tela que ocupa
+  // a área inteira, como qualquer mensageiro. A altura desconta só o header (3.5rem), porque a
+  // margem negativa devolve o espaço vertical que o padding tomava.
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="-m-6 flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="border-b px-6 py-4">
         <h1 className="text-2xl font-semibold">Conversas</h1>
         <p className="text-muted-foreground text-sm">
