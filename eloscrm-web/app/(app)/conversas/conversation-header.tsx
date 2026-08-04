@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Archive, ArchiveRestore, ExternalLink, UserPlus } from "lucide-react";
+import { Archive, ArchiveRestore, ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { useArchiveConversation } from "@/lib/queries/conversations";
 import { formatPhone, leadTemperatureLabels } from "@/lib/labels";
 import type { Conversation } from "@/lib/types";
 import { toast } from "sonner";
+import { AddToPipelineDialog } from "./add-to-pipeline-dialog";
+import { LinkLeadDialog } from "./link-lead-dialog";
 
 export const ConversationHeader = ({ conversation }: { conversation: Conversation }) => {
   const archive = useArchiveConversation();
@@ -38,21 +40,20 @@ export const ConversationHeader = ({ conversation }: { conversation: Conversatio
 
       <div className="flex items-center gap-2">
         {conversation.client ? (
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/clients/${conversation.client.id}`} />}
-          >
-            <ExternalLink />
-            Abrir lead
-          </Button>
+          <>
+            <AddToPipelineDialog client={conversation.client} />
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/clients/${conversation.client.id}`} />}
+            >
+              <ExternalLink />
+              Abrir lead
+            </Button>
+          </>
         ) : (
-          // a ação de criar/escolher lead é a fase 7; aqui o botão só sinaliza o que falta
-          <Button variant="outline" size="sm" disabled>
-            <UserPlus />
-            Sem lead vinculado
-          </Button>
+          <LinkLeadDialog conversation={conversation} />
         )}
 
         <Button

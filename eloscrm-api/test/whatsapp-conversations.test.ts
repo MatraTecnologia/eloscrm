@@ -43,6 +43,9 @@ let seq = 0;
 beforeEach(async () => {
   await prisma.whatsappMessage.deleteMany({ where: { organizationId: orgId } });
   await prisma.conversation.deleteMany({ where: { organizationId: orgId } });
+  // os testes de vínculo criam leads com a mesma phoneKey; sem limpar, um contamina a contagem
+  // de candidatos do outro
+  await prisma.client.deleteMany({ where: { organizationId: orgId } });
   const conversation = await prisma.conversation.create({
     data: {
       organizationId: orgId,
@@ -271,6 +274,94 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
     await conectar();
     expect((await enviar({ text: "   " })).statusCode).toBe(422);
     expect((await enviar({ text: "oi" }, cookieB)).statusCode).toBe(404);
+  });
+});
+
+describe("ligação com o lead", () => {
+  const post = (rota: string, payload?: Record<string, unknown>, c = cookie) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/whatsapp/conversations/${conversationId}/${rota}`,
+      headers: { cookie: c },
+      payload: payload ?? {},
+    });
+
+  it("cria lead a partir da conversa, com origem WHATSAPP e telefone formatado", async () => {
+    const res = await post("create-client", { name: "Fulano do WhatsApp" });
+    expect(res.statusCode).toBe(201);
+
+    const lead = res.json();
+    expect(lead.source).toBe("WHATSAPP");
+    // o CRM guarda com máscara; os dígitos crus destoariam dos leads cadastrados à mão.
+    // 554399990000 tem 10 dígitos nacionais, então a máscara é a de 8 — o formato segue o número.
+    expect(lead.phone).toBe("(43) 9999-0000");
+    expect(lead.phoneKey).toBe("4399990000");
+
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    expect(conversa.clientId).toBe(lead.id);
+  });
+
+  it("registra auditoria da criação, como qualquer lead", async () => {
+    const res = await post("create-client", { name: "Auditado" });
+    const evento = await prisma.auditEvent.findFirst({
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: res.json().id },
+    });
+    expect(evento?.action).toBe("CREATED");
+  });
+
+  it("recusa criar quando a conversa já tem lead", async () => {
+    await post("create-client", { name: "Primeiro" });
+    const res = await post("create-client", { name: "Segundo" });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("CONVERSATION_ALREADY_LINKED");
+  });
+
+  it("lista candidatos quando o telefone é ambíguo", async () => {
+    await prisma.client.createMany({
+      data: [
+        { organizationId: orgId, name: "Fixo", phone: "(43) 9999-0000", phoneKey: "4399990000" },
+        { organizationId: orgId, name: "Celular", phone: "(43) 99999-0000", phoneKey: "4399990000" },
+      ],
+    });
+
+    const res = await get(`/v1/whatsapp/conversations/${conversationId}/candidates`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(2);
+  });
+
+  it("vincula a um lead existente e permite desvincular", async () => {
+    const lead = await prisma.client.create({
+      data: { organizationId: orgId, name: "Escolhido", phone: "(43) 98888-7777" },
+    });
+
+    await post("link-client", { clientId: lead.id });
+    expect(
+      (await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } })).clientId,
+    ).toBe(lead.id);
+
+    await post("unlink-client");
+    expect(
+      (await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } })).clientId,
+    ).toBeNull();
+  });
+
+  it("não vincula a lead de outra organização", async () => {
+    const outraOrg = await prisma.organization.create({
+      data: { name: `outra-${stamp}`, slug: `outra-link-${stamp}` },
+    });
+    const alheio = await prisma.client.create({
+      data: { organizationId: outraOrg.id, name: "Alheio", phone: "(43) 97777-6666" },
+    });
+
+    const res = await post("link-client", { clientId: alheio.id });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("filtra conversas pelo lead — é como a ficha do cliente acha a conversa dele", async () => {
+    const criado = (await post("create-client", { name: "Da Ficha" })).json();
+    const res = await get(`/v1/whatsapp/conversations?clientId=${criado.id}`);
+    expect(res.json().items).toHaveLength(1);
+    expect(res.json().items[0].id).toBe(conversationId);
   });
 });
 

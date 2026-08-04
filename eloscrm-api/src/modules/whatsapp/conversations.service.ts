@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  ClientSource,
   UazapiInstanceStatus,
   WhatsappDirection,
   WhatsappMessageStatus,
@@ -9,7 +10,9 @@ import {
 } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { conflict, notFound } from "../../lib/http-error.js";
+import { formatBrPhone, phoneKey } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
+import * as clients from "../clients/clients.service.js";
 import { resolveMediaUrl } from "./media.service.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
 import type {
@@ -40,6 +43,7 @@ export const list = async (orgId: string, query: ListConversationsQuery) => {
     organizationId: orgId,
     archivedAt: query.archived ? { not: null } : null,
   };
+  if (query.clientId) where.clientId = query.clientId;
   if (query.unread) where.unreadCount = { gt: 0 };
   if (query.q) {
     where.OR = [
@@ -192,6 +196,68 @@ export const sendText = async (
   });
 
   return serializeMessage(updated);
+};
+
+/**
+ * Leads que respondem pelo mesmo telefone da conversa.
+ *
+ * Normalmente é zero (gente nova) ou um (vinculado sozinho na ingestão). Devolve mais de um quando a
+ * chave colide — fixo e celular do mesmo número — e é justamente aí que a tela pede escolha em vez
+ * de adivinhar.
+ */
+export const candidates = async (orgId: string, id: string) => {
+  const conversation = await getById(orgId, id);
+  if (!conversation.phone) return [];
+  const key = phoneKey(conversation.phone);
+  if (!key) return [];
+  return prisma.client.findMany({
+    where: { organizationId: orgId, phoneKey: key },
+    select: { id: true, name: true, phone: true, email: true, status: true, temperature: true },
+    orderBy: { createdAt: "asc" },
+  });
+};
+
+/** Cria o lead a partir da conversa e vincula. É o caminho de "quem chegou virou lead". */
+export const createClientFrom = async (
+  orgId: string,
+  id: string,
+  data: { name: string },
+  actor: Actor,
+) => {
+  const conversation = await getById(orgId, id);
+  if (conversation.clientId) {
+    throw conflict("CONVERSATION_ALREADY_LINKED", "Esta conversa já está ligada a um lead");
+  }
+
+  const client = await clients.create(
+    orgId,
+    {
+      name: data.name,
+      // o CRM guarda telefone com máscara; gravar os dígitos crus destoaria de todos os outros
+      phone: formatBrPhone(conversation.phone) ?? undefined,
+      source: ClientSource.WHATSAPP,
+    },
+    actor,
+  );
+
+  await prisma.conversation.update({ where: { id }, data: { clientId: client.id } });
+  return client;
+};
+
+export const linkClient = async (orgId: string, id: string, clientId: string) => {
+  await getById(orgId, id);
+  // o lead precisa ser da mesma organização — sem isto, um id chutado ligaria conversa a lead alheio
+  const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId } });
+  if (!client) throw notFound("Lead não encontrado");
+
+  await prisma.conversation.update({ where: { id }, data: { clientId } });
+  return client;
+};
+
+export const unlinkClient = async (orgId: string, id: string) => {
+  await getById(orgId, id);
+  await prisma.conversation.update({ where: { id }, data: { clientId: null } });
+  return { ok: true };
 };
 
 export const archive = async (orgId: string, id: string, archived: boolean) => {

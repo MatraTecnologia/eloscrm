@@ -15,6 +15,7 @@ import { useOrgDeals } from "@/lib/queries/deals";
 import { useActivities } from "@/lib/queries/activities";
 import { LeadHeader } from "./lead-header";
 import { NurtureBanner } from "./nurture-banner";
+import { WhatsappTab } from "./whatsapp-tab";
 import { InterestProperties } from "./interest-properties";
 import { ActivityTimeline } from "@/components/app/activity-timeline";
 import { UnifiedTimeline } from "@/components/app/unified-timeline";
@@ -114,6 +115,9 @@ export default function ClientProfilePage() {
           </TabsTrigger>
           <TabsTrigger value="propostas" className="data-active:text-primary after:bg-primary">
             Propostas
+          </TabsTrigger>
+          <TabsTrigger value="conversa" className="data-active:text-primary after:bg-primary">
+            Conversa
           </TabsTrigger>
           <TabsTrigger value="arquivos" className="data-active:text-primary after:bg-primary">
             Arquivos
@@ -266,6 +270,10 @@ export default function ClientProfilePage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="conversa" className="mt-4">
+          <WhatsappTab clientId={client.id} />
         </TabsContent>
 
         <TabsContent value="arquivos" className="mt-4">

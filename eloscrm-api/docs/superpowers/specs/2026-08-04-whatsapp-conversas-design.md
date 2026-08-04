@@ -737,11 +737,25 @@ envio pode ser recusado pelo próprio WhatsApp, e mostrar uma bolha que depois s
 esperar. O `pending` no banco existe para o caso oposto: o provedor demorar e a mensagem já estar
 registrada.
 
-### Fase 7 — ações de CRM
+### Fase 7 — ações de CRM ✅ concluída
 
-- [ ] Criar lead a partir da conversa (`source: WHATSAPP`)
-- [ ] Escolher lead quando o telefone é ambíguo
-- [ ] Adicionar ao funil (pipeline + estágio)
+- [x] Criar lead a partir da conversa (`source: WHATSAPP`, telefone com máscara, auditoria)
+- [x] Escolher lead quando o telefone é ambíguo (`GET /:id/candidates`)
+- [x] Vincular e desvincular lead, com verificação de organização
+- [x] Adicionar ao funil (pipeline + estágio), reusando `POST /v1/deals`
+- [x] Aba **Conversa** na ficha do lead, reusando thread e composer do inbox
+- [x] Filtro `?clientId=` na listagem — é como a ficha acha a conversa
+- [x] 7 testes novos (26 no arquivo de conversas)
+
+**Um dialog para os dois caminhos.** Criar e escolher respondem à mesma pergunta — *de quem é esta
+conversa* — e separá-los levaria o corretor a criar um segundo lead com um número que já existe.
+Quando há candidatos, escolher aparece **antes** de criar.
+
+**Bug corrigido de tabela ao lado:** `formatPhone` decidia a máscara pelo primeiro dígito
+(`startsWith("9") ? 5 : 4`), o que erra em número de 8 dígitos começando com 9 — `9111-2222` virava
+`91112-222`. É justamente o formato que o WhatsApp entrega quando o número não tem o nono dígito,
+então a tela de conversas exibiria telefone errado com frequência. Agora o número completo manda no
+corte e a heurística do "9" vale só durante a digitação.
 
 ### Fase 8 — validação real e docs
 

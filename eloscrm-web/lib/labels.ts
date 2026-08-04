@@ -70,9 +70,11 @@ export const formatPhone = (value: string | null | undefined) => {
   if (digits.length <= 2) return `(${digits}`;
   const ddd = digits.slice(0, 2);
   const rest = digits.slice(2);
-  // celular tem 9 dígitos e sempre começa com 9; fixo tem 8. Decidir isso já no primeiro dígito
-  // evita o hífen dançar durante a digitação — (43) 99841 em vez de (43) 9-9841.
-  const cut = rest.startsWith("9") ? 5 : 4;
+  // Número completo manda no corte: 9 dígitos partem em 5, 8 dígitos em 4. A heurística do "9"
+  // vale só enquanto se digita — ela existe para o hífen não dançar ((43) 99841 em vez de
+  // (43) 9-9841), mas sozinha erra em 8 dígitos começando com 9, que é o formato que o WhatsApp
+  // entrega quando o número não tem o nono dígito: 9111-2222 virava 91112-222.
+  const cut = rest.length >= 8 ? rest.length - 4 : rest.startsWith("9") ? 5 : 4;
   if (rest.length <= cut) return `(${ddd}) ${rest}`;
   return `(${ddd}) ${rest.slice(0, cut)}-${rest.slice(cut)}`;
 };

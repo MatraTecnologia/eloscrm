@@ -13,6 +13,24 @@
  * chave. Por isso quem casa conversa com lead **não auto-vincula** quando mais de um cliente
  * responde pela mesma chave — a escolha vai para o corretor.
  */
+/**
+ * Formata para o padrão que o CRM já usa nos leads cadastrados à mão — `(43) 99812-4470`. O
+ * WhatsApp entrega só dígitos (`554398124470`), e gravar assim deixaria a ficha do lead com um
+ * número que destoa de todos os outros. Fora do formato brasileiro, devolve como veio.
+ */
+export const formatBrPhone = (value: string | null | undefined): string | null => {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const national =
+    digits.startsWith("55") && (digits.length === 12 || digits.length === 13)
+      ? digits.slice(2)
+      : digits;
+  if (national.length !== 10 && national.length !== 11) return value ?? null;
+  const ddd = national.slice(0, 2);
+  const resto = national.slice(2);
+  return `(${ddd}) ${resto.slice(0, resto.length - 4)}-${resto.slice(-4)}`;
+};
+
 export const phoneKey = (value: string | null | undefined): string | null => {
   const digits = (value ?? "").replace(/\D/g, "");
   if (!digits) return null;

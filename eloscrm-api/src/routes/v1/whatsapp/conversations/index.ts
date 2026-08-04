@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { actorOf } from "../../../../lib/actor.js";
 import {
+  createClientFromConversationSchema,
+  linkClientSchema,
   listConversationsQuerySchema,
   listMessagesQuerySchema,
   sendMessageSchema,
@@ -39,6 +41,29 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     const data = sendMessageSchema.parse(request.body);
     const message = await service.sendText(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(message);
+  });
+
+  app.get("/:id/candidates", async (request) => {
+    const { id } = request.params as { id: string };
+    return service.candidates(request.orgId!, id);
+  });
+
+  app.post("/:id/create-client", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const data = createClientFromConversationSchema.parse(request.body);
+    const client = await service.createClientFrom(request.orgId!, id, data, actorOf(request));
+    return reply.status(201).send(client);
+  });
+
+  app.post("/:id/link-client", async (request) => {
+    const { id } = request.params as { id: string };
+    const { clientId } = linkClientSchema.parse(request.body);
+    return service.linkClient(request.orgId!, id, clientId);
+  });
+
+  app.post("/:id/unlink-client", async (request) => {
+    const { id } = request.params as { id: string };
+    return service.unlinkClient(request.orgId!, id);
   });
 
   app.post("/:id/read", async (request) => {

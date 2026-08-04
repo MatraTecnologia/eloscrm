@@ -1,11 +1,17 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Conversation, WhatsappMessage } from "@/lib/types";
+import type { Client, Conversation, ConversationClient, WhatsappMessage } from "@/lib/types";
 
 const key = (orgId?: string) => ["conversations", orgId] as const;
 
-export type ConversationFilters = { q?: string; unread?: boolean; archived?: boolean };
+export type ConversationFilters = {
+  q?: string;
+  unread?: boolean;
+  archived?: boolean;
+  /** usado pela aba Conversa na ficha do lead */
+  clientId?: string;
+};
 
 export const useConversations = (filters: ConversationFilters = {}) => {
   const { data: org } = useActiveOrganization();
@@ -70,6 +76,46 @@ const useConversationMutation = <TInput, TResult>(fn: (input: TInput) => Promise
 export const useMarkRead = () =>
   useConversationMutation(async (id: string) => {
     await api.post(`/whatsapp/conversations/${id}/read`);
+  });
+
+export const useCandidates = (conversationId: string | null, enabled: boolean) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), "candidates", conversationId],
+    queryFn: async () => {
+      const { data } = await api.get<ConversationClient[]>(
+        `/whatsapp/conversations/${conversationId}/candidates`,
+      );
+      return data;
+    },
+    enabled: enabled && !!org?.id && !!conversationId,
+  });
+};
+
+/** Invalida também `clients`: criar ou ligar lead muda a lista de leads, não só a conversa. */
+const useCrmMutation = <TInput, TResult>(fn: (input: TInput) => Promise<TResult>) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+};
+
+export const useCreateClientFromConversation = () =>
+  useCrmMutation(async ({ conversationId, name }: { conversationId: string; name: string }) => {
+    const { data } = await api.post<Client>(
+      `/whatsapp/conversations/${conversationId}/create-client`,
+      { name },
+    );
+    return data;
+  });
+
+export const useLinkClient = () =>
+  useCrmMutation(async ({ conversationId, clientId }: { conversationId: string; clientId: string }) => {
+    await api.post(`/whatsapp/conversations/${conversationId}/link-client`, { clientId });
   });
 
 export const useSendMessage = () => {

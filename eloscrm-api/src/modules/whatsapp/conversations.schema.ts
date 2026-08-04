@@ -1,6 +1,8 @@
 import * as z from "zod";
 
 export const listConversationsQuerySchema = z.object({
+  // usado pela aba Conversa na ficha do lead
+  clientId: z.string().optional(),
   q: z.string().trim().min(1).optional(),
   unread: z.coerce.boolean().optional(),
   archived: z.coerce.boolean().default(false),
@@ -16,6 +18,15 @@ export const listMessagesQuerySchema = z.object({
 
 export const sendMessageSchema = z.object({
   text: z.string().trim().min(1).max(4096),
+});
+
+export const createClientFromConversationSchema = z.object({
+  // o nome do perfil do WhatsApp é sugestão; o corretor pode corrigir antes de criar
+  name: z.string().trim().min(1).max(120),
+});
+
+export const linkClientSchema = z.object({
+  clientId: z.string().min(1),
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
