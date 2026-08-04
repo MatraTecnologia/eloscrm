@@ -21,6 +21,8 @@ model User {
   members       Member[]
   invitations   Invitation[]
 
+  uazapiInstanceLogs UazapiInstanceLog[]
+
   @@unique([email])
   @@map("user")
 }
@@ -92,6 +94,9 @@ model Organization {
   auditEvents AuditEvent[]
   comments    Comment[]
   attachments Attachment[]
+
+  // uma imobiliária conecta no máximo um número de WhatsApp
+  uazapiInstance UazapiInstance?
 
   @@unique([slug])
   @@map("organization")
@@ -375,4 +380,104 @@ model Attachment {
   createdAt      DateTime         @default(now())
 
   @@index([organizationId, entityType, entityId, createdAt])
+}
+
+// hibernated entrou na uazapi v2.1.1: sessão pausada com as credenciais preservadas. Sem esse valor
+// aqui, parseStatus devolve null e o status local congela no anterior — a tela mostraria "conectado"
+// para um número que parou de atender.
+enum UazapiInstanceStatus {
+  disconnected
+  connecting
+  connected
+  hibernated
+}
+
+enum UazapiInstanceLogEvent {
+  created
+  connect_requested
+  qr_generated
+  paircode_generated
+  connected
+  disconnected
+  status_changed
+  reset
+  synced
+  name_updated
+  webhook_configured
+  test_message_sent
+  remote_deleted
+  deleted
+  error
+}
+
+enum UazapiInstanceLogSource {
+  manual
+  webhook
+  sync
+  system
+}
+
+model UazapiInstance {
+  id String @id @default(cuid())
+
+  // @unique é a regra de negócio no banco: uma instância por imobiliária. É também o que permite às
+  // rotas serem /v1/whatsapp/instance no singular, sem id na URL para adulterar.
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  remoteId String @unique
+  name     String
+
+  // token da instância cifrado em AES-256-GCM; nunca sai da API em claro
+  tokenEnc      String
+  tokenLast4    String?
+  tokenHash     String  @unique
+  // segredo do último segmento da URL do webhook desta instância
+  webhookSecret String  @unique
+
+  status       UazapiInstanceStatus @default(disconnected)
+  lastStatusAt DateTime?
+  qrcode       String?
+  paircode     String?
+
+  profileName   String?
+  profilePicUrl String?
+  isBusiness    Boolean?
+  // o typo é da uazapi, preservado para casar com o payload
+  plataform     String?
+  ownerJid      String?
+  systemName    String?
+
+  lastDisconnectAt     DateTime?
+  lastDisconnectReason String?
+  // preenchido quando a instância some do provedor; a partir daí só resta remover e recriar
+  remoteDeletedAt      DateTime?
+
+  logs UazapiInstanceLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UazapiInstanceLog {
+  id String @id @default(cuid())
+
+  instanceId String
+  instance   UazapiInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  event  UazapiInstanceLogEvent
+  source UazapiInstanceLogSource
+
+  previousStatus UazapiInstanceStatus?
+  newStatus      UazapiInstanceStatus?
+
+  actorUserId String?
+  actor       User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  message String?
+  payload Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([instanceId, createdAt])
 }

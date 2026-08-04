@@ -213,3 +213,109 @@ export type NurturePayload = {
 export type AgendaItem =
   | { kind: "ACTIVITY"; id: string; at: string; payload: Activity }
   | { kind: "NURTURE"; id: string; at: string; payload: NurturePayload };
+
+// Espelha os models UazapiInstance/UazapiInstanceLog do Prisma (a duplicação é à mão, como o resto
+// deste arquivo). `hibernated` é sessão pausada com credenciais preservadas — uazapi v2.1.1.
+export type WhatsappStatus = "disconnected" | "connecting" | "connected" | "hibernated";
+
+export type WhatsappInstance = {
+  id: string;
+  organizationId: string;
+  remoteId: string;
+  name: string;
+  tokenLast4: string | null;
+  status: WhatsappStatus;
+  lastStatusAt: string | null;
+  qrcode: string | null;
+  paircode: string | null;
+  profileName: string | null;
+  profilePicUrl: string | null;
+  isBusiness: boolean | null;
+  plataform: string | null;
+  ownerJid: string | null;
+  systemName: string | null;
+  lastDisconnectAt: string | null;
+  lastDisconnectReason: string | null;
+  remoteDeletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // só na resposta de criação: false quando a instância nasceu mas o webhook não pôde ser registrado
+  webhookConfigured?: boolean;
+};
+
+export type WhatsappLogEvent =
+  | "created"
+  | "connect_requested"
+  | "qr_generated"
+  | "paircode_generated"
+  | "connected"
+  | "disconnected"
+  | "status_changed"
+  | "reset"
+  | "synced"
+  | "name_updated"
+  | "webhook_configured"
+  | "test_message_sent"
+  | "remote_deleted"
+  | "deleted"
+  | "error";
+
+export type WhatsappLog = {
+  id: string;
+  event: WhatsappLogEvent;
+  source: "manual" | "webhook" | "sync" | "system";
+  previousStatus: WhatsappStatus | null;
+  newStatus: WhatsappStatus | null;
+  message: string | null;
+  createdAt: string;
+};
+
+export type WhatsappWebhookConfig = {
+  id: string;
+  enabled: boolean;
+  events: string[];
+  excludeMessages?: string[];
+  url: string;
+  isOurs: boolean;
+};
+
+export type WhatsappWebhookErrors = {
+  errors: {
+    url: string;
+    event: string;
+    type: string;
+    error: string;
+    attempts: number;
+    status_code?: number;
+    created: string;
+    message_type?: string;
+  }[];
+  captureStartedAt?: string;
+};
+
+// Passthrough de GET /instance/wa-limits. Os campos vêm da uazapi; nem todos aparecem sempre.
+export type WhatsappLimits = {
+  can_send_new_messages: boolean | null;
+  reachable: boolean;
+  message: string;
+  message_ptbr: string;
+  provider: string;
+  provider_message_ptbr?: string;
+  diagnostics_endpoint?: string;
+  new_chat_message_capping?: {
+    available: boolean;
+    status?: string;
+    total_quota?: number;
+    used_quota?: number;
+    cycle_start?: string;
+    cycle_end?: string;
+    lookup_error?: string;
+  };
+  reachout_timelock?: {
+    active: boolean;
+    available: boolean;
+    until?: string;
+    enforcement_type?: string;
+    lookup_error?: string;
+  };
+};

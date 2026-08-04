@@ -23,6 +23,25 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().trim().min(1).optional(),
     // onboarding@resend.dev é o remetente de teste do Resend, que funciona sem domínio verificado.
     EMAIL_FROM: z.string().trim().min(1).default("elosCRM <onboarding@resend.dev>"),
+
+    // uazapi (WhatsApp). Opcionais pelo mesmo motivo do RESEND_API_KEY: sem elas a API sobe normal e
+    // só as rotas de WhatsApp respondem 503 — dev, teste e CI não ganham pré-requisito novo.
+    UAZAPI_BASE_URL: z.url().trim().optional(),
+    UAZAPI_ADMIN_TOKEN: z.string().trim().min(1).optional(),
+    // openssl rand -hex 32
+    UAZAPI_TOKEN_ENCRYPTION_KEY: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{64}$/, "deve ser hex de 32 bytes (openssl rand -hex 32)")
+      .optional(),
+    // URL pública desta API, usada só para montar a URL do webhook entregue à uazapi. O fallback
+    // para BETTER_AUTH_URL só serve em produção: em dev ele é localhost e a uazapi não alcança —
+    // ali é preciso um túnel (cloudflared/ngrok) apontado aqui, senão o status só muda via sync.
+    PUBLIC_API_URL: z.url().trim().optional(),
+    // Caminho de um arquivo JSONL com a trilha bruta da integração (o que sai para a uazapi, o que
+    // volta, e o corpo cru dos webhooks). Vazio = desligado. Ferramenta de diagnóstico: serve para
+    // descobrir o formato real do envelope, que a spec da uazapi não documenta.
+    UAZAPI_DEBUG_LOG: z.string().trim().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
