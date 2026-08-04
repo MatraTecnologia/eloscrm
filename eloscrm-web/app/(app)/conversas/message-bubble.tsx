@@ -117,12 +117,18 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
 export const MessageBubble = ({
   message,
   onReply,
+  onJumpTo,
+  highlight,
 }: {
   message: WhatsappMessage;
   onReply?: (message: WhatsappMessage) => void;
+  /** leva a thread até a mensagem citada, como o clique na citação do WhatsApp */
+  onJumpTo?: (messageId: string) => void;
+  highlight?: boolean;
 }) => {
   const mine = message.direction === "outbound";
   const temMidia = message.type !== "text" && message.type !== "unsupported";
+  const citada = message.quoted;
 
   // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
   // ou que falhou, e a API recusaria de qualquer forma
@@ -145,14 +151,23 @@ export const MessageBubble = ({
       {mine && responder}
       <div
         className={cn(
-          "flex max-w-[75%] flex-col gap-1 rounded-lg px-3 py-2 text-sm",
+          "flex max-w-[75%] flex-col gap-1 rounded-lg px-3 py-2 text-sm transition-shadow",
           mine ? "bg-primary text-primary-foreground" : "bg-muted",
+          highlight && "ring-primary ring-offset-background ring-2 ring-offset-2",
         )}
       >
-        {message.quoted && <QuotedPreview quoted={message.quoted} mine={mine} />}
+        {citada &&
+          (onJumpTo ? (
+            <button type="button" className="w-full text-left" onClick={() => onJumpTo(citada.id)}>
+              <QuotedPreview quoted={citada} mine={mine} className="hover:brightness-95" />
+            </button>
+          ) : (
+            <QuotedPreview quoted={citada} mine={mine} />
+          ))}
 
-        {/* citada fora do lote carregado (ou anterior à integração): o vínculo existe, o conteúdo não */}
-        {!message.quoted && message.quotedId && (
+        {/* a citação é resolvida no banco inteiro, não só no lote: sem conteúdo aqui, a original foi
+            apagada ou é anterior à integração */}
+        {!citada && message.quotedId && (
           <span className="border-l-2 py-1 pl-2 text-xs italic opacity-60">
             Mensagem respondida não disponível
           </span>

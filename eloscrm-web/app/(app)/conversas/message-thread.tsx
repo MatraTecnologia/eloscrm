@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMessages } from "@/lib/queries/conversations";
@@ -19,6 +20,13 @@ const rotuloDoDia = (iso: string) => {
   return format(data, "d 'de' MMMM", { locale: ptBR });
 };
 
+// Teto do "carregar até achar". O limite não é de paciência, é de custo permanente: o
+// `refetchInterval` do `useMessages` refaz TODAS as páginas carregadas a cada 5s, então cada página
+// que o salto abre fica sendo repuxada enquanto a conversa estiver na tela. Três páginas (~120
+// mensagens) cobrem a citação de qualquer conversa em andamento, que é o caso real — ninguém
+// responde uma mensagem de 400 atrás.
+const MAX_PAGINAS = 3;
+
 export const MessageThread = ({
   conversationId,
   onReply,
@@ -29,6 +37,8 @@ export const MessageThread = ({
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useMessages(conversationId);
   const fimRef = useRef<HTMLDivElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
+  const [destacada, setDestacada] = useState<string | null>(null);
 
   // páginas anteriores vêm depois na lista do infinite query, mas são mais antigas na conversa.
   // O separador de dia é derivado aqui, comparando com o item anterior — não dá para acumular
@@ -48,6 +58,44 @@ export const MessageThread = ({
     fimRef.current?.scrollIntoView({ block: "end" });
   }, [ultimaId, conversationId]);
 
+  const nodeDe = (id: string) =>
+    listaRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`) ?? null;
+
+  /**
+   * Salta para a mensagem citada, como o clique na citação do WhatsApp.
+   *
+   * A API resolve a citação contra o banco inteiro, não só contra o lote carregado — então o
+   * bloco pode apontar para algo que ainda não está na tela, e é preciso paginar para trás até
+   * encontrar. O alvo é sempre mais antigo que a resposta, então a direção é a mesma do
+   * "carregar mensagens anteriores".
+   */
+  const irAte = async (id: string) => {
+    if (!nodeDe(id)) {
+      let achou = false;
+      let temMais = hasNextPage;
+      for (let pagina = 0; !achou && temMais && pagina < MAX_PAGINAS; pagina++) {
+        const r = await fetchNextPage();
+        temMais = r.hasNextPage;
+        achou = r.data?.pages.some((p) => p.items.some((m) => m.id === id)) ?? false;
+      }
+      if (!achou) {
+        toast.error("A mensagem respondida está muito atrás nesta conversa");
+        return;
+      }
+    }
+    setDestacada(id);
+  };
+
+  useEffect(() => {
+    if (!destacada) return;
+    // o nó já existe: `destacada` só é marcado depois que a página com a mensagem entrou no cache,
+    // e o React pinta antes de rodar o efeito
+    nodeDe(destacada)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // o realce é um piscar de reconhecimento, não um estado — sai sozinho
+    const t = setTimeout(() => setDestacada(null), 2000);
+    return () => clearTimeout(t);
+  }, [destacada]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-3 p-4">
@@ -59,7 +107,7 @@ export const MessageThread = ({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+    <div ref={listaRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
       {hasNextPage && (
         <Button
           variant="ghost"
@@ -73,13 +121,18 @@ export const MessageThread = ({
       )}
 
       {mensagens.map(({ message, dia, mostrarDia }) => (
-        <div key={message.id} className="flex flex-col gap-2">
+        <div key={message.id} data-message-id={message.id} className="flex flex-col gap-2">
           {mostrarDia && (
             <span className="text-muted-foreground bg-muted mx-auto rounded-full px-3 py-0.5 text-xs">
               {dia}
             </span>
           )}
-          <MessageBubble message={message} onReply={onReply} />
+          <MessageBubble
+            message={message}
+            onReply={onReply}
+            onJumpTo={irAte}
+            highlight={destacada === message.id}
+          />
         </div>
       ))}
 
