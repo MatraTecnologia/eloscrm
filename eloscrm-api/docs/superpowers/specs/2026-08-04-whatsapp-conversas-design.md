@@ -84,30 +84,44 @@ número.
 estado em dois lugares cria divergência sem dono. Ler `chat.lead_name` só como *sugestão* de nome ao
 criar lead — nunca escrever de volta.
 
-### 2.5 O que vem numa mensagem de mídia (observado: image, ptt, document)
+### 2.5 Os sete tipos observados, e as armadilhas de cada um
 
-`message` **não tem `fileURL`**. O que existe é `content`, com os campos crus do WhatsApp:
+Capturados em tráfego real: texto, imagem, áudio de voz, documento, gif e figurinha (todos
+`fromMe: false`), mais o texto enviado pela API.
 
-| Campo em `content` | image | ptt | document |
-|---|---|---|---|
-| `mimetype` | `image/jpeg` | `audio/ogg; codecs=opus` | `application/pdf` |
-| `fileLength` | 18196 | 12313 | 18810 |
-| `JPEGThumbnail` | 1440 chars b64 | — | 700 chars b64 |
-| `caption` | `legenda` | — | `Legenda` |
-| outros | `width`, `height` | `seconds`, `waveform`, `PTT` | `fileName`, `pageCount` |
-| `URL` / `directPath` | `.enc` no CDN da Meta | idem | idem |
+| `messageType` | `type` | `mediaType` | `content` | `mimetype` | Particular |
+|---|---|---|---|---|---|
+| `Conversation` | text | `''` | **string** | — | texto simples |
+| `ExtendedTextMessage` | text | `''` | objeto | — | texto com contexto/link |
+| `ImageMessage` | media | `image` | objeto | `image/jpeg` | `width`, `height`, `caption`, thumb |
+| `AudioMessage` | media | `ptt` | objeto | `audio/ogg; codecs=opus` | `seconds`, `waveform`, **sem thumb** |
+| `DocumentMessage` | media | `document` | objeto | `application/pdf` | `fileName`, `pageCount`, thumb |
+| `VideoMessage` | media | **`gif`** | objeto | **`video/mp4`** | `gifPlayback: true`, `seconds`, thumb |
+| `StickerMessage` | media | `sticker` | objeto | `image/webp` | `isAnimated`, `isAvatar`, **sem thumb** |
 
-Três consequências:
+**As cinco armadilhas:**
 
-1. **`URL` é inútil direto.** Aponta para `mmg.whatsapp.net/….enc` — arquivo cifrado que exige
-   `mediaKey` para decifrar. Não entra num `<img src>`. Confirma que a URL exibível só nasce do
-   `/message/download`.
-2. **`JPEGThumbnail` é preview grátis e instantâneo.** ~1 KB de base64 que chega junto do webhook.
-   Dá para desenhar a bolha com a miniatura antes de qualquer download — melhor que qualquer URL
-   temporária, porque tem latência zero.
-3. **Os metadados chegam antes do arquivo**: nome, tamanho, duração, dimensões, páginas. A tela
-   mostra "sample.pdf · 18 KB" de imediato, e `fileLength` permite recusar arquivo grande **antes**
-   de baixar.
+1. **`content` é `string` no texto simples** e objeto em todo o resto. Ler `content.text` direto
+   estoura em `Conversation` — que é justamente o tipo mais comum.
+2. **GIF é vídeo.** `messageType: VideoMessage`, `mimetype: video/mp4`. Só `mediaType: 'gif'` e
+   `gifPlayback: true` distinguem — e a UI precisa saber, porque gif toca em laço e sem controles.
+3. **Áudio de voz é `ptt`, não `audio`.** Merece a UI de nota de voz (onda + duração), não um player
+   de arquivo.
+4. **Figurinha e áudio não têm `JPEGThumbnail`.** O estágio 3 da §3.5 não cobre esses dois: áudio
+   mostra duração e `waveform`; figurinha mostra um marcador até o arquivo chegar.
+5. **Tamanho não segue a intuição:** a figurinha tem 233 KB — mais de 10× a foto JPEG (18 KB). Um
+   teto de tamanho baixo demais recusaria figurinha, que é conteúdo trivial de conversa.
+
+Além disso: `message.text` já traz a legenda (duplicando `content.caption`), o que evita mais uma
+ramificação por tipo.
+
+**O que nenhum tipo traz: `fileURL`.** O `content.URL` aponta para `mmg.whatsapp.net/….enc` —
+arquivo cifrado que exige `mediaKey` para decifrar, inútil num `<img src>`. A URL exibível só nasce
+do `/message/download`.
+
+**O que todos trazem (menos os dois da armadilha 4): `JPEGThumbnail`** em base64, de 700 a 4368
+chars. Preview instantâneo, sem requisição nenhuma — e os metadados (nome, tamanho, duração,
+dimensões, páginas) vêm junto, então a bolha nasce completa.
 
 ### 2.6 Mídia expira em 2 dias
 
@@ -186,7 +200,8 @@ Então a mensagem tem **três estágios de exibição**, em ordem de precedênci
 1. `mediaKey` no R2 → **presigned URL** de curta duração. É o caminho definitivo.
 2. Ainda na fila → `mediaTempUrl` da uazapi, enquanto não expirou.
 3. Nada disso ainda → **`JPEGThumbnail`** (§2.5), que chegou junto do webhook e não custa
-   requisição nenhuma. Some assim que (1) ou (2) existir.
+   requisição nenhuma. Some assim que (1) ou (2) existir. Em `ptt` e `sticker` não há thumb: o
+   primeiro mostra duração e onda, o segundo um marcador.
 
 O estágio 3 é o que faz a bolha nunca aparecer vazia: a miniatura está no banco no mesmo instante em
 que a mensagem aparece, antes de qualquer chamada à uazapi.
@@ -206,9 +221,11 @@ aberta, mais longo na lista. Suficiente para atendimento humano; registrar como 
 ```prisma
 enum WhatsappDirection { inbound outbound }
 
-enum WhatsappMessageType {           // `message.type` da uazapi, normalizado
-  text image video audio document sticker location contact
-  reaction poll system unsupported
+/// Espelha `mediaType` da uazapi (§2.5), não `type`, porque é `mediaType` que distingue gif de
+/// vídeo e nota de voz de áudio — e as duas distinções mudam como a UI renderiza.
+enum WhatsappMessageType {
+  text image video gif audio ptt document sticker
+  location contact reaction poll system unsupported
 }
 
 enum WhatsappMessageStatus { pending sent delivered read failed }
@@ -284,9 +301,10 @@ model WhatsappMessage {
   mediaDuration Int?      // content.seconds (áudio/vídeo)
   mediaWidth    Int?
   mediaHeight   Int?      // dimensões evitam o layout pular quando a imagem carrega
-  // content.JPEGThumbnail: ~1 KB de base64 que já chega no webhook e cobre o intervalo até o
-  // arquivo existir. É o estágio 3 da §3.5.
+  // content.JPEGThumbnail: base64 que já chega no webhook e cobre o intervalo até o arquivo
+  // existir (estágio 3 da §3.5). Ausente em ptt e sticker — ver armadilha 4 da §2.5.
   mediaThumb    String?
+  mediaWaveform String?   // ptt: desenha a onda sem baixar o áudio
   // ponte enquanto o upload não terminou (§3.5). A uazapi expira em ~2 dias — guardar a validade
   // evita entregar ao front uma URL que já morreu.
   mediaTempUrl       String?
@@ -526,6 +544,8 @@ Mesma linha da fase 1: Postgres real, uazapi mockada (`vi.mock`).
 5. Dois leads com a mesma `phoneKey` → conversa fica **sem** vínculo.
 6. `sender` em LID não é usado como telefone.
 7. `messageTimestamp` em ms vira `sentAt` correto (não 1970).
+7b. Os sete tipos da §2.5 são ingeridos sem erro — em especial `Conversation`, cujo `content` é
+    **string**, e `gif`, que chega como `VideoMessage`.
 8. Mídia: metadados e `mediaThumb` gravados na ingestão, sem chamar a uazapi; download mockado →
    `mediaTempUrl`; upload → `mediaKey` + `ready`; falha → `failed` com a mensagem preservada.
 8b. Resolvedor da §7.2: `ready` → presigned; `pending` com temp válida → temp; temp expirada → nulo.
@@ -587,4 +607,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:05 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 02:12 (-03)
