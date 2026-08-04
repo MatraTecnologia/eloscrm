@@ -253,6 +253,35 @@ describe("POST /webhooks/uazapi/:instanceId/:secret", () => {
     expect(saved.status).toBe("connected");
   });
 
+  // Envelope real observado no tráfego da v2.1.1 (ngrok + uazapiGO-Webhook/1.0). Note `owner` no
+  // topo, fora de `instance` — antes de constatar isso, ownerJid nunca era preenchido por webhook.
+  it("aplica o envelope real da uazapi, com owner no topo", async () => {
+    const res = await post(instanceId, secret, {
+      BaseUrl: "https://free.uazapi.com",
+      EventType: "connection",
+      token: TOKEN,
+      instanceName: "imob-qa",
+      owner: "5543999140409@s.whatsapp.net",
+      instance: { name: "imob-qa", status: "connected", qrcode: "" },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const saved = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
+    expect(saved.status).toBe("connected");
+    expect(saved.ownerJid).toBe("5543999140409@s.whatsapp.net");
+  });
+
+  it("owner dentro de instance tem precedência sobre o do topo", async () => {
+    await post(instanceId, secret, {
+      EventType: "connection",
+      token: TOKEN,
+      owner: "5500000000000@s.whatsapp.net",
+      instance: { status: "connected", owner: "5543999140409@s.whatsapp.net" },
+    });
+    const saved = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
+    expect(saved.ownerJid).toBe("5543999140409@s.whatsapp.net");
+  });
+
   it("aceita o envelope na forma event/data do webhook_event.yaml", async () => {
     const res = await post(instanceId, secret, {
       event: "connection",

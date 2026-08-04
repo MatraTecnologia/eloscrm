@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { redact, debugLogEnabled } from "../src/lib/debug-log.js";
+import { redact, debugLogEnabled, safeHeaders } from "../src/lib/debug-log.js";
 import { createUazapiClient, type UazapiTraceEntry } from "../src/lib/uazapi/index.js";
 
 describe("debug-log", () => {
@@ -33,6 +33,27 @@ describe("debug-log", () => {
   it("não mexe em URL que não seja de webhook", () => {
     const url = "https://free.uazapi.com/instance/connect";
     expect((redact({ url }) as Record<string, string>).url).toBe(url);
+  });
+
+  it("omite o valor de header não inócuo, mas mantém o nome", () => {
+    const out = safeHeaders({
+      "content-type": "application/json",
+      authorization: "Bearer super-secreto",
+      cookie: "sess=abc",
+      "x-api-key": "chave",
+      "x-uazapi-signature": "assinatura",
+    });
+    expect(out["content-type"]).toBe("application/json");
+    // o nome aparece — é assim que se descobre que a uazapi passou a mandar um header novo
+    expect(out).toHaveProperty("x-uazapi-signature");
+    for (const key of ["authorization", "cookie", "x-api-key", "x-uazapi-signature"]) {
+      expect(out[key]).toBe("<omitido>");
+    }
+  });
+
+  it("nenhum header sensível conhecido escapa por diferença de caixa", () => {
+    const out = safeHeaders({ Authorization: "Bearer x", Cookie: "s=1" });
+    expect(Object.values(out)).toEqual(["<omitido>", "<omitido>"]);
   });
 
   it("percorre arrays e preserva escalares", () => {

@@ -47,15 +47,26 @@ export const webhookBodySchema = z.looseObject({
   // objeto na forma do matra-notification-manager, string (id) na forma do webhook_event.yaml
   instance: z.union([z.string(), z.looseObject({})]).optional(),
   data: z.looseObject({}).optional(),
+  // observados no envelope real (v2.1.1): `owner` fica no TOPO, não dentro de `instance`
+  owner: z.string().optional(),
+  instanceName: z.string().optional(),
+  BaseUrl: z.string().optional(),
 });
 
 export const eventNameOf = (body: WebhookBody) => body.EventType ?? body.event ?? body.type ?? null;
 
-/** O payload da conexão vem em `instance` (objeto) ou em `data`, conforme a forma do envelope. */
+/**
+ * O payload da conexão vem em `instance` (objeto) ou em `data`, conforme a forma do envelope.
+ *
+ * `owner` (o JID do número conectado) chega no **topo** do envelope, fora de `instance` — observado
+ * no tráfego real da v2.1.1. Sem trazê-lo para dentro, `applyInstanceSnapshot` procuraria
+ * `instance.owner`, não acharia, e `ownerJid` só seria preenchido pelo botão Sincronizar.
+ */
 export const connectionDataOf = (body: WebhookBody): Record<string, unknown> => {
-  if (body.instance && typeof body.instance === "object") return body.instance;
-  if (body.data) return body.data;
-  return {};
+  const base =
+    body.instance && typeof body.instance === "object" ? body.instance : (body.data ?? {});
+  if (base.owner === undefined && body.owner !== undefined) return { ...base, owner: body.owner };
+  return base;
 };
 
 export type CreateInstanceInput = z.infer<typeof createInstanceSchema>;

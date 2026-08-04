@@ -37,6 +37,20 @@ export const redact = (value: unknown): unknown => {
   return value;
 };
 
+// Headers vão por allowlist de VALOR, não por blocklist: uma lista de proibidos sempre esquece um
+// (`authorization`, `cookie`, `x-api-key`, `proxy-authorization`…) e o custo do esquecimento é
+// credencial em claro no disco. Os **nomes** de todos os headers continuam visíveis — se a uazapi
+// passar a mandar um header próprio (uma assinatura, por exemplo), ele aparece sem o valor vazar.
+const HEADER_VALUES_OK = new Set(["host", "accept", "content-type", "content-length", "user-agent"]);
+
+export const safeHeaders = (headers: Record<string, unknown>) => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    out[key] = HEADER_VALUES_OK.has(key.toLowerCase()) ? value : "<omitido>";
+  }
+  return out;
+};
+
 let stream: WriteStream | null = null;
 let failed = false;
 

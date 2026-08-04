@@ -111,15 +111,24 @@ constante em `whatsapp.webhook.service.ts`; o hash do token no corpo é defesa e
 conferido quando o campo vem. Rota nova ali dentro precisa chamar `authenticate` também. Ainda **não
 há rate limit** — o projeto não tem `@fastify/rate-limit`.
 
-**O envelope do webhook é palpite, e o receptor é tolerante de propósito.** A spec da uazapi não
-documenta o corpo entregue (`paths/webhooks-e-sse/webhook.yaml` só cobre a configuração, sem
-`callbacks` nem exemplo), e as três fontes disponíveis discordam: `EventType`/`token`/`instance` no
-`matra-notification-manager` (onde o webhook era **global**, e o token era o único jeito de
-identificar a instância), `event`/`instance`/`data` em `schemas/webhook_event.yaml`, `type`/`data` no
-SSE. Por isso `webhookBodySchema` aceita os três nomes e **não exige nenhum campo**: rejeitar o corpo
-derrubaria todos os eventos em silêncio, e o sintoma só apareceria em `/webhook/errors` da uazapi.
-Envelope irreconhecível vira `request.log.warn`. **Não aperte esse schema sem antes capturar um corpo
-real** — e, quando capturar, registre-o aqui.
+**Envelope do webhook (confirmado no tráfego real da v2.1.1, 2026-08-03):**
+
+```jsonc
+{ "BaseUrl": "…", "EventType": "connection", "token": "…", "instanceName": "…",
+  "owner": "55…@s.whatsapp.net",              // no TOPO, fora de `instance`
+  "instance": { "name": "…", "status": "…", "qrcode": "…" } }
+```
+
+⚠️ **`owner` fica fora de `instance`.** `applyInstanceSnapshot` lê `data.owner`, e `data` é
+`body.instance` — sem trazer o campo do topo (é o que `connectionDataOf` faz), `ownerJid` nunca seria
+preenchido por webhook e a tela mostraria "Número ainda não identificado" numa instância conectada.
+
+**O `webhookBodySchema` continua tolerante de propósito**: aceita `EventType`/`event`/`type`, não
+exige campo nenhum e confere o hash do token só quando ele vem. A spec da uazapi **não** documenta o
+corpo entregue (`paths/webhooks-e-sse/webhook.yaml` só cobre a configuração), então o formato acima é
+observação, não contrato. Apertar o schema devolveria o pior modo de falha possível — todo evento
+recusado em silêncio, com o sintoma só aparecendo em `/webhook/errors` da uazapi. Envelope
+irreconhecível vira `request.log.warn`.
 
 **Trilha bruta para diagnóstico: `UAZAPI_DEBUG_LOG`.** Aponte para um arquivo (ex:
 `logs/uazapi.jsonl`) e a API passa a gravar, em JSONL, tudo que sai para a uazapi, tudo que volta e
@@ -130,6 +139,18 @@ Os *valores* de `token`/`admintoken`/`apikey`/`webhookSecret` saem redigidos com
 `<redigido len=N>`, e a URL de webhook perde o último segmento — mas **as chaves permanecem**, que é
 o que revela o formato do envelope. Não relaxe essa redação para "ver o token": ele está cifrado no
 banco exatamente para não existir em claro em lugar nenhum.
+
+Headers seguem **allowlist de valor** (`safeHeaders`), não blocklist: só `host`, `accept`,
+`content-type`, `content-length` e `user-agent` saem com valor; o resto vira `<omitido>` com o nome
+preservado. Blocklist de header sempre esquece um (`authorization`, `cookie`, `x-api-key`,
+`proxy-authorization`…) e o custo do esquecimento é credencial em claro no disco. Se a uazapi passar
+a mandar um header próprio, o **nome** aparece — que é o suficiente para notar e investigar.
+
+⚠️ **O corpo gravado contém dado pessoal**: telefone (`owner`, no formato `55…@s.whatsapp.net`),
+nome de perfil, nome de contato. Isso é deliberado — é o dado que responde "qual é o formato do
+envelope" — mas significa que o arquivo é **dado pessoal sob LGPD**: não o suba para issue, chat,
+gist ou anexo de ticket, e apague quando terminar a investigação. Em produção, ligue só pelo tempo
+da apuração.
 
 É ferramenta de investigação, não o logger da aplicação: ligue enquanto apura, desligue depois.
 

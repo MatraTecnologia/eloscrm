@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { debugLog } from "../../../lib/debug-log.js";
+import { debugLog, safeHeaders } from "../../../lib/debug-log.js";
 import { webhookBodySchema, webhookParamsSchema } from "../../../modules/whatsapp/whatsapp.schema.js";
 import * as webhook from "../../../modules/whatsapp/whatsapp.webhook.service.js";
 
@@ -19,7 +19,7 @@ const uazapiWebhookRoutes = async (app: FastifyInstance) => {
     // a autenticação falhar, é exatamente aí que precisamos ver o que chegou.
     debugLog("webhook.received", {
       instanceId,
-      headers: request.headers,
+      headers: safeHeaders(request.headers),
       body: request.body,
     });
 

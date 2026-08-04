@@ -248,7 +248,39 @@ atualiza via botão **Sincronizar**.
 
 ---
 
-### 5.1 O envelope do webhook é palpite — e o receptor precisa sobreviver a estar errado
+### 5.1 O envelope do webhook — confirmado no tráfego real
+
+> **Resolvido em 2026-08-03.** Capturado via `UAZAPI_DEBUG_LOG` com a integração no ar
+> (`user-agent: uazapiGO-Webhook/1.0`, uazapiGO v2.1.1, entrega por túnel). O restante desta seção
+> registra por que o receptor foi construído tolerante — o raciocínio segue valendo, e a tolerância
+> fica.
+
+```jsonc
+{
+  "BaseUrl": "https://….uazapi.com",
+  "EventType": "connection",          // confirmado: é este o nome, não `event` nem `type`
+  "token": "…",                        // presente em 5/5 eventos observados
+  "instanceName": "…",
+  "owner": "55…@s.whatsapp.net",      // ⚠️ no TOPO do envelope, fora de `instance`
+  "instance": { "name": "…", "status": "…", "qrcode": "…" }
+}
+```
+
+Duas consequências práticas:
+
+1. **A forma do `matra-notification-manager` estava certa** (`EventType`/`token`/`instance` objeto).
+   As outras duas fontes (`webhook_event.yaml`, SSE) não descrevem este endpoint.
+2. **`owner` fora de `instance` era um bug silencioso.** `applyInstanceSnapshot` procura
+   `data.owner`, e `data` é `body.instance` — que não tem esse campo. `ownerJid` nunca seria
+   preenchido por webhook, só pelo botão Sincronizar, e a tela mostraria "Número ainda não
+   identificado" numa instância conectada. `connectionDataOf` agora traz `owner` do topo para
+   dentro, com precedência para o de dentro caso um dia passe a existir. Nenhuma leitura da spec
+   apontaria isso — só o tráfego real.
+
+Como `token` vem sempre, a conferência do hash (defesa em profundidade) está de fato ativa em
+produção.
+
+### 5.2 Por que o receptor continua tolerante
 
 **A spec da uazapi não documenta o corpo entregue.** `paths/webhooks-e-sse/webhook.yaml` (282 linhas)
 descreve só a *configuração* do webhook: não há bloco `callbacks` nem exemplo de payload recebido. As
@@ -277,14 +309,17 @@ Por isso o receptor é deliberadamente tolerante:
 - Envelope sem evento reconhecível → `request.log.warn` + `200`. O aviso aparece no **nosso** log,
   não só no dashboard de erros da uazapi.
 
-**Como capturar o corpo real.** Aponte `UAZAPI_DEBUG_LOG` para um arquivo (ex: `logs/uazapi.jsonl`)
-e a API grava, em JSONL, o corpo cru de cada webhook — antes do `parse` e antes de autenticar, para
-que um envelope recusado também apareça — mais tudo que sai para a uazapi e tudo que volta
-(`UazapiClientConfig.onTrace`). Valores de token/segredo saem redigidos; as **chaves** ficam, que é
-exatamente o que resolve a dúvida desta seção. Vazio = desligado, e `logs/` está no `.gitignore`.
+**Como capturar o corpo real** (foi assim que a §5.1 foi resolvida). Aponte `UAZAPI_DEBUG_LOG` para
+um arquivo (ex: `logs/uazapi.jsonl`) e a API grava, em JSONL, o corpo cru de cada webhook — antes do
+`parse` e antes de autenticar, para que um envelope recusado também apareça — mais tudo que sai para
+a uazapi e tudo que volta (`UazapiClientConfig.onTrace`). Valores de token/segredo saem redigidos e
+headers seguem allowlist de valor; as **chaves** ficam, que é exatamente o que responde a pergunta.
+Vazio = desligado, e `logs/` está no `.gitignore`.
 
-Com o formato em mãos, registrá-lo aqui e no `CLAUDE.md` da API — e só então considerar apertar
-`webhookBodySchema`.
+**Apertar o `webhookBodySchema` agora seria troca ruim.** O formato está confirmado para a v2.1.1,
+mas exigir `EventType` e `token` devolve o modo de falha que a §5.2 descreve: uma mudança do
+provedor derrubaria todo evento em silêncio, e o ganho seria nenhum — o schema tolerante já aplica o
+envelope real corretamente. A tolerância custa três campos opcionais; a rigidez custa a integração.
 
 ## 5. `src/lib/crypto.ts` (novo)
 
