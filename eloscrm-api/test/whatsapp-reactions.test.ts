@@ -249,13 +249,15 @@ describe("POST /:id/messages/:messageId/reaction", () => {
     expect(items[0].reactions).toEqual([]);
   });
 
-  it("recusa reagir à própria mensagem — o provedor não permite", async () => {
+  it("reage à própria mensagem — o WhatsApp aceita, ao contrário do que a spec diz", async () => {
     const minha = await criarMensagem({ direction: "outbound" });
 
     const res = await reagir(minha.id, "👍");
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe("MESSAGE_NOT_REACTABLE");
-    expect(remote.messages.react).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(remote.messages.react).toHaveBeenCalled();
+
+    const { items } = await thread();
+    expect(items[0].reactions[0]).toMatchObject({ emoji: "👍", mine: true });
   });
 
   it("não reage a mensagem de outra conversa", async () => {

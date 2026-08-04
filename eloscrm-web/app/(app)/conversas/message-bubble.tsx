@@ -130,9 +130,9 @@ export const MessageBubble = ({
 
   const minhaReacao = message.reactions.find((r) => r.mine)?.emoji ?? null;
 
-  // O provedor não deixa reagir às próprias mensagens, então o botão nem aparece nelas — melhor que
-  // oferecer e devolver erro. Mensagem sem id no provedor também não tem como ser endereçada.
-  const reagir = onReact && !apagada && !mine && message.providerMessageId && (
+  // Vale para bolha própria também: a spec da uazapi diz que só dá para reagir a mensagem de
+  // outros, mas o WhatsApp aceita. Mensagem sem id no provedor é que não tem como ser endereçada.
+  const reagir = onReact && !apagada && message.providerMessageId && (
     <ReactionPicker atual={minhaReacao} onPick={(emoji) => onReact(message.id, emoji)} />
   );
 

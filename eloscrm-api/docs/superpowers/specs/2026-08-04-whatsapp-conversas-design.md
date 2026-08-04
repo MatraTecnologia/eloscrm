@@ -259,11 +259,14 @@ consertar o que já tinha sido ingerido, sem migração.
 
 **Reagir não é escrever**: não mexe em `lastMessageText` nem no não lido.
 
-**`content.key.fromMe` descreve o alvo, não o autor.** Nos dois exemplos capturados ele é o oposto
-de `message.fromMe` — coerente com a limitação que a spec declara em `/message/react`: *"só é
-possível reagir a mensagens enviadas por outros usuários"*. Por isso o botão de reagir não aparece
-em bolha própria. **Não foi testado contra a API real** — se a limitação não valer, soltar é uma
-linha em `reactions.service.ts`.
+**`content.key.fromMe` descreve o alvo, não o autor.** Nos dois primeiros exemplos capturados ele é
+o oposto de `message.fromMe`, o que parecia confirmar a limitação que a spec declara em
+`/message/react`: *"só é possível reagir a mensagens enviadas por outros usuários"*.
+
+**Essa frase da spec não se confirma.** Verificado no aparelho em 2026-08-04: o WhatsApp aceita
+reagir à própria mensagem. O botão vale para qualquer bolha, e se `/message/react` recusar em algum
+caso, o erro do provedor sobe traduzido pelo `uazapiError`. Mais um item para a lista do que a spec
+da uazapi afirma e o tráfego desmente.
 
 **Remover tem duas formas.** Quem remove **de fora** manda `content` **sem** o campo `text`; a
 remoção que sai daqui manda `content.text: ""`. Nos dois casos `message.text` é vazio — por isso o
@@ -901,4 +904,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:41 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:49 (-03)

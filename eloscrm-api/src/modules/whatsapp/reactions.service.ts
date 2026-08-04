@@ -66,9 +66,10 @@ export const applyReaction = async (
  *
  * `emoji` vazio remove, que é como a uazapi modela o "desreagir" (`/message/react` com `text: ""`).
  *
- * **Só mensagem recebida.** A spec do provedor diz que "só é possível reagir a mensagens enviadas
- * por outros usuários"; não foi testado contra a API real, então a recusa fica aqui, explícita e
- * fácil de soltar, em vez de virar um erro do provedor na cara do corretor.
+ * **Vale para mensagem própria também.** A spec do provedor diz que "só é possível reagir a
+ * mensagens enviadas por outros usuários", mas o WhatsApp aceita — verificado no aparelho em
+ * 2026-08-04. A frase da spec descreve uma limitação que não se confirma; se `/message/react`
+ * recusar em algum caso, o erro do provedor sobe traduzido pelo `uazapiError`.
  */
 export const react = async (
   orgId: string,
@@ -93,10 +94,6 @@ export const react = async (
   if (!alvo.providerMessageId) {
     throw conflict("MESSAGE_NOT_REACTABLE", "Esta mensagem ainda não pode receber reação");
   }
-  if (alvo.direction === WhatsappDirection.outbound) {
-    throw conflict("MESSAGE_NOT_REACTABLE", "O WhatsApp não permite reagir às próprias mensagens");
-  }
-
   const config = requireIntegration();
   const destino = conversation.isGroup
     ? conversation.chatid
