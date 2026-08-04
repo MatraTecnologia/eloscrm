@@ -29,7 +29,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { authClient, useActiveOrganization } from '@/lib/auth-client'
-import { UserPlus } from 'lucide-react'
+import { ChevronRight, UserPlus } from 'lucide-react'
+import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -149,6 +150,23 @@ export default function SettingsPage() {
 
       {org && (
         <>
+          <div className="space-y-2">
+            <h2 className="text-lg font-medium">Automações</h2>
+            <Link
+              href="/settings/automacoes"
+              className="hover:bg-muted/50 flex max-w-lg items-center justify-between gap-4 rounded-lg border p-4 transition-colors"
+            >
+              <span>
+                <span className="block text-sm font-medium">Automação de leads</span>
+                <span className="text-muted-foreground block text-sm">
+                  Criar lead, pôr no funil e distribuir entre os corretores quando alguém escreve no
+                  WhatsApp.
+                </span>
+              </span>
+              <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+            </Link>
+          </div>
+
           <div className="space-y-2">
             <h2 className="text-lg font-medium">Imobiliária</h2>
             <div className="grid max-w-lg grid-cols-2 gap-4 rounded-lg border p-4">

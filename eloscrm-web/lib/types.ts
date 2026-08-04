@@ -400,3 +400,25 @@ export type WhatsappMessage = {
   mediaUrl: string | null;
   mediaSource: "r2" | "provider" | null;
 };
+
+// Automação de entrada de leads. Espelha LeadAutomation/LeadAutomationMember do Prisma.
+export type LeadAutomationMember = {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  /** participa da roleta */
+  active: boolean;
+  /** negócios abertos hoje — é o critério da distribuição, e o que explica a próxima escolha */
+  openDeals: number;
+};
+
+export type LeadAutomation = {
+  autoCreateClient: boolean;
+  autoCreateDeal: boolean;
+  pipelineId: string | null;
+  stageId: string | null;
+  autoAssign: boolean;
+  strategy: "LEAST_OPEN";
+  members: LeadAutomationMember[];
+};

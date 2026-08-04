@@ -1,4 +1,4 @@
-# Automação de entrada de leads — criação e roleta de distribuição
+# Automação de entrada de leads — criação e roleta de distribuição ✅ concluído
 
 Quando alguém desconhecido manda mensagem no WhatsApp da imobiliária, hoje a conversa aparece no
 inbox e **espera**. Um humano decide criar o lead, escolhe o funil, arrasta o card e define o
@@ -309,10 +309,23 @@ engolia, e o resultado observável era idêntico. Foi preciso um segundo teste c
 `applyToConversation` **direto**, sem a rede de proteção, para distinguir tratado de estourado.
 Segundo caso do dia em que o teste óbvio não testava nada — ver Fase 2.
 
-### Fase 4 — tela
-- [ ] `settings/automacoes` com os três blocos e a carga por corretor
-- [ ] avisos de configuração pela metade
-- [ ] entrada na sidebar
+### Fase 4 — tela ✅ concluída
+- [x] `settings/automacoes` com os três blocos e a carga por corretor
+- [x] avisos de configuração pela metade (funil sem estágio, roleta sem ninguém)
+- [x] entrada em Configurações
+
+**Entrada em Configurações, não na sidebar.** A sidebar tem nove itens e é o menu de trabalho
+diário; automação se configura uma vez e se revisa raramente. Ficou como cartão dentro de
+`/settings`, que é onde o gestor já vai mexer em membros.
+
+**O formulário monta só com os dados em mãos.** A página renderiza o `AutomationForm` apenas quando
+a query resolve, e ele copia a configuração para o estado local na primeira renderização — nenhum
+efeito sincronizando estado, que é a regra do projeto, e refetch em segundo plano não sobrescreve o
+que o gestor está editando.
+
+**A tela mostra quem é o próximo.** Ao lado de cada corretor vai a contagem de negócios abertos, e
+abaixo da lista, "o próximo lead vai para fulano". Sem isso o critério é invisível: o gestor liga a
+chave e não tem como conferir se a distribuição faz sentido.
 
 ---
 
@@ -339,4 +352,4 @@ aberto — o enum existe para elas, o código não.
 
 ---
 
-> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-04 11:56 (-03)
+> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-04 12:02 (-03)
