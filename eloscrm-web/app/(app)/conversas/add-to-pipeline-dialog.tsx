@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatCurrencyInput, parseCurrencyInput } from '@/lib/labels'
 import { useCreateDeal } from '@/lib/queries/deals'
 import { usePipelines } from '@/lib/queries/pipelines'
 import type { ConversationClient } from '@/lib/types'
@@ -36,6 +37,7 @@ export const AddToPipelineDialog = ({
   const [titulo, setTitulo] = useState('')
   const [pipelineId, setPipelineId] = useState('')
   const [stageId, setStageId] = useState('')
+  // state guarda o valor já formatado (1.250.000,00); vira número só no submit, igual ao DealForm
   const [valor, setValor] = useState('')
 
   const { data: pipelines } = usePipelines()
@@ -129,13 +131,19 @@ export const AddToPipelineDialog = ({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="deal-valor">Valor (opcional)</Label>
-            <Input
-              id="deal-valor"
-              inputMode="decimal"
-              value={valor}
-              onChange={e => setValor(e.target.value)}
-              placeholder="450000"
-            />
+            <div className="relative">
+              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                R$
+              </span>
+              <Input
+                id="deal-valor"
+                inputMode="numeric"
+                placeholder="0,00"
+                className="pl-9 text-right tabular-nums"
+                value={valor}
+                onChange={e => setValor(formatCurrencyInput(e.target.value))}
+              />
+            </div>
           </div>
         </div>
 
@@ -148,7 +156,7 @@ export const AddToPipelineDialog = ({
                   clientId: client.id,
                   pipelineId,
                   stageId,
-                  value: valor.trim() ? Number(valor.replace(/\D/g, '')) : null,
+                  value: parseCurrencyInput(valor) ?? null,
                 },
                 {
                   onSuccess: () => {
