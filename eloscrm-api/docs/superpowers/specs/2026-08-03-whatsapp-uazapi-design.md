@@ -291,7 +291,7 @@ Duas consequências práticas:
 Como `token` vem sempre, a conferência do hash (defesa em profundidade) está de fato ativa em
 produção.
 
-### 4.3 Perfil só aparece depois de sincronizar — em aberto
+### 4.3 Perfil só aparece depois de sincronizar — resolvido no front
 
 Ciclo observado (criar → conectar → ler QR → conectado), com a conexão real:
 
@@ -309,15 +309,24 @@ nome de perfil** — cai no fallback `instance.name` do cabeçalho. O estado nã
 incompleto, e o `refetchInterval` do web passa de 3s para 30s justamente ao conectar, então nada o
 completa sozinho.
 
-Duas saídas, não decididas:
+**Escolhido: sync no front** (`useAutoSyncProfile`), disparado quando `status === "connected"` e
+`profileName` está vazio. A alternativa — sync automático dentro do handler do webhook — resolveria
+também para quem fecha a aba, mas poria uma chamada HTTP à uazapi no caminho de resposta do webhook,
+que hoje é só banco e responde em milissegundos. Não vale o custo: quem acabou de ler o QR é
+justamente quem está com a tela aberta.
 
-1. **Sync automático no handler do webhook** ao entrar em `connected`. Completa o perfil sem
-   intervenção, mas põe uma chamada HTTP à uazapi dentro do caminho de resposta do webhook, que
-   hoje é só banco e responde em milissegundos.
-2. **Sync no front** quando `status === "connected" && !profileName`. Mantém o webhook barato e
-   resolve para quem está com a tela aberta — que é exatamente quem acabou de ler o QR.
+**Uma tentativa por instância, com trava em `useRef`.** Conta de WhatsApp sem nome de perfil é
+possível, e nesse caso `profileName` continua nulo *depois* do sync — sem a trava, a condição seguiria
+verdadeira para sempre e cada refetch dispararia outra chamada. Falhou, resta o botão manual.
+Desmontar e remontar a tela reseta a trava, o que é o comportamento desejado: uma tentativa por
+visita, não um laço.
 
-A (2) parece melhor pelo custo, mas deixa o perfil vazio para quem conectou e fechou a aba.
+Limitação aceita: corretor (`member`) não sincroniza — o service exige gestor — então, se ele abrir a
+tela antes de qualquer gestor, vê o perfil vazio.
+
+Verificado com a conexão real: limpando `profileName`/`profilePicUrl` no banco e abrindo a tela, o
+perfil voltou sozinho, com **uma única** chamada a `GET /instance/status` mesmo com a página aberta e
+o refetch ativo.
 
 ### 4.4 Por que o receptor continua tolerante
 
@@ -664,7 +673,6 @@ Verificado antes, sem credenciais: a tela no navegador nos estados "sem instânc
 (cabeçalho, telefone formatado, abas, histórico com labels em pt-BR), a degradação em `503` quando a
 integração não está configurada, e os três envelopes candidatos aceitos pelo receptor.
 
-**Em aberto**, nenhum bloqueante: a decisão da §4.3 (perfil vazio até sincronizar), o rate limit do
-receptor (§11) e a rotação de `webhookSecret`.
+**Em aberto**, nenhum bloqueante: o rate limit do receptor (§11) e a rotação de `webhookSecret`.
 
-> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-04 00:12 (-03)
+> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-04 00:22 (-03)

@@ -126,8 +126,10 @@ preenchido por webhook e a tela mostraria "Número ainda não identificado" numa
 **O webhook manda pouco; o resto só vem por sync.** `instance` traz apenas `name` + `status` (mais
 `qrcode` em `connecting`, e `lastDisconnect`/`lastDisconnectReason` em `disconnected`).
 `profileName`, `profilePicUrl`, `isBusiness` e `plataform` **não chegam por webhook** — só por
-`GET /instance/status`, ou seja, pelo botão Sincronizar. Ao conectar, a tela fica correta no status
-mas sem foto nem nome de perfil até alguém sincronizar.
+`GET /instance/status`. Por isso o web tem `useAutoSyncProfile`: ao ver `connected` sem
+`profileName`, dispara um sync, **uma vez por instância** (trava em `useRef` — conta sem nome de
+perfil existe, e sem a trava cada refetch dispararia outra chamada). Se mexer nisso, mantenha a
+trava.
 
 **O `webhookBodySchema` continua tolerante de propósito**: aceita `EventType`/`event`/`type`, não
 exige campo nenhum e confere o hash do token só quando ele vem. A spec da uazapi **não** documenta o
@@ -192,4 +194,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 - Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 - WhatsApp/uazapi: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:12 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 00:22 (-03)

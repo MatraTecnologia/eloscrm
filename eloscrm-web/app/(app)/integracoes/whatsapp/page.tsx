@@ -14,6 +14,7 @@ import { ConnectPanel } from "./connect-panel";
 import { DangerZone } from "./danger-zone";
 import { InstanceHeader } from "./instance-header";
 import { LogsTab } from "./logs-tab";
+import { useAutoSyncProfile } from "./use-auto-sync-profile";
 import { WebhookTab } from "./webhook-tab";
 
 export default function WhatsappIntegrationPage() {
@@ -25,6 +26,9 @@ export default function WhatsappIntegrationPage() {
 
   const role = members?.find((member) => member.userId === session?.user.id)?.role;
   const canManage = role === "owner" || role === "admin";
+
+  // o webhook não traz perfil; sem isto a tela fica sem foto e sem nome até alguém sincronizar
+  useAutoSyncProfile(instance, canManage);
 
   const notConfigured = (error as { code?: string } | null)?.code === "INTEGRATION_NOT_CONFIGURED";
 
