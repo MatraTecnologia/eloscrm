@@ -94,7 +94,10 @@ export const AddToPipelineDialog = ({
             <Label>Funil</Label>
             <Select value={pipelineId} onValueChange={trocarPipeline}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Escolha o funil" />
+                {/* sem a função, o Base UI mostra o valor cru — aqui, o cuid do funil */}
+                <SelectValue placeholder="Escolha o funil">
+                  {(v: string) => pipelines?.find(p => p.id === v)?.name ?? ''}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {pipelines?.map(p => (
@@ -110,7 +113,9 @@ export const AddToPipelineDialog = ({
             <Label>Estágio</Label>
             <Select value={stageId} onValueChange={v => setStageId(v ?? '')}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Escolha o estágio" />
+                <SelectValue placeholder="Escolha o estágio">
+                  {(v: string) => pipeline?.stages.find(s => s.id === v)?.name ?? ''}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {pipeline?.stages.map(s => (
