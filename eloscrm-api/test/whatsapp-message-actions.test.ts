@@ -209,6 +209,66 @@ describe("fixar mensagem", () => {
   });
 });
 
+describe("fixar pelo celular (eco do webhook)", () => {
+  // Payload real de 2026-08-04: fixar fora do CRM volta como `messages_update`, com
+  // `type: "PinnedMessage"` e `state: "Pinned"/"Unpinned"` — não como mensagem na thread.
+  const eventoPin = (ids: string[], state: "Pinned" | "Unpinned") => ({
+    EventType: "messages_update",
+    type: "PinnedMessage",
+    state,
+    token: TOKEN,
+    owner: "554391834229",
+    instanceName: "acoes",
+    event: {
+      Chat: "554398414904@s.whatsapp.net",
+      MessageIDs: ids,
+      Pinned: state === "Pinned",
+      Type: state,
+      // ⚠️ ISO-8601 aqui, enquanto o ReadReceipt manda epoch em segundos
+      Timestamp: "2026-08-04T17:21:29Z",
+      sender_lid: "53176141132007@lid",
+    },
+  });
+
+  const postWebhook = async (body: Record<string, unknown>) => {
+    const instance = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
+    return app.inject({
+      method: "POST",
+      url: `/webhooks/uazapi/${instanceId}/${instance.webhookSecret}`,
+      payload: body,
+    });
+  };
+
+  it("fixar no aparelho reflete na barra do CRM", async () => {
+    const msg = await criarMensagem();
+
+    const res = await postWebhook(eventoPin([msg.providerMessageId!], "Pinned"));
+    expect(res.statusCode).toBe(200);
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(salvo.pinnedAt).not.toBeNull();
+    // o evento não traz duração; sem um `pinnedUntil` a barra ignoraria o pin feito pelo celular
+    expect(salvo.pinnedUntil).not.toBeNull();
+  });
+
+  it("desafixar no aparelho tira da barra", async () => {
+    const msg = await criarMensagem({
+      pinnedAt: new Date(),
+      pinnedUntil: new Date(Date.now() + 1e6),
+    });
+
+    await postWebhook(eventoPin([msg.providerMessageId!], "Unpinned"));
+
+    const salvo = await prisma.whatsappMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(salvo.pinnedUntil).toBeNull();
+  });
+
+  it("id desconhecido não quebra o webhook", async () => {
+    const res = await postWebhook(eventoPin(["NAO-EXISTE"], "Pinned"));
+    expect(res.statusCode).toBe(200);
+  });
+});
+
 describe("favoritar mensagem", () => {
   it("marca sem falar com o provedor — é marca do CRM", async () => {
     const msg = await criarMensagem();

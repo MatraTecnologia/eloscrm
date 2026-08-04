@@ -129,6 +129,56 @@ export const applyStatusUpdate = async (orgId: string, parsed: ParsedStatusUpdat
 };
 
 /**
+ * Fixar/desafixar feito **fora do CRM** (pelo celular) chega no mesmo `messages_update`, com
+ * `type: "PinnedMessage"` e `state: "Pinned" | "Unpinned"`. Capturado em 2026-08-04.
+ *
+ * Sem tratar, o evento era reconhecido e descartado calado: fixar pelo aparelho não aparecia na
+ * barra do topo, e desafixar por lá deixava a barra mostrando algo que já não estava fixado.
+ */
+export const parsePin = (body: Record<string, unknown>): PinUpdate | null => {
+  const data = payloadOf(body);
+  if (!data) return null;
+
+  const state = stateOf(body, data);
+  if (state !== "pinned" && state !== "unpinned") return null;
+
+  const ids = messageIdsOf(data);
+  return ids.length > 0 ? { pin: state === "pinned", providerMessageIds: ids } : null;
+};
+
+export type PinUpdate = { pin: boolean; providerMessageIds: string[] };
+
+/**
+ * O evento **não traz a duração** do pin, só que ele existe.
+ *
+ * Trinta dias é o padrão do próprio provedor quando `duration` não vem, então é o palpite menos
+ * errado — e `pinnedUntil` precisa de algum valor, senão a barra do topo (que filtra por ele)
+ * ignoraria todo pin feito pelo celular.
+ */
+const PIN_PADRAO_DIAS = 30;
+
+export const applyPin = async (orgId: string, parsed: PinUpdate) => {
+  const afetadas = await prisma.whatsappMessage.findMany({
+    where: { organizationId: orgId, providerMessageId: { in: parsed.providerMessageIds } },
+    select: { id: true },
+  });
+  if (afetadas.length === 0) return { pinned: 0 };
+
+  const agora = new Date();
+  await prisma.whatsappMessage.updateMany({
+    where: { id: { in: afetadas.map((m) => m.id) } },
+    data: parsed.pin
+      ? {
+          pinnedAt: agora,
+          pinnedUntil: new Date(agora.getTime() + PIN_PADRAO_DIAS * 24 * 60 * 60 * 1000),
+        }
+      : { pinnedAt: null, pinnedUntil: null },
+  });
+
+  return { pinned: afetadas.length };
+};
+
+/**
  * Marca as mensagens como apagadas e conserta o que a conversa guardava sobre elas.
  *
  * Dois estados derivados dependem do conteúdo e ficariam mentindo:

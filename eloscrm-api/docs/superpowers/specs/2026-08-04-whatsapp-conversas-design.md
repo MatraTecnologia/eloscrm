@@ -274,6 +274,29 @@ reagir à própria mensagem. O botão vale para qualquer bolha, e se `/message/r
 caso, o erro do provedor sobe traduzido pelo `uazapiError`. Mais um item para a lista do que a spec
 da uazapi afirma e o tráfego desmente.
 
+### 2.11 Fixar volta como `messages_update`, e com um terceiro formato de data
+
+Fixar/desafixar — pelo CRM ou pelo aparelho — ecoa como `messages_update`, **não** como mensagem:
+
+```jsonc
+{ "EventType": "messages_update", "type": "PinnedMessage",
+  "state": "Pinned",                     // ou "Unpinned"
+  "event": { "MessageIDs": ["3B6298BAE86F08B242C5"],
+             "Pinned": true, "Type": "Pinned",
+             "Timestamp": "2026-08-04T17:21:29Z" } }   // ⚠️ ISO-8601
+```
+
+⚠️ **Terceiro formato de data do mesmo provedor**: `messageTimestamp` de `messages` vem em
+milissegundos, o `Timestamp` do `ReadReceipt` em segundos, e aqui é ISO-8601. Nenhum deles entra em
+decisão — os `MessageIDs` bastam —, mas a inconsistência vale o registro.
+
+**O evento não traz a duração do pin.** Fixar pelo celular só informa *que* foi fixado. Trinta dias
+é o padrão do próprio provedor quando `duration` não vem, então é o palpite menos errado — e
+`pinnedUntil` precisa de algum valor, senão a barra do topo (que filtra por ele) ignoraria todo pin
+feito fora do CRM.
+
+Sem tratar, o evento caía no mesmo silêncio da deleção: reconhecido, `handled: true`, descartado.
+
 **Remover tem duas formas.** Quem remove **de fora** manda `content` **sem** o campo `text`; a
 remoção que sai daqui manda `content.text: ""`. Nos dois casos `message.text` é vazio — por isso o
 parse lê `message.text` e não `content.text`, que quebraria justamente na remoção vinda do contato:

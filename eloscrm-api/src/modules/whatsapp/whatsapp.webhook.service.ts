@@ -10,8 +10,10 @@ import { applyInstanceSnapshot, eventForTransition, parseStatus, str } from "../
 import { enqueueMessageEvent } from "./ingest.service.js";
 import {
   applyDeletion,
+  applyPin,
   applyStatusUpdate,
   parseDeletion,
+  parsePin,
   parseStatusUpdate,
 } from "./status.service.js";
 import * as repo from "./whatsapp.repo.js";
@@ -93,6 +95,11 @@ export const process = async (
     const apagadas = parseDeletion(raw);
     if (apagadas) {
       await applyDeletion(instance.organizationId, apagadas);
+      return { event, handled: true };
+    }
+    const fixadas = parsePin(raw);
+    if (fixadas) {
+      await applyPin(instance.organizationId, fixadas);
       return { event, handled: true };
     }
     const parsed = parseStatusUpdate(raw);
