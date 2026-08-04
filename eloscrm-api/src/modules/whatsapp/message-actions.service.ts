@@ -2,6 +2,7 @@ import { UazapiInstanceStatus, WhatsappDirection } from "../../generated/prisma/
 import type { Actor } from "../../lib/actor.js";
 import { conflict, notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
+import { refreshPreview } from "./status.service.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
 
 /** Durações que o WhatsApp aceita para um pin; qualquer outra o provedor troca por 30. */
@@ -70,6 +71,11 @@ export const remove = async (orgId: string, conversationId: string, messageId: s
     where: { id: message.id },
     data: { deletedAt: new Date() },
   });
+
+  // o eco do provedor NÃO conserta isto: `applyDeletion` filtra `deletedAt: null`, e a mensagem já
+  // foi marcada aqui. Sem a chamada, a lista de conversas continuaria mostrando o texto apagado.
+  await refreshPreview(conversationId);
+
   return { deletedAt: updated.deletedAt };
 };
 

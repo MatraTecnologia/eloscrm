@@ -112,6 +112,21 @@ describe("apagar mensagem", () => {
     expect(salvo.text).toBe("combinado");
   });
 
+  it("limpa a prévia da lista quando a apagada era a última", async () => {
+    const msg = await criarMensagem({ text: "combinado" });
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageText: "combinado", lastMessageAt: msg.sentAt },
+    });
+
+    await apagar(msg.id);
+
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    // o eco do provedor não conserta: applyDeletion filtra `deletedAt: null` e a mensagem já foi
+    // marcada aqui. Sem recalcular, a lista mostraria o texto que a thread esconde.
+    expect(conversa.lastMessageText).toBeNull();
+  });
+
   it("recusa apagar mensagem do lead — apagaria registro de negociação", async () => {
     const recebida = await criarMensagem({ direction: "inbound" });
 

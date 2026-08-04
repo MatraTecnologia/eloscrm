@@ -191,6 +191,30 @@ export const applyPin = async (orgId: string, parsed: PinUpdate) => {
  *   lido — o contador é um número, não uma marca por mensagem, então essa correção é aproximada
  *   por natureza; errar para baixo é melhor que deixar a conversa acesa para sempre.
  */
+/**
+ * Reescreve a prévia da conversa a partir da última mensagem.
+ *
+ * `lastMessageText` guarda uma **cópia** do texto, então apagar sem passar por aqui deixa a lista
+ * de conversas mostrando o que a thread já esconde. Lê a última de novo em vez de comparar strings:
+ * a prévia não guarda de qual mensagem veio.
+ */
+export const refreshPreview = async (conversationId: string) => {
+  const ultima = await prisma.whatsappMessage.findFirst({
+    where: { conversationId },
+    orderBy: { sentAt: "desc" },
+    select: { sentAt: true, text: true, deletedAt: true },
+  });
+  if (!ultima) return;
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      lastMessageAt: ultima.sentAt,
+      lastMessageText: ultima.deletedAt ? null : ultima.text,
+    },
+  });
+};
+
 export const applyDeletion = async (orgId: string, providerMessageIds: string[]) => {
   const afetadas = await prisma.whatsappMessage.findMany({
     where: {
@@ -208,32 +232,23 @@ export const applyDeletion = async (orgId: string, providerMessageIds: string[])
   });
 
   for (const conversationId of new Set(afetadas.map((m) => m.conversationId))) {
-    const [conversa, ultima] = await Promise.all([
-      prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { unreadCount: true },
-      }),
-      prisma.whatsappMessage.findFirst({
-        where: { conversationId },
-        orderBy: { sentAt: "desc" },
-        select: { sentAt: true, text: true, deletedAt: true },
-      }),
-    ]);
-    if (!conversa || !ultima) continue;
+    await refreshPreview(conversationId);
 
     // só o que o lead mandou entrou no contador; o que sai daqui nunca entrou
     const recebidasApagadas = afetadas.filter(
       (m) => m.conversationId === conversationId && m.direction === WhatsappDirection.inbound,
     ).length;
+    if (recebidasApagadas === 0) continue;
+
+    const conversa = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { unreadCount: true },
+    });
+    if (!conversa) continue;
 
     await prisma.conversation.update({
       where: { id: conversationId },
-      data: {
-        lastMessageAt: ultima.sentAt,
-        // apagada não devolve texto nem para a prévia: é o mesmo conteúdo que a thread esconde
-        lastMessageText: ultima.deletedAt ? null : ultima.text,
-        unreadCount: Math.max(0, conversa.unreadCount - recebidasApagadas),
-      },
+      data: { unreadCount: Math.max(0, conversa.unreadCount - recebidasApagadas) },
     });
   }
 
