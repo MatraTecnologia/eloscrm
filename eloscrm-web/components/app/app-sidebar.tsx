@@ -9,6 +9,7 @@ import {
   Handshake,
   LayoutDashboard,
   MessageCircle,
+  MessageSquare,
   Settings,
   Snowflake,
   Users,
@@ -34,6 +35,7 @@ const items = [
   { title: "Nutrição", href: "/nurturing", icon: Snowflake },
   { title: "Imóveis", href: "/properties", icon: Building2 },
   { title: "Agenda", href: "/agenda", icon: Calendar },
+  { title: "Conversas", href: "/conversas", icon: MessageSquare },
   { title: "WhatsApp", href: "/integracoes/whatsapp", icon: MessageCircle },
   { title: "Configurações", href: "/settings", icon: Settings },
 ];

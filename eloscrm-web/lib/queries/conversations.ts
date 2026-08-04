@@ -1,0 +1,78 @@
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useActiveOrganization } from "@/lib/auth-client";
+import type { Conversation, WhatsappMessage } from "@/lib/types";
+
+const key = (orgId?: string) => ["conversations", orgId] as const;
+
+export type ConversationFilters = { q?: string; unread?: boolean; archived?: boolean };
+
+export const useConversations = (filters: ConversationFilters = {}) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), filters],
+    queryFn: async () => {
+      const { data } = await api.get<{ items: Conversation[]; nextCursor?: string }>(
+        "/whatsapp/conversations",
+        { params: filters },
+      );
+      return data;
+    },
+    enabled: !!org?.id,
+    // não há realtime no projeto: a lista se atualiza sozinha em intervalo curto o bastante para
+    // atendimento humano, sem virar polling agressivo
+    refetchInterval: 10_000,
+  });
+};
+
+export const useConversation = (id: string | null) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: [...key(org?.id), "detail", id],
+    queryFn: async () => {
+      const { data } = await api.get<Conversation>(`/whatsapp/conversations/${id}`);
+      return data;
+    },
+    enabled: !!org?.id && !!id,
+  });
+};
+
+/**
+ * Thread paginada para trás. A API devolve em ordem cronológica; cada página anterior é prefixada,
+ * então o array final continua do mais antigo para o mais novo.
+ */
+export const useMessages = (conversationId: string | null) => {
+  const { data: org } = useActiveOrganization();
+  return useInfiniteQuery({
+    queryKey: [...key(org?.id), "messages", conversationId],
+    queryFn: async ({ pageParam }: { pageParam?: string }) => {
+      const { data } = await api.get<{ items: WhatsappMessage[]; nextBefore?: string }>(
+        `/whatsapp/conversations/${conversationId}/messages`,
+        { params: pageParam ? { before: pageParam } : undefined },
+      );
+      return data;
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextBefore,
+    enabled: !!org?.id && !!conversationId,
+    refetchInterval: 5_000,
+  });
+};
+
+const useConversationMutation = <TInput, TResult>(fn: (input: TInput) => Promise<TResult>) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+};
+
+export const useMarkRead = () =>
+  useConversationMutation(async (id: string) => {
+    await api.post(`/whatsapp/conversations/${id}/read`);
+  });
+
+export const useArchiveConversation = () =>
+  useConversationMutation(async ({ id, archived }: { id: string; archived: boolean }) => {
+    await api.post(`/whatsapp/conversations/${id}/${archived ? "archive" : "unarchive"}`);
+  });

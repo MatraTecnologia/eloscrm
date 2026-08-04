@@ -319,3 +319,64 @@ export type WhatsappLimits = {
     lookup_error?: string;
   };
 };
+
+// Conversas de WhatsApp. Espelha os models Conversation/WhatsappMessage do Prisma.
+export type WhatsappMessageType =
+  | "text" | "image" | "video" | "gif" | "audio" | "ptt"
+  | "document" | "sticker" | "location" | "contact"
+  | "reaction" | "poll" | "system" | "unsupported";
+
+export type WhatsappMessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
+export type WhatsappMediaStatus = "none" | "pending" | "ready" | "failed";
+
+export type ConversationClient = {
+  id: string;
+  name: string;
+  phone: string | null;
+  status: ClientStatus;
+  temperature: LeadTemperature;
+};
+
+export type Conversation = {
+  id: string;
+  chatid: string;
+  phone: string | null;
+  isGroup: boolean;
+  waName: string | null;
+  contactName: string | null;
+  photoUrl: string | null;
+  clientId: string | null;
+  client: ConversationClient | null;
+  lastMessageAt: string | null;
+  lastMessageText: string | null;
+  unreadCount: number;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type WhatsappMessage = {
+  id: string;
+  providerId: string;
+  direction: "inbound" | "outbound";
+  type: WhatsappMessageType;
+  rawType: string | null;
+  status: WhatsappMessageStatus;
+  text: string | null;
+  senderName: string | null;
+  sentByApi: boolean;
+  sentAt: string;
+  mediaStatus: WhatsappMediaStatus;
+  mediaMime: string | null;
+  mediaSize: number | null;
+  mediaFilename: string | null;
+  mediaDuration: number | null;
+  mediaWidth: number | null;
+  mediaHeight: number | null;
+  // JPEGThumbnail em base64: preview que chega junto do webhook, sem requisição
+  mediaThumb: string | null;
+  mediaWaveform: string | null;
+  mediaError: string | null;
+  // já resolvida pela API (R2 presigned ou URL temporária do provedor); null se indisponível
+  mediaUrl: string | null;
+  mediaSource: "r2" | "provider" | null;
+};

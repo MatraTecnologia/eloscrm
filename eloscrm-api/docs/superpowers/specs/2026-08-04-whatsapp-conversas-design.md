@@ -691,11 +691,32 @@ nosso e não interpretação do payload.
 
 Processado **fora da fila**: é um `updateMany` por lote de ids, sem chamada externa.
 
-### Fase 5 — leitura no web
+### Fase 5 — leitura no web ✅ concluída
 
-- [ ] Inbox: lista + thread
-- [ ] Bolhas por tipo, incluindo `ptt` (onda) e `gif` (laço)
-- [ ] Painel do lead e aba na ficha do cliente
+**API de leitura** (não estava no checklist e era pré-requisito):
+
+- [x] `GET /conversations` com busca, não lidas e arquivadas
+- [x] `GET /conversations/:id` e `/:id/messages` (paginado para trás)
+- [x] `POST /:id/read`, `/:id/archive`, `/:id/unarchive`
+- [x] `GET /conversations/messages/:id/media` para renovar a presigned
+- [x] 13 testes, incluindo que `mediaKey` e `mediaTempUrl` **nunca** saem crus
+
+**Web:**
+
+- [x] Inbox: lista com busca e filtros + thread com separador de dia
+- [x] Bolhas por tipo: `gif` em laço mudo, `ptt` com duração, documento com nome e tamanho
+- [x] `mediaThumb` desfocado enquanto o arquivo não chega
+- [x] ✓ / ✓✓ / ✓✓ azul conforme o status, só nas mensagens que saem daqui
+- [x] Item **Conversas** na sidebar
+- [ ] Painel do lead e aba na ficha do cliente → movido para a fase 7, junto das ações de CRM
+
+**Notas:**
+
+- A URL da mídia é embutida na listagem em vez de pedida por bolha: assinar é computação local,
+  sem I/O, então uma requisição a menos por mensagem sai mais barato. O endpoint dedicado fica para
+  renovar quando a presigned expira.
+- O separador de dia é derivado no `useMemo`, comparando com o item anterior — acumular estado
+  durante o render é erro de lint (`react-hooks/immutability`) e de correção.
 
 ### Fase 6 — envio
 
@@ -740,4 +761,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 03:04 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 03:24 (-03)
