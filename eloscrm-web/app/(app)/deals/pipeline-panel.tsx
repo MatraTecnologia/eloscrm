@@ -79,7 +79,9 @@ export const PipelinePanel = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-7 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+                    // sempre visível no toque: sem mouse não há hover, e o menu do funil
+                    // (renomear, excluir) ficaria inalcançável
+                    className="size-7 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:data-[popup-open]:opacity-100"
                   />
                 }
               >

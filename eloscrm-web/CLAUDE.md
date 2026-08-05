@@ -82,10 +82,14 @@ mostra dados da org anterior.
 - **Nunca emoji na UI** — ícones Lucide.
 - Cores de gráfico: usar `CHART_COLORS` de `app/(app)/dashboard/chart-colors.ts`, cuja ordem foi
   escolhida para não deixar adjacentes o par com pior separação para daltonismo.
+- **Ação que só aparece no hover precisa ficar visível no toque.** Aparelho sem mouse não dispara
+  hover, então `opacity-0 group-hover:opacity-100` deixa o botão inalcançável — foi o que escondeu
+  excluir, mover e o menu do funil em celular. O padrão é `opacity-100 md:opacity-0
+  md:group-hover:opacity-100`: visível por padrão, e o comportamento de hover só a partir de `md`.
 - Kanban usa **Pointer Events** (`use-kanban-drag.ts`), sem lib de DnD. Não use `draggable` do
   HTML5: ele não emite evento nenhum em touch, e o board ficou inoperável em celular e tablet até
   ser trocado. O tipo de entrada vem do `pointerType` do evento, **não** de `useIsMobile` — um iPad
   em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
   que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 21:52 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 22:19 (-03)
