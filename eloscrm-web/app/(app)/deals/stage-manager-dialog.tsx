@@ -9,6 +9,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   useAddStage,
   useDeleteStage,
@@ -115,70 +116,73 @@ export const StageManagerDialog = ({
         <DialogHeader>
           <DialogTitle>Estágios de {pipeline.name}</DialogTitle>
         </DialogHeader>
-        {/* `-mr-2 pr-2` afasta a barra de rolagem das ações sem tirá-las do alinhamento do resto */}
-        <div className="-mr-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
-          {stages.map((stage, i) => (
-            <div
-              key={stage.id}
-              className="flex items-center gap-2 rounded-lg border p-2"
-            >
-              <div className="flex flex-col">
+        {/* `ScrollArea` e não um `overflow-y-auto` qualquer: é ele que marca de que lado ainda há
+            conteúdo escondido, e é disso que o `scroll-fade` vive. */}
+        <ScrollArea className="-mr-2 min-h-0 flex-1 scroll-fade">
+          <div className="space-y-2 pr-3">
+            {stages.map((stage, i) => (
+              <div
+                key={stage.id}
+                className="flex items-center gap-2 rounded-lg border p-2"
+              >
+                <div className="flex flex-col">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={() => move(i, -1)}
+                    disabled={i === 0}
+                  >
+                    <ArrowUp className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={() => move(i, 1)}
+                    disabled={i === stages.length - 1}
+                  >
+                    <ArrowDown className="size-3.5" />
+                  </Button>
+                </div>
+                <Input
+                  defaultValue={stage.name}
+                  className="h-8 flex-1"
+                  onBlur={e => rename(stage.id, e.target.value, stage.name)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                  }}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
-                  onClick={() => move(i, -1)}
-                  disabled={i === 0}
+                  className={cn('size-8', stage.isWon && 'text-success')}
+                  title="Marcar como ganho"
+                  onClick={() => toggleFlag(stage.id, 'isWon', !stage.isWon)}
                 >
-                  <ArrowUp className="size-3.5" />
+                  <Trophy className="size-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
-                  onClick={() => move(i, 1)}
-                  disabled={i === stages.length - 1}
+                  className={cn('size-8', stage.isLost && 'text-destructive')}
+                  title="Marcar como perdido"
+                  onClick={() => toggleFlag(stage.id, 'isLost', !stage.isLost)}
                 >
-                  <ArrowDown className="size-3.5" />
+                  <XCircle className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => remove(stage.id)}
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
                 </Button>
               </div>
-              <Input
-                defaultValue={stage.name}
-                className="h-8 flex-1"
-                onBlur={e => rename(stage.id, e.target.value, stage.name)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                }}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn('size-8', stage.isWon && 'text-success')}
-                title="Marcar como ganho"
-                onClick={() => toggleFlag(stage.id, 'isWon', !stage.isWon)}
-              >
-                <Trophy className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn('size-8', stage.isLost && 'text-destructive')}
-                title="Marcar como perdido"
-                onClick={() => toggleFlag(stage.id, 'isLost', !stage.isLost)}
-              >
-                <XCircle className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => remove(stage.id)}
-              >
-                <Trash2 className="size-4 text-muted-foreground" />
-              </Button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </ScrollArea>
         <div className="flex shrink-0 gap-2 border-t pt-4">
           <Input
             placeholder="Novo estágio"

@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatPhone } from "@/lib/labels";
 import { useClients } from "@/lib/queries/clients";
 import type { Client } from "@/lib/types";
@@ -36,7 +37,9 @@ export const LinkClientDialog = ({ trigger }: { trigger: ReactNode }) => {
           setOpen(next);
         }}
       >
-        <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
+        <DialogTrigger
+          render={trigger as React.ReactElement<Record<string, unknown>>}
+        />
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Trazer lead existente</DialogTitle>
@@ -51,28 +54,40 @@ export const LinkClientDialog = ({ trigger }: { trigger: ReactNode }) => {
                 className="pl-9"
               />
             </div>
-            <div className="max-h-80 space-y-1 overflow-y-auto">
-              {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Carregando…</p>}
-              {!isLoading && clients?.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">Nenhum lead ativo encontrado.</p>
-              )}
-              {clients?.map((client) => (
-                <button
-                  key={client.id}
-                  type="button"
-                  onClick={() => pick(client)}
-                  className="flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm hover:bg-muted"
-                >
-                  <ClientAvatar id={client.id} name={client.name} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{client.name}</span>
-                    {client.phone && (
-                      <span className="block truncate text-xs text-muted-foreground">{formatPhone(client.phone)}</span>
-                    )}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <ScrollArea className="max-h-80 scroll-fade">
+              <div className="space-y-1 pr-2">
+                {isLoading && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    Carregando…
+                  </p>
+                )}
+                {!isLoading && clients?.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    Nenhum lead ativo encontrado.
+                  </p>
+                )}
+                {clients?.map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => pick(client)}
+                    className="flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm hover:bg-muted"
+                  >
+                    <ClientAvatar id={client.id} name={client.name} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {client.name}
+                      </span>
+                      {client.phone && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {formatPhone(client.phone)}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         </DialogContent>
       </Dialog>

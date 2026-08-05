@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { PIPELINE_TEMPLATES } from '@/lib/pipeline-templates'
 import { useCreatePipeline, useUpdatePipeline } from '@/lib/queries/pipelines'
 import type { Pipeline } from '@/lib/types'
@@ -101,36 +102,38 @@ export const PipelineFormDialog = ({
           {!editing && (
             <div className="space-y-1.5">
               <Label>Modelo</Label>
-              <div className="grid max-h-60 gap-2 overflow-y-auto pr-1">
-                {PIPELINE_TEMPLATES.map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setTemplateId(t.id)}
-                    className={cn(
-                      'flex items-start gap-3 rounded-lg border p-3 text-left transition-colors',
-                      templateId === t.id
-                        ? 'border-primary bg-accent'
-                        : 'hover:bg-muted/50',
-                    )}
-                  >
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{t.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {t.description}
-                      </div>
-                      {t.stages.length > 0 && (
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {t.stages.map(s => s.name).join(' → ')}
-                        </div>
+              <ScrollArea className="max-h-60 scroll-fade">
+                <div className="grid gap-2 pr-2">
+                  {PIPELINE_TEMPLATES.map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTemplateId(t.id)}
+                      className={cn(
+                        'flex items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+                        templateId === t.id
+                          ? 'border-primary bg-accent'
+                          : 'hover:bg-muted/50',
                       )}
-                    </div>
-                    {templateId === t.id && (
-                      <Check className="size-4 shrink-0 text-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
+                    >
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{t.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {t.description}
+                        </div>
+                        {t.stages.length > 0 && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {t.stages.map(s => s.name).join(' → ')}
+                          </div>
+                        )}
+                      </div>
+                      {templateId === t.id && (
+                        <Check className="size-4 shrink-0 text-primary" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
           )}
         </div>

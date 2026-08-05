@@ -126,6 +126,30 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Diz que a área rola: o conteúdo esmaece na borda em que ainda há mais para ver — cortado numa
+   linha reta, ele parece o fim da lista, não uma lista que continua.
+
+   Vai no `ScrollArea` (Base UI), que publica no viewport a distância já rolada de cada lado em
+   `--scroll-area-overflow-y-*`. Usar essas variáveis, em vez de ligar/desligar o efeito, faz o
+   esmaecimento crescer junto com o gesto e desaparecer sozinho ao chegar na ponta.
+
+   `mask-image` e não um gradiente colorido: desvanece o próprio conteúdo, então funciona sobre
+   qualquer fundo e nos dois temas sem ninguém informar a cor. */
+@utility scroll-fade {
+  --scroll-fade-size: 1.5rem;
+
+  & [data-slot="scroll-area-viewport"] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 min(var(--scroll-fade-size), var(--scroll-area-overflow-y-start, 0px)),
+      #000 calc(100% - min(var(--scroll-fade-size), var(--scroll-area-overflow-y-end, 0px))),
+      transparent 100%
+    );
+    mask-repeat: no-repeat;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
