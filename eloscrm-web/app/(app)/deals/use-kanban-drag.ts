@@ -21,8 +21,8 @@ export type DragGhost = { dealId: string; x: number; y: number };
  * Arrastar cartão no kanban, com o mesmo código para mouse, dedo e caneta.
  *
  * Substituiu o drag-and-drop nativo do HTML5, que **não emite evento nenhum em touch**. O tipo de
- * entrada vem do `pointerType` do evento, não da largura da tela: um iPad em paisagem passa dos
- * 768px do `useIsMobile` e continua sendo toque.
+ * entrada vem do `pointerType` do evento, não da largura da tela — largura não diz se existe
+ * mouse, e é por isso que nem o `useIsMobile` nem um breakpoint serviriam aqui.
  *
  * **O gesto é acompanhado pelo `document`, não pelo cartão.** Essa é a decisão que sustenta o
  * resto: soltar o cartão numa coluna nova faz o React desmontar o elemento de origem, e um

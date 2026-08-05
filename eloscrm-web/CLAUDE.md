@@ -88,10 +88,13 @@ mostra dados da org anterior.
   aconteceu na primeira tentativa. O padrão é
   `opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`.
   Mesmo princípio do kanban, que decide pelo `pointerType` do evento e não pela largura da janela.
+- `useIsMobile` (`hooks/use-mobile.ts`) responde **"a janela é estreita?"**, não "tem toque?". Serve
+  para escolher layout — é o que o `sidebar` faz, trocando barra fixa por drawer — e o corte está
+  em 1250px por causa disso. Não use para decidir comportamento de entrada.
 - Kanban usa **Pointer Events** (`use-kanban-drag.ts`), sem lib de DnD. Não use `draggable` do
   HTML5: ele não emite evento nenhum em touch, e o board ficou inoperável em celular e tablet até
   ser trocado. O tipo de entrada vem do `pointerType` do evento, **não** de `useIsMobile` — um iPad
   em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
   que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 22:19 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 22:28 (-03)
