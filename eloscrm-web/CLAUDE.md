@@ -82,10 +82,12 @@ mostra dados da org anterior.
 - **Nunca emoji na UI** — ícones Lucide.
 - Cores de gráfico: usar `CHART_COLORS` de `app/(app)/dashboard/chart-colors.ts`, cuja ordem foi
   escolhida para não deixar adjacentes o par com pior separação para daltonismo.
-- **Ação que só aparece no hover precisa ficar visível no toque.** Aparelho sem mouse não dispara
-  hover, então `opacity-0 group-hover:opacity-100` deixa o botão inalcançável — foi o que escondeu
-  excluir, mover e o menu do funil em celular. O padrão é `opacity-100 md:opacity-0
-  md:group-hover:opacity-100`: visível por padrão, e o comportamento de hover só a partir de `md`.
+- **Ação que só aparece no hover precisa ficar visível no toque**, e o gate é
+  `[@media(hover:hover)]`, **nunca** um breakpoint de tamanho. `md:` mede largura, não se existe
+  mouse: um tablet grande passa de 768px, é touch, e o botão some de novo — foi exatamente o que
+  aconteceu na primeira tentativa. O padrão é
+  `opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`.
+  Mesmo princípio do kanban, que decide pelo `pointerType` do evento e não pela largura da janela.
 - Kanban usa **Pointer Events** (`use-kanban-drag.ts`), sem lib de DnD. Não use `draggable` do
   HTML5: ele não emite evento nenhum em touch, e o board ficou inoperável em celular e tablet até
   ser trocado. O tipo de entrada vem do `pointerType` do evento, **não** de `useIsMobile` — um iPad

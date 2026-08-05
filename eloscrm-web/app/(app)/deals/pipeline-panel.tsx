@@ -81,7 +81,7 @@ export const PipelinePanel = ({
                     size="icon"
                     // sempre visível no toque: sem mouse não há hover, e o menu do funil
                     // (renomear, excluir) ficaria inalcançável
-                    className="size-7 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:data-[popup-open]:opacity-100"
+                    className="size-7 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:data-[popup-open]:opacity-100"
                   />
                 }
               >

@@ -225,7 +225,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                               variant="ghost"
                               size="icon-sm"
                               aria-label={`Excluir ${deal.title}`}
-                              className="absolute top-1.5 right-1.5 opacity-100 transition-opacity md:opacity-0 md:group-focus-within/card:opacity-100 md:group-hover/card:opacity-100"
+                              className="absolute top-1.5 right-1.5 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100"
                             >
                               <Trash2 className="size-3.5 text-destructive" />
                             </Button>
