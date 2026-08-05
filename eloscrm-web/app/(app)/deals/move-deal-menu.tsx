@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -42,21 +43,25 @@ export const MoveDealMenu = ({
       <MoveRight className="size-3.5" />
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
-      <DropdownMenuLabel>Mover para</DropdownMenuLabel>
-      {stages.map((stage) => (
-        <DropdownMenuItem
-          key={stage.id}
-          disabled={stage.id === deal.stageId}
-          onClick={() => onMove(stage.id)}
-        >
-          <span
-            className="size-2 shrink-0 rounded-full"
-            style={{ background: stage.color ?? "var(--chart-1)" }}
-          />
-          {stage.name}
-          {stage.id === deal.stageId && <Check className="ml-auto size-3.5" />}
-        </DropdownMenuItem>
-      ))}
+      {/* o Group não é decoração: o Base UI exige que o Label viva dentro de um, e sem ele o menu
+          estoura em runtime — o build não acusa */}
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Mover para</DropdownMenuLabel>
+        {stages.map((stage) => (
+          <DropdownMenuItem
+            key={stage.id}
+            disabled={stage.id === deal.stageId}
+            onClick={() => onMove(stage.id)}
+          >
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ background: stage.color ?? "var(--chart-1)" }}
+            />
+            {stage.name}
+            {stage.id === deal.stageId && <Check className="ml-auto size-3.5" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuGroup>
     </DropdownMenuContent>
   </DropdownMenu>
 );
