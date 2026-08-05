@@ -703,6 +703,30 @@ O painel lateral da conversa é onde a conversa vira CRM:
 
 `ClientSource.WHATSAPP` **já existe** no enum — nenhuma mudança necessária.
 
+### 10.2 A conversa aberta mora na URL
+
+`/conversas?c=<conversationId>` — parâmetro gerido por **nuqs** (`useQueryState`, `history: "push"`),
+com o `NuqsAdapter` em `lib/providers.tsx`. O nome do parâmetro fica em
+`app/(app)/conversas/params.ts` (`CONVERSA_PARAM`, `conversaHref`), porque quem escreve é a tela e
+quem lê é qualquer link de fora: divergir o nome quebraria o link sem erro de compilação.
+
+É o que permite mandar o corretor direto para uma conversa de qualquer ponto do app — o primeiro
+consumidor é o **Abrir no inbox** da aba Conversa da ficha do lead (§10). Três consequências que a
+tela precisa tratar, porque a seleção deixou de passar só pelos nossos setters:
+
+- **rascunho de citação** é guardado junto do id da conversa e derivado no render, não limpo por
+  efeito — a troca vem também do botão voltar do navegador e de links externos;
+- **link para conversa inexistente ou de outra imobiliária** resolve em 404 (`getById` filtra por
+  `organizationId`) e tem estado próprio na tela, com saída;
+- **o botão "Todas as conversas"** (tela estreita) depende do parâmetro, não da conversa carregada:
+  preso ao dado, um link quebrado deixaria o celular sem saída, com a lista escondida.
+
+`useSearchParams` empurra a árvore para client-side rendering, então a página vive dentro de um
+`<Suspense>` — sem o boundary o `next build` falha, como já acontece em `login` e `reset-password`.
+
+Conversa **arquivada** abre normalmente pelo link, mas não aparece na lista enquanto o filtro for
+"todas" — o painel mostra uma conversa que a barra lateral não destaca.
+
 ---
 
 ## 11. Testes
@@ -933,4 +957,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 13:53 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 23:29 (-03)

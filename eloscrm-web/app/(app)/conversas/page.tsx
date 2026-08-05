@@ -25,9 +25,10 @@ const Inbox = () => {
   // qualquer mensageiro; com o `replace` padrão do nuqs ele sairia da tela de conversas inteira.
   const [selecionada, setSelecionada] = useQueryState(CONVERSA_PARAM, { history: "push" });
 
-  // A citação pertence à conversa em que foi escolhida, então ela é guardada junto do id e some
-  // sozinha no render quando a conversa muda. Um efeito de limpeza não bastaria: agora a troca
-  // também vem do botão voltar do navegador e de links de fora, que não passam por setter nenhum.
+  // A citação pertence à conversa em que foi escolhida, então ela é guardada junto do id e fica
+  // fora do caminho enquanto outra conversa está aberta — voltar para a de origem a traz de volta,
+  // como o rascunho por conversa do próprio WhatsApp. Um efeito de limpeza não serviria: a troca
+  // agora também vem do botão voltar do navegador e de links de fora, sem passar por setter nenhum.
   const [citacao, setCitacao] = useState<{ conversationId: string; message: WhatsappMessage } | null>(null);
   const respondendo = citacao && citacao.conversationId === selecionada ? citacao.message : null;
 
