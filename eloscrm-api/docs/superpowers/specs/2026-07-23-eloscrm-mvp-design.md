@@ -97,7 +97,7 @@ Domínio CRM (todas com `organizationId`, `createdAt`, `updatedAt`):
 |---|---|
 | Auth | `/api/auth/*` (Better Auth: signup, login, logout, session, org, invite) |
 | Clients | `GET/POST /v1/clients` (filtros: source, ownerId, q) · `GET/PATCH/DELETE /v1/clients/:id` |
-| Deals | `GET/POST /v1/deals` (filtros: stage, ownerId) · `PATCH/DELETE /v1/deals/:id` (PATCH move de stage) |
+| Deals | `GET/POST /v1/deals` (filtros: stage, ownerId) · `PATCH/DELETE /v1/deals/:id` (PATCH move de estágio e, com `pipelineId` + `stageId` juntos, transfere de funil) · `POST /v1/deals/bulk-transfer` (transfere vários de uma vez, tudo ou nada) |
 | Activities | `GET/POST /v1/activities` (filtros: clientId\|dealId, type) · `PATCH /v1/activities/:id` (done, reagendar) |
 | Properties | `GET/POST /v1/properties` · `GET/PATCH/DELETE /v1/properties/:id` |
 | Dashboard | `GET /v1/dashboard/stats` (KPIs + funil + por origem) |
@@ -154,4 +154,4 @@ eloscrm-web/app/
 
 ---
 
-> Criado em 2026-07-23 16:40 (-03) · Última modificação: 2026-07-23 16:40 (-03)
+> Criado em 2026-07-23 16:40 (-03) · Última modificação: 2026-08-05 11:35 (-03)

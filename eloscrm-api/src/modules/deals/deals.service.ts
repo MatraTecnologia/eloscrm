@@ -81,10 +81,22 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
   // que o destino é desta imobiliária: `assertStageInOrgPipeline` só aceita estágio da org que
   // pertença ao funil informado.
   const targetPipelineId = data.pipelineId ?? deal.pipelineId;
-  if (data.stageId) await assertStageInOrgPipeline(orgId, targetPipelineId, data.stageId);
+  const destino = data.stageId
+    ? await assertStageInOrgPipeline(orgId, targetPipelineId, data.stageId)
+    : null;
 
-  const updated = await repo.updateDealById(id, data);
-  const changes = diffFields(deal, data);
+  // mesma regra do lote: quem sai da perda não leva o motivo junto. Sem isto, transferir por aqui e
+  // transferir em lote deixariam o negócio em estados diferentes — e é o tipo de divergência que só
+  // aparece quando alguém repara no "perdido porque…" de um negócio reaberto.
+  const limpaPerda =
+    destino && !destino.isLost && deal.lostReason && data.lostReason === undefined
+      ? { lostReason: null }
+      : {};
+  const aplicado = { ...data, ...limpaPerda };
+  const updated = await repo.updateDealById(id, aplicado);
+  // o diff acompanha o que foi gravado, não o que veio no corpo: o motivo apagado por regra também
+  // é mudança e precisa aparecer no histórico
+  const changes = diffFields(deal, aplicado);
 
   if (changes.stageId || changes.pipelineId) {
     // um PATCH pode mudar estágio e dono juntos; o movimento no funil é o que a timeline destaca
