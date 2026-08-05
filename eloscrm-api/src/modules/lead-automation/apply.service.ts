@@ -102,13 +102,17 @@ const createDeal = async (
   });
   if (!stage) return null;
 
-  // sem isto, cada "bom dia" de um cliente em negociação vira um card novo, e em uma semana o
-  // funil fica ilegível
+  // Sem isto, cada "bom dia" de um cliente em negociação vira um card novo, e em uma semana o
+  // funil fica ilegível.
+  //
+  // A busca é por negócio aberto em **qualquer** funil, não só no configurado: presa ao funil da
+  // automação, ela deixava de encontrar o negócio assim que alguém o movia para outro — e a
+  // resposta seguinte do cliente criava um card novo em "Novo lead", como se o atendimento tivesse
+  // voltado à estaca zero. Quem já está em negociação em algum lugar não precisa de outro card.
   const aberto = await prisma.deal.findFirst({
     where: {
       organizationId: orgId,
       clientId,
-      pipelineId: config.pipelineId,
       stage: { isWon: false, isLost: false },
     },
     select: { id: true },

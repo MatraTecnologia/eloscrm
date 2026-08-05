@@ -69,9 +69,14 @@ hoje, pedindo escolha na tela.
 Vale para lead recém-criado **e** para lead que já existia — é o caso de quem sumiu por meses e
 volta a falar. O funil e o estágio vêm da configuração; sem eles escolhidos, a chave não liga.
 
-**Não cria se o lead já tem negócio aberto naquele funil.** Sem essa regra, cada "bom dia" de um
+**Não cria se o lead já tem negócio aberto em qualquer funil.** Sem essa regra, cada "bom dia" de um
 cliente em negociação vira um card novo, e em uma semana o funil está impossível de ler. "Aberto" =
 estágio que não é `isWon` nem `isLost`.
+
+> A busca foi por negócio aberto **no funil configurado** até 2026-08-05, e isso era um bug relatado
+> em produção: assim que alguém movia o negócio para outro funil, a automação deixava de encontrá-lo
+> e a resposta seguinte do cliente criava um card novo em "Novo lead" — o atendimento parecia voltar
+> à estaca zero a cada mensagem. Quem já está em negociação em algum lugar não precisa de outro card.
 
 ### 2.3 Escolher o dono (chave 3)
 
@@ -241,7 +246,8 @@ Com Postgres real, como o resto do projeto:
 2. Chaves desligadas → nada acontece (o padrão é não automatizar).
 3. Lead já existente **com** dono → ganha negócio com o mesmo dono, e o lead não troca.
 3b. Lead já existente **sem** dono → roleta define, no lead e no negócio.
-4. Lead com negócio aberto no funil configurado → não cria segundo negócio.
+4. Lead com negócio aberto em qualquer funil → não cria segundo negócio, mesmo que o negócio tenha
+   sido movido para fora do funil da automação.
 5. `phoneKey` ambígua → automação não cria lead nenhum.
 6. Roleta com todos em zero → distribui em rodízio, não empilha no primeiro.
 7. Roleta com cargas diferentes → vai para o de menor carga.
@@ -335,7 +341,7 @@ chave e não tem como conferir se a distribuição faz sentido.
 |---|---|
 | Roleta empilha no primeiro corretor | desempate por `lastAssignedAt` (§3.1) — o teste 6 existe por isso |
 | Duas mensagens simultâneas, mesmo corretor | transação com `FOR UPDATE` por organização (§3.2) |
-| Negócio duplicado a cada mensagem | só cria se não houver negócio aberto no funil (§2.2) |
+| Negócio duplicado a cada mensagem | só cria se o lead não tiver negócio aberto em funil nenhum (§2.2) |
 | Automação transfere lead de corretor | lead existente nunca troca de dono (§2.3) |
 | Corretor que saiu continua recebendo | lista elegível derivada de `Member` a cada atribuição (§1) |
 | Falha da automação derruba a ingestão | catch, como no enqueue de mídia (§5) |
@@ -352,4 +358,4 @@ aberto — o enum existe para elas, o código não.
 
 ---
 
-> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-04 12:02 (-03)
+> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-05 12:34 (-03)

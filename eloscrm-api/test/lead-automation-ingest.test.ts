@@ -206,6 +206,34 @@ describe("automação na entrada de mensagem", () => {
     expect(await prisma.deal.count({ where: { organizationId: orgId } })).toBe(1);
   });
 
+  it("negócio movido para outro funil não vira card novo quando o cliente responde", async () => {
+    await configurar();
+    await post(evento());
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+
+    // o corretor tira o negócio do funil da automação — é o fluxo normal de quem separa
+    // "novos leads" de "em negociação"
+    const outro = await prisma.pipeline.create({
+      data: {
+        organizationId: orgId,
+        name: `Negociação ${stamp}`,
+        stages: { create: [{ organizationId: orgId, name: "Em conversa", position: 0 }] },
+      },
+      include: { stages: true },
+    });
+    await prisma.deal.update({
+      where: { id: negocio.id },
+      data: { pipelineId: outro.id, stageId: outro.stages[0].id },
+    });
+
+    // o cliente responde: o atendimento continua onde está, não recomeça em "Novo lead"
+    await post(evento());
+
+    const negocios = await prisma.deal.findMany({ where: { organizationId: orgId } });
+    expect(negocios).toHaveLength(1);
+    expect(negocios[0]).toMatchObject({ id: negocio.id, pipelineId: outro.id });
+  });
+
   it("telefone ambíguo não cria lead — a escolha continua sendo humana", async () => {
     // fixo e celular do mesmo número colidem na phoneKey
     await prisma.client.createMany({
