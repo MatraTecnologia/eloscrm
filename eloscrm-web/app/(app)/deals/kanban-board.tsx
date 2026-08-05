@@ -200,7 +200,10 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             // é a maior parte do uso
                             style={{ touchAction: "pan-y" }}
                             className={cn(
-                              "cursor-grab touch-pan-y rounded-lg border bg-card p-3 shadow-sm transition-colors select-none hover:border-primary/50 active:cursor-grabbing",
+                              // `pt-10` reserva a faixa dos controles, que ficam numa linha própria
+                              // acima do título: sobrepostos ao nome, eles disputavam a mesma linha
+                              // e o texto encolhia para caber
+                              "cursor-grab touch-pan-y rounded-lg border bg-card p-3 pt-10 shadow-sm transition-colors select-none hover:border-primary/50 active:cursor-grabbing",
                               dragId === deal.id && "opacity-30",
                               // a caixa marcada é pequena para uma coluna cheia; a borda diz de
                               // longe quais cartões vão junto na transferência
@@ -208,7 +211,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             )}
                           >
                             {/* espaço para os três controles do canto: marcar, mover e excluir */}
-                            <div className="pr-24 text-sm font-medium">{deal.title}</div>
+                            <div className="text-sm font-medium">{deal.title}</div>
                             {client && (
                               <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                 <User className="size-3 shrink-0" />
@@ -261,57 +264,78 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                           </div>
                         }
                       />
-                      {/* irmão do trigger, nunca dentro dele: aninhado, o clique de marcar abriria
-                          também o negócio — foi o que aconteceu com a lixeira. Como irmão, o
-                          `pointerdown` também não chega ao cartão, então não arma o arraste. */}
-                      <Checkbox
-                        checked={marcados.includes(deal.id)}
-                        onCheckedChange={() => alternarMarcado(deal.id)}
-                        aria-label={`Selecionar ${deal.title}`}
-                        className={cn(
-                          // `right-16` e não `right-14`: o botão de mover ocupa até 60px da borda,
-                          // e a área de toque ampliada do checkbox ficava embaixo dele
-                          "absolute top-2 right-16 bg-card transition-opacity",
-                          "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100",
-                          // com algo selecionado, todas as caixas ficam à vista: esconder as demais
-                          // no mouse deixaria o corretor sem ver o que ainda dá para incluir
-                          selecionados.length > 0 && "[@media(hover:hover)]:opacity-100",
-                        )}
-                      />
-                      <MoveDealMenu
-                        deal={deal}
-                        stages={stages}
-                        onMove={(stageId) => enviarPara(deal.id, stageId)}
-                      />
-                      <AlertDialog>
-                        <AlertDialogTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Excluir ${deal.title}`}
-                              className="absolute top-1.5 right-1.5 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100"
-                            >
-                              <Trash2 className="size-3.5 text-destructive" />
-                            </Button>
-                          }
-                        />
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir negócio</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Tem certeza que deseja excluir &quot;{deal.title}&quot;? Essa ação não pode ser
-                              desfeita.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(deal)}>
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      {/* Faixa de controles, irmã do trigger e nunca filha: aninhado, o clique de
+                          marcar ou excluir abriria também o negócio. Como irmã, o `pointerdown`
+                          também não chega ao cartão e não arma o arraste. Fica sobre o `pt-10` que
+                          o cartão reserva, então nada disputa espaço com o título. */}
+                      <div className="absolute inset-x-2 top-1.5 z-10 flex items-center gap-1">
+                        <label
+                          // rótulo em volta da caixa: no celular, acertar 18px de quadradinho é
+                          // frustrante. Com o `label` e a área extra que o próprio checkbox já
+                          // reserva, o alvo passa de 30x26 — e vira 100px quando está marcado,
+                          // porque aí o texto "Selecionado" também alterna
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 rounded-md py-1 pe-2 ps-1 text-xs transition-opacity",
+                            "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100",
+                            // com algo selecionado, todas as caixas ficam à vista: esconder as
+                            // demais no mouse deixaria o corretor sem ver o que dá para incluir
+                            selecionados.length > 0 && "[@media(hover:hover)]:opacity-100",
+                            marcados.includes(deal.id)
+                              ? "text-primary"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <Checkbox
+                            checked={marcados.includes(deal.id)}
+                            onCheckedChange={() => alternarMarcado(deal.id)}
+                            aria-label={`Selecionar ${deal.title}`}
+                            className="size-[18px] rounded-[5px] bg-card"
+                          />
+                          {marcados.includes(deal.id) && (
+                            <span className="font-medium">Selecionado</span>
+                          )}
+                        </label>
+
+                        <div className="ms-auto flex items-center gap-0.5">
+                          <MoveDealMenu
+                            deal={deal}
+                            stages={stages}
+                            onMove={(stageId) => enviarPara(deal.id, stageId)}
+                          />
+                          <AlertDialog>
+                            <AlertDialogTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Excluir ${deal.title}`}
+                                  className="opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100"
+                                >
+                                  <Trash2 className="size-3.5 text-destructive" />
+                                </Button>
+                              }
+                            />
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir negócio</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja excluir &quot;{deal.title}&quot;? Essa ação
+                                  não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  variant="destructive"
+                                  onClick={() => handleDelete(deal)}
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}

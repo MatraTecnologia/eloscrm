@@ -35,9 +35,10 @@ export const MoveDealMenu = ({
           variant="ghost"
           size="icon-sm"
           aria-label={`Mover ${deal.title} de estágio`}
+          // quem posiciona é a faixa de controles do cartão; aqui fica só a regra de aparecer.
           // `@media(hover:hover)` e não `md:`: breakpoint mede largura, não se o aparelho tem
           // mouse — um tablet grande passa de 768px, é touch, e o botão sumiria
-          className="absolute top-1.5 right-8 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100"
+          className="opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100"
         />
       }
     >
