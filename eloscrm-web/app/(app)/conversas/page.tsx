@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare } from "lucide-react";
+import { ArrowLeft, MessageSquare } from "lucide-react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useConversation, useConversations, useMarkRead } from "@/lib/queries/conversations";
 import type { WhatsappMessage } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { ConversationHeader } from "./conversation-header";
 import { ConversationList } from "./conversation-list";
 import { MessageComposer } from "./message-composer";
@@ -40,8 +41,12 @@ export default function ConversasPage() {
   // `-m-6` cancela o `p-6` que o layout aplica a todas as páginas: o inbox é a única tela que ocupa
   // a área inteira, como qualquer mensageiro. A altura desconta só o header (3.5rem), porque a
   // margem negativa devolve o espaço vertical que o padding tomava.
+  //
+  // `dvh` e não `vh`: no celular a barra do navegador entra e sai, e `vh` congela na altura maior —
+  // o compositor ficaria abaixo da dobra. `overflow-hidden` é a garantia final de que quem rola é
+  // a lista e a thread, nunca a página.
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="-m-6 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden">
       <div className="border-b px-6 py-4">
         <h1 className="text-2xl font-semibold">Conversas</h1>
         <p className="text-muted-foreground text-sm">
@@ -49,21 +54,38 @@ export default function ConversasPage() {
         </p>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[320px_1fr]">
-        <ConversationList
-          conversations={data?.items}
-          isLoading={isLoading && !!org}
-          selectedId={selecionada}
-          onSelect={selecionar}
-          busca={busca}
-          onBusca={setBusca}
-          filtro={filtro}
-          onFiltro={setFiltro}
-        />
+      {/* `grid-rows-[minmax(0,1fr)]` é o que segura tudo: linha de grid é `auto` por padrão e
+          cresce com o conteúdo, então as conversas empurravam a página inteira em vez de rolar
+          dentro da coluna. `min-h-0` no pai não basta — quem precisa poder encolher é a linha.
+          A regra só define UMA linha, e é de propósito: em tela estreita a lista e a conversa se
+          revezam em vez de empilhar, então nunca há uma segunda linha para dimensionar. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[320px_1fr]">
+        {/* Estreito mostra uma coisa por vez, como qualquer mensageiro: as duas empilhadas
+            deixariam a conversa abaixo da dobra e a lista sem altura para rolar. */}
+        <div className={cn("min-h-0", selecionada && "hidden md:block")}>
+          <ConversationList
+            conversations={data?.items}
+            isLoading={isLoading && !!org}
+            selectedId={selecionada}
+            onSelect={selecionar}
+            busca={busca}
+            onBusca={setBusca}
+            filtro={filtro}
+            onFiltro={setFiltro}
+          />
+        </div>
 
-        <div className="flex min-h-0 flex-col">
+        <div className={cn("flex min-h-0 flex-col", !selecionada && "hidden md:flex")}>
           {conversa ? (
             <>
+              <button
+                type="button"
+                onClick={() => setSelecionada(null)}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 border-b px-4 py-2 text-sm md:hidden"
+              >
+                <ArrowLeft className="size-4" />
+                Todas as conversas
+              </button>
               <ConversationHeader conversation={conversa} />
               <MessageThread conversationId={conversa.id} onReply={setRespondendo} />
               <MessageComposer

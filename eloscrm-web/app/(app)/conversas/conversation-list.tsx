@@ -51,7 +51,7 @@ export const ConversationList = ({
   const { data: counts } = useConversationCounts();
 
   return (
-  <div className="flex h-full flex-col border-r">
+  <div className="flex h-full min-h-0 flex-col border-r">
     <div className="flex flex-col gap-2 border-b p-3">
       <div className="relative">
         <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
