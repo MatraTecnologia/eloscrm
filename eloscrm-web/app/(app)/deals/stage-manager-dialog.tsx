@@ -106,11 +106,17 @@ export const StageManagerDialog = ({
       <DialogTrigger
         render={trigger as React.ReactElement<Record<string, unknown>>}
       />
-      <DialogContent className="sm:max-w-lg">
+      {/* O popup rola por padrão (`overflow-y-auto`), o que empurrava o campo de novo estágio para
+          fora da tela em funil com muitos estágios — justamente o caso em que se quer adicionar
+          mais um. Aqui quem rola é só a lista: `overflow-y-hidden` desliga a rolagem do popup
+          (mesmo grupo do utilitário padrão, senão não sobrescreve) e o flex-col dá ao meio uma
+          altura que pode encolher. */}
+      <DialogContent className="flex max-h-[85dvh] flex-col gap-4 overflow-y-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Estágios de {pipeline.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2">
+        {/* `-mr-2 pr-2` afasta a barra de rolagem das ações sem tirá-las do alinhamento do resto */}
+        <div className="-mr-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
           {stages.map((stage, i) => (
             <div
               key={stage.id}
@@ -173,7 +179,7 @@ export const StageManagerDialog = ({
             </div>
           ))}
         </div>
-        <div className="flex gap-2 pt-2">
+        <div className="flex shrink-0 gap-2 border-t pt-4">
           <Input
             placeholder="Novo estágio"
             value={newName}
