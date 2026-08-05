@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import { ArrowLeft, MessageSquare, MessageSquareX } from "lucide-react";
+import { useQueryState } from "nuqs";
+import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useConversation, useConversations, useMarkRead } from "@/lib/queries/conversations";
 import type { WhatsappMessage } from "@/lib/types";
@@ -11,26 +14,29 @@ import { ConversationHeader } from "./conversation-header";
 import { ConversationList } from "./conversation-list";
 import { MessageComposer } from "./message-composer";
 import { MessageThread } from "./message-thread";
+import { CONVERSA_PARAM } from "./params";
 
-export default function ConversasPage() {
+const Inbox = () => {
   const { data: org } = useActiveOrganization();
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
-  const [selecionada, setSelecionada] = useState<string | null>(null);
-  const [respondendo, setRespondendo] = useState<WhatsappMessage | null>(null);
 
-  // trocar de conversa descarta a citação: ela aponta para uma mensagem que não está mais na tela
-  const selecionar = (id: string) => {
-    setSelecionada(id);
-    setRespondendo(null);
-  };
+  // `history: "push"` porque o botão voltar do celular precisa devolver para a lista, como em
+  // qualquer mensageiro; com o `replace` padrão do nuqs ele sairia da tela de conversas inteira.
+  const [selecionada, setSelecionada] = useQueryState(CONVERSA_PARAM, { history: "push" });
+
+  // A citação pertence à conversa em que foi escolhida, então ela é guardada junto do id e some
+  // sozinha no render quando a conversa muda. Um efeito de limpeza não bastaria: agora a troca
+  // também vem do botão voltar do navegador e de links de fora, que não passam por setter nenhum.
+  const [citacao, setCitacao] = useState<{ conversationId: string; message: WhatsappMessage } | null>(null);
+  const respondendo = citacao && citacao.conversationId === selecionada ? citacao.message : null;
 
   const { data, isLoading } = useConversations({
     q: busca.trim() || undefined,
     unread: filtro === "nao-lidas" || undefined,
     archived: filtro === "arquivadas" || undefined,
   });
-  const { data: conversa } = useConversation(selecionada);
+  const { data: conversa, isError } = useConversation(selecionada);
   const { mutate: markRead } = useMarkRead();
 
   // abrir a conversa é o ato de ler: manter o contador aceso deixaria a lista sempre "pendente"
@@ -67,7 +73,7 @@ export default function ConversasPage() {
             conversations={data?.items}
             isLoading={isLoading && !!org}
             selectedId={selecionada}
-            onSelect={selecionar}
+            onSelect={setSelecionada}
             busca={busca}
             onBusca={setBusca}
             filtro={filtro}
@@ -76,24 +82,53 @@ export default function ConversasPage() {
         </div>
 
         <div className={cn("flex min-h-0 flex-col", !selecionada && "hidden md:flex")}>
+          {/* Preso ao parâmetro, não à conversa carregada: link colado apontando para conversa de
+              outra imobiliária resolve em 404 e, se o botão dependesse do dado, o celular ficaria
+              com a lista escondida e sem saída. */}
+          {selecionada && (
+            <button
+              type="button"
+              onClick={() => setSelecionada(null)}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 border-b px-4 py-2 text-sm md:hidden"
+            >
+              <ArrowLeft className="size-4" />
+              Todas as conversas
+            </button>
+          )}
+
           {conversa ? (
             <>
-              <button
-                type="button"
-                onClick={() => setSelecionada(null)}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 border-b px-4 py-2 text-sm md:hidden"
-              >
-                <ArrowLeft className="size-4" />
-                Todas as conversas
-              </button>
               <ConversationHeader conversation={conversa} />
-              <MessageThread conversationId={conversa.id} onReply={setRespondendo} />
+              <MessageThread
+                conversationId={conversa.id}
+                onReply={(message) => setCitacao({ conversationId: conversa.id, message })}
+              />
               <MessageComposer
                 conversationId={conversa.id}
                 replyTo={respondendo}
-                onCancelReply={() => setRespondendo(null)}
+                onCancelReply={() => setCitacao(null)}
               />
             </>
+          ) : isError ? (
+            <Empty className="m-auto">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MessageSquareX />
+                </EmptyMedia>
+                <EmptyTitle>Conversa não encontrada</EmptyTitle>
+                <EmptyDescription>
+                  Ela pode ter sido removida, ou o link ser de outra imobiliária.
+                </EmptyDescription>
+              </EmptyHeader>
+              <Button variant="outline" onClick={() => setSelecionada(null)}>
+                Ver todas as conversas
+              </Button>
+            </Empty>
+          ) : selecionada ? (
+            <div className="flex flex-1 flex-col gap-3 p-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-full w-full" />
+            </div>
           ) : (
             <Empty className="m-auto">
               <EmptyHeader>
@@ -110,5 +145,15 @@ export default function ConversasPage() {
         </div>
       </div>
     </div>
+  );
+};
+
+export default function ConversasPage() {
+  // `useQueryState` lê o query string via `useSearchParams`, que empurra a árvore para
+  // client-side rendering: sem o boundary o build falha.
+  return (
+    <Suspense fallback={<div className="-m-6 h-[calc(100dvh-3.5rem)]" />}>
+      <Inbox />
+    </Suspense>
   );
 }
