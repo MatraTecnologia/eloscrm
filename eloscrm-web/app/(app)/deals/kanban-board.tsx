@@ -1,13 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Building2, Plus, Settings2, Trash2, User } from "lucide-react";
+import { Building2, Phone, Plus, Settings2, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
 import { useClients } from "@/lib/queries/clients";
 import { useMembers } from "@/lib/queries/members";
 import { useProperties } from "@/lib/queries/properties";
-import { formatCurrency } from "@/lib/labels";
+import { formatCurrency, formatPhone } from "@/lib/labels";
 import type { Deal, Pipeline, Stage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const stages = [...pipeline.stages].sort((a, b) => a.position - b.position);
-  const clientNames = new Map((clients ?? []).map((c) => [c.id, c.name] as const));
+  const clientsById = new Map((clients ?? []).map((c) => [c.id, c] as const));
   const memberNames = new Map((members ?? []).map((m) => [m.userId, m.name] as const));
   const propertyTitles = new Map((properties ?? []).map((p) => [p.id, p.title] as const));
 
@@ -148,7 +148,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                   </div>
                 )}
                 {stageDeals.map((deal) => {
-                  const clientName = clientNames.get(deal.clientId);
+                  const client = clientsById.get(deal.clientId);
                   const ownerName = deal.ownerId ? memberNames.get(deal.ownerId) : null;
                   const propertyTitle = deal.propertyId ? propertyTitles.get(deal.propertyId) : null;
                   return (
@@ -173,10 +173,20 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             )}
                           >
                             <div className="pr-14 text-sm font-medium">{deal.title}</div>
-                            {clientName && (
+                            {client && (
                               <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                 <User className="size-3 shrink-0" />
-                                <span className="truncate">{clientName}</span>
+                                <span className="truncate">{client.name}</span>
+                              </div>
+                            )}
+                            {client?.phone && (
+                              // lead que entra pelo WhatsApp só tem nome e telefone; sem ele no
+                              // card, ligar exige abrir o negócio e depois a ficha
+                              <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                <Phone className="size-3 shrink-0" />
+                                <span className="truncate tabular-nums">
+                                  {formatPhone(client.phone)}
+                                </span>
                               </div>
                             )}
                             {propertyTitle && (

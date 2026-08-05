@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatCurrency } from '@/lib/labels'
+import { formatCurrency, formatPhone, toE164 } from '@/lib/labels'
 import { useActivities } from '@/lib/queries/activities'
 import { useClients } from '@/lib/queries/clients'
 import { useMembers } from '@/lib/queries/members'
@@ -31,7 +31,7 @@ import { useProperties } from '@/lib/queries/properties'
 import type { Deal, Stage } from '@/lib/types'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Building2, CalendarPlus, ExternalLink, User } from 'lucide-react'
+import { Building2, CalendarPlus, ExternalLink, Phone, User } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 import { DealForm } from './deal-form'
@@ -136,6 +136,16 @@ export const DealDetailDialog = ({
                 <User className="size-3.5" /> {client.name}
                 <ExternalLink className="size-3" />
               </Link>
+            )}
+            {client?.phone && (
+              // `tel:` em vez de texto solto: no celular abre a discagem, e é o dado que o corretor
+              // busca aqui — leads que entram pelo WhatsApp só têm nome e telefone
+              <a
+                href={`tel:${toE164(client.phone) ?? client.phone}`}
+                className="flex items-center gap-1.5 hover:text-foreground hover:underline"
+              >
+                <Phone className="size-3.5" /> {formatPhone(client.phone)}
+              </a>
             )}
             <span className="flex items-center gap-1.5">
               <Building2 className="size-3.5" />{' '}
