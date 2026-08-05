@@ -1,36 +1,42 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import Link from "next/link";
-import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { Building2, CalendarPlus, ExternalLink, User } from "lucide-react";
-import { useActivities } from "@/lib/queries/activities";
-import { useClients } from "@/lib/queries/clients";
-import { useMembers } from "@/lib/queries/members";
-import { useProperties } from "@/lib/queries/properties";
-import { formatCurrency } from "@/lib/labels";
-import type { Deal, Stage } from "@/lib/types";
-import { ActivityDialog } from "@/components/app/activity-dialog";
-import { ActivityTimeline } from "@/components/app/activity-timeline";
-import { AttachmentsPanel } from "@/components/app/attachments-panel";
-import { AuditFeed } from "@/components/app/audit-feed";
-import { CommentFeed } from "@/components/app/comment-feed";
-import { UnifiedTimeline } from "@/components/app/unified-timeline";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ActivityDialog } from '@/components/app/activity-dialog'
+import { ActivityTimeline } from '@/components/app/activity-timeline'
+import { AttachmentsPanel } from '@/components/app/attachments-panel'
+import { AuditFeed } from '@/components/app/audit-feed'
+import { CommentFeed } from '@/components/app/comment-feed'
+import { UnifiedTimeline } from '@/components/app/unified-timeline'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DealForm } from "./deal-form";
+} from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatCurrency } from '@/lib/labels'
+import { useActivities } from '@/lib/queries/activities'
+import { useClients } from '@/lib/queries/clients'
+import { useMembers } from '@/lib/queries/members'
+import { useProperties } from '@/lib/queries/properties'
+import type { Deal, Stage } from '@/lib/types'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import { Building2, CalendarPlus, ExternalLink, User } from 'lucide-react'
+import Link from 'next/link'
+import { useState } from 'react'
+import { DealForm } from './deal-form'
 
-const TAB_CLASS = "data-active:text-primary after:bg-primary";
+const TAB_CLASS = 'data-active:text-primary after:bg-primary'
 
 /**
  * Componente separado só para a busca ficar dentro da aba: o painel do Tabs não é montado enquanto
@@ -38,7 +44,7 @@ const TAB_CLASS = "data-active:text-primary after:bg-primary";
  * uma vez por card do kanban.
  */
 const DealActivities = ({ deal }: { deal: Deal }) => {
-  const { data: activities, isLoading } = useActivities({ dealId: deal.id });
+  const { data: activities, isLoading } = useActivities({ dealId: deal.id })
 
   return (
     <Card>
@@ -66,8 +72,8 @@ const DealActivities = ({ deal }: { deal: Deal }) => {
         />
       </CardContent>
     </Card>
-  );
-};
+  )
+}
 
 export const DealDetailDialog = ({
   pipelineId,
@@ -76,21 +82,21 @@ export const DealDetailDialog = ({
   trigger,
   nativeButton,
 }: {
-  pipelineId: string;
-  stages: Stage[];
-  deal: Deal;
-  trigger: React.ReactNode;
-  nativeButton?: boolean;
+  pipelineId: string
+  stages: Stage[]
+  deal: Deal
+  trigger: React.ReactNode
+  nativeButton?: boolean
 }) => {
-  const [open, setOpen] = useState(false);
-  const { data: clients } = useClients({ status: "ALL" });
-  const { data: members } = useMembers();
-  const { data: properties } = useProperties();
+  const [open, setOpen] = useState(false)
+  const { data: clients } = useClients({ status: 'ALL' })
+  const { data: members } = useMembers()
+  const { data: properties } = useProperties()
 
-  const client = clients?.find((c) => c.id === deal.clientId) ?? null;
-  const owner = members?.find((m) => m.userId === deal.ownerId) ?? null;
-  const property = properties?.find((p) => p.id === deal.propertyId) ?? null;
-  const stage = stages.find((s) => s.id === deal.stageId) ?? null;
+  const client = clients?.find(c => c.id === deal.clientId) ?? null
+  const owner = members?.find(m => m.userId === deal.ownerId) ?? null
+  const property = properties?.find(p => p.id === deal.propertyId) ?? null
+  const stage = stages.find(s => s.id === deal.stageId) ?? null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -100,7 +106,7 @@ export const DealDetailDialog = ({
       />
       {/* o conteúdo do dialog é desmontado ao fechar (o portal do Base UI não fica montado), então
           formulário e abas nascem com o negócio atualizado a cada abertura */}
-      <DialogContent className="max-h-[88vh] gap-4 overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="gap-4 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="pr-8 text-base">{deal.title}</DialogTitle>
           <div className="flex flex-wrap items-center gap-2">
@@ -108,14 +114,17 @@ export const DealDetailDialog = ({
               <Badge variant="outline" className="gap-1.5">
                 <span
                   className="size-2 rounded-full"
-                  style={{ background: stage.color ?? "var(--chart-1)" }}
+                  style={{ background: stage.color ?? 'var(--chart-1)' }}
                 />
                 {stage.name}
               </Badge>
             )}
-            <span className="text-sm font-medium">{formatCurrency(deal.value)}</span>
+            <span className="text-sm font-medium">
+              {formatCurrency(deal.value)}
+            </span>
             <span className="text-xs text-muted-foreground">
-              criado em {format(parseISO(deal.createdAt), "dd/MM/yyyy", { locale: ptBR })}
+              criado em{' '}
+              {format(parseISO(deal.createdAt), 'dd/MM/yyyy', { locale: ptBR })}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -129,10 +138,11 @@ export const DealDetailDialog = ({
               </Link>
             )}
             <span className="flex items-center gap-1.5">
-              <Building2 className="size-3.5" /> {property?.title ?? "Sem imóvel vinculado"}
+              <Building2 className="size-3.5" />{' '}
+              {property?.title ?? 'Sem imóvel vinculado'}
             </span>
             <span className="flex items-center gap-1.5">
-              <User className="size-3.5" /> {owner?.name ?? "Sem responsável"}
+              <User className="size-3.5" /> {owner?.name ?? 'Sem responsável'}
             </span>
           </div>
         </DialogHeader>
@@ -171,7 +181,11 @@ export const DealDetailDialog = ({
                 <CardTitle>Linha do tempo</CardTitle>
               </CardHeader>
               <CardContent>
-                <UnifiedTimeline entityType="DEAL" entityId={deal.id} limit={8} />
+                <UnifiedTimeline
+                  entityType="DEAL"
+                  entityId={deal.id}
+                  limit={8}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -194,5 +208,5 @@ export const DealDetailDialog = ({
         </Tabs>
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}
