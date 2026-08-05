@@ -8,12 +8,12 @@ import {
   Calendar,
   Handshake,
   LayoutDashboard,
-  MessageCircle,
   MessageSquare,
   Settings,
   Snowflake,
   Users,
 } from "lucide-react";
+import { WhatsappIcon } from "@/components/icons/whatsapp";
 import {
   Sidebar,
   SidebarContent,
@@ -36,7 +36,7 @@ const items = [
   { title: "Imóveis", href: "/properties", icon: Building2 },
   { title: "Agenda", href: "/agenda", icon: Calendar },
   { title: "Conversas", href: "/conversas", icon: MessageSquare },
-  { title: "WhatsApp", href: "/integracoes/whatsapp", icon: MessageCircle },
+  { title: "WhatsApp", href: "/integracoes/whatsapp", icon: WhatsappIcon },
   { title: "Configurações", href: "/settings", icon: Settings },
 ];
 

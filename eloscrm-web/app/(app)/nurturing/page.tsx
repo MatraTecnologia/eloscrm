@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, MessageCircle, Pencil, Plus, RotateCcw, Snowflake, UserPlus } from "lucide-react";
+import { CalendarClock, Pencil, Plus, RotateCcw, Snowflake, UserPlus } from "lucide-react";
+import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { ClientAvatar } from "@/app/(app)/clients/client-avatar";
 import { ClientDialog } from "@/app/(app)/clients/client-dialog";
 import { NurtureDialog } from "@/components/app/nurture-dialog";
@@ -202,7 +203,7 @@ export default function NurturingPage() {
                                 nativeButton={false}
                                 render={<a href={whatsappUrl(client.phone)} target="_blank" rel="noreferrer" />}
                               >
-                                <MessageCircle className="size-4 text-success" />
+                                <WhatsappIcon className="size-4 text-success" />
                               </Button>
                             )}
                             <ReschedulePopover

@@ -1,6 +1,7 @@
 "use client";
 
-import { MessageCircle, Plus, TriangleAlert } from "lucide-react";
+import { Plus, TriangleAlert } from "lucide-react";
+import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -60,7 +61,7 @@ export default function WhatsappIntegrationPage() {
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <MessageCircle />
+              <WhatsappIcon className="size-6" />
             </EmptyMedia>
             <EmptyTitle>Nenhum WhatsApp conectado</EmptyTitle>
             <EmptyDescription>

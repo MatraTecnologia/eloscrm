@@ -1,4 +1,5 @@
-import { AtSign, Mail, MessageCircle, Pencil, Phone } from "lucide-react";
+import { AtSign, Mail, Pencil, Phone } from "lucide-react";
+import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { clientSourceLabels, formatCurrency, formatPhone, leadTemperatureLabels, phoneNationalDigits, whatsappUrl } from "@/lib/labels";
 import type { Client } from "@/lib/types";
 import { ClientAvatar } from "../client-avatar";
@@ -84,7 +85,7 @@ export const LeadHeader = ({
             nativeButton={false}
             render={<a href={whatsappUrl(client.phone)} target="_blank" rel="noreferrer" />}
           >
-            <MessageCircle className="size-4 text-success" />
+            <WhatsappIcon className="size-4 text-success" />
           </Button>
         )}
         {client.email && (

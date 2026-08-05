@@ -31,7 +31,8 @@ import { useProperties } from '@/lib/queries/properties'
 import type { Deal, Stage } from '@/lib/types'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Building2, CalendarPlus, ExternalLink, MessageCircle, User } from 'lucide-react'
+import { Building2, CalendarPlus, ExternalLink, User } from 'lucide-react'
+import { WhatsappIcon } from '@/components/icons/whatsapp'
 import Link from 'next/link'
 import { useState } from 'react'
 import { DealForm } from './deal-form'
@@ -146,7 +147,7 @@ export const DealDetailDialog = ({
                 rel="noreferrer"
                 className="flex items-center gap-1.5 hover:text-foreground hover:underline"
               >
-                <MessageCircle className="size-3.5" /> {formatPhone(client.phone)}
+                <WhatsappIcon className="size-3.5" /> {formatPhone(client.phone)}
               </a>
             )}
             <span className="flex items-center gap-1.5">
