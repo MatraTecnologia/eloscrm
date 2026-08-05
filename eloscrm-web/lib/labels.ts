@@ -104,6 +104,18 @@ export const toE164 = (value: string | null | undefined) => {
   return digits ? `+55${digits}` : undefined;
 };
 
+/**
+ * Link de conversa no WhatsApp. O `wa.me` quer só dígitos com DDI e **sem** o `+`.
+ *
+ * Existe para o `55` não ficar concatenado à mão em cada tela: `phoneNationalDigits` já tira o DDI
+ * quando ele vem, então montar `wa.me/55${digits}` fora daqui erra assim que alguém passar o
+ * telefone completo em vez do nacional.
+ */
+export const whatsappUrl = (value: string | null | undefined) => {
+  const e164 = toE164(value);
+  return e164 ? `https://wa.me/${e164.slice(1)}` : undefined;
+};
+
 // Campo de moeda trabalha em centavos: o usuário só digita dígitos e a vírgula anda sozinha,
 // então não há como digitar "1e5", sinal negativo ou uma vírgula fora de lugar.
 const brl = { minimumFractionDigits: 2, maximumFractionDigits: 2 } as const;

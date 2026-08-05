@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, MessageCircle, Pencil, Phone, Plus, RotateCcw, Snowflake, UserPlus } from "lucide-react";
+import { CalendarClock, MessageCircle, Pencil, Plus, RotateCcw, Snowflake, UserPlus } from "lucide-react";
 import { ClientAvatar } from "@/app/(app)/clients/client-avatar";
 import { ClientDialog } from "@/app/(app)/clients/client-dialog";
 import { NurtureDialog } from "@/components/app/nurture-dialog";
@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { nurtureReasonLabels, phoneNationalDigits } from "@/lib/labels";
+import { nurtureReasonLabels, phoneNationalDigits, whatsappUrl } from "@/lib/labels";
 import { useClients } from "@/lib/queries/clients";
 import { useMembers } from "@/lib/queries/members";
 import type { Client } from "@/lib/types";
@@ -200,20 +200,9 @@ export default function NurturingPage() {
                                 size="icon-sm"
                                 aria-label="Conversar no WhatsApp"
                                 nativeButton={false}
-                                render={<a href={`https://wa.me/55${digits}`} target="_blank" rel="noreferrer" />}
+                                render={<a href={whatsappUrl(client.phone)} target="_blank" rel="noreferrer" />}
                               >
                                 <MessageCircle className="size-4 text-success" />
-                              </Button>
-                            )}
-                            {client.phone && (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Ligar"
-                                nativeButton={false}
-                                render={<a href={`tel:${client.phone}`} />}
-                              >
-                                <Phone className="size-4" />
                               </Button>
                             )}
                             <ReschedulePopover

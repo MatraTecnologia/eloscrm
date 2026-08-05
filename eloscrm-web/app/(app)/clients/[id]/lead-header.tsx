@@ -1,5 +1,5 @@
 import { AtSign, Mail, MessageCircle, Pencil, Phone } from "lucide-react";
-import { clientSourceLabels, formatCurrency, formatPhone, leadTemperatureLabels, phoneNationalDigits } from "@/lib/labels";
+import { clientSourceLabels, formatCurrency, formatPhone, leadTemperatureLabels, phoneNationalDigits, whatsappUrl } from "@/lib/labels";
 import type { Client } from "@/lib/types";
 import { ClientAvatar } from "../client-avatar";
 import { ClientDialog } from "../client-dialog";
@@ -82,14 +82,9 @@ export const LeadHeader = ({
             size="icon"
             aria-label="Conversar no WhatsApp"
             nativeButton={false}
-            render={<a href={`https://wa.me/55${digits}`} target="_blank" rel="noreferrer" />}
+            render={<a href={whatsappUrl(client.phone)} target="_blank" rel="noreferrer" />}
           >
             <MessageCircle className="size-4 text-success" />
-          </Button>
-        )}
-        {client.phone && (
-          <Button variant="ghost" size="icon" aria-label="Ligar" nativeButton={false} render={<a href={`tel:${client.phone}`} />}>
-            <Phone className="size-4" />
           </Button>
         )}
         {client.email && (
