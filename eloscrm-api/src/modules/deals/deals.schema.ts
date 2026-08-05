@@ -37,6 +37,19 @@ export const updateDealSchema = z
     path: ["stageId"],
   });
 
+// Transferência em lote. `dealIds` é desduplicado aqui porque o service compara o total encontrado
+// com o total pedido para provar que todos são da imobiliária — id repetido faria a contagem bater
+// com menos negócios de verdade.
+export const bulkTransferDealsSchema = z.object({
+  dealIds: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(200)
+    .transform((ids) => [...new Set(ids)]),
+  pipelineId: z.string().min(1),
+  stageId: z.string().min(1),
+});
+
 export const listDealsQuerySchema = z.object({
   pipelineId: z.string().optional(),
   stageId: z.string().optional(),
@@ -45,4 +58,5 @@ export const listDealsQuerySchema = z.object({
 
 export type CreateDealInput = z.infer<typeof createDealSchema>;
 export type UpdateDealInput = z.infer<typeof updateDealSchema>;
+export type BulkTransferDealsInput = z.infer<typeof bulkTransferDealsSchema>;
 export type ListDealsQuery = z.infer<typeof listDealsQuerySchema>;

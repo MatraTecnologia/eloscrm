@@ -243,7 +243,7 @@ export const DealDetailDialog = ({
             ao kanban do funil de origem e some no refetch, levando o dialog junto — melhor sair
             junto com a ação do que ser desmontado no meio dela */}
         <TransferPipelineDialog
-          deal={deal}
+          deals={[deal]}
           currentPipelineId={pipelineId}
           open={transferindo}
           onOpenChange={setTransferindo}

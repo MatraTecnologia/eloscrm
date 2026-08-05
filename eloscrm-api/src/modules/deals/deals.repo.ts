@@ -19,6 +19,18 @@ export const createDeal = (orgId: string, data: CreateDealInput) =>
 export const updateDealById = (id: string, data: UpdateDealInput) =>
   prisma.deal.update({ where: { id }, data });
 
+export const findDealsInOrg = (orgId: string, ids: string[]) =>
+  prisma.deal.findMany({ where: { id: { in: ids }, organizationId: orgId } });
+
+// devolve a promise sem await: quem chama põe dentro de `$transaction` junto das linhas de histórico.
+// O `organizationId` no where é redundante depois da checagem do service, e fica de propósito — é a
+// última linha de defesa se um dia alguém chamar isto sem conferir os ids antes.
+export const transferDeals = (
+  orgId: string,
+  ids: string[],
+  data: { pipelineId: string; stageId: string; lostReason?: null },
+) => prisma.deal.updateMany({ where: { id: { in: ids }, organizationId: orgId }, data });
+
 export const deleteDealById = (id: string) => prisma.deal.delete({ where: { id } });
 
 export const findClientInOrg = (orgId: string, clientId: string) =>

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useUpdateDeal } from '@/lib/queries/deals'
+import { useBulkTransferDeals } from '@/lib/queries/deals'
 import { usePipelines } from '@/lib/queries/pipelines'
 import type { Deal } from '@/lib/types'
 import { ArrowRight } from 'lucide-react'
@@ -24,30 +24,30 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 /**
- * Transferir o negócio para outro funil.
+ * Transferir negócios para outro funil — um ou vários, mesmo diálogo.
  *
  * Não dá para reaproveitar o `MoveDealMenu`: ele lista os estágios do funil aberto, e aqui o destino
  * é justamente outro funil — a lista vem de `usePipelines`, não das props da tela.
  *
- * Escolher o estágio de destino é obrigatório e não tem default silencioso além do primeiro: a API
- * recusa a troca sem ele, porque um negócio apontando para estágio de outro funil sumiria de todas
- * as colunas do kanban.
+ * Um negócio só também passa pelo endpoint de lote. As regras da transferência (limpar o motivo da
+ * perda, gravar funil e estágio no histórico) ficam então num lugar só, no servidor, em vez de
+ * existirem em duas versões que precisam concordar.
  */
 export const TransferPipelineDialog = ({
-  deal,
+  deals,
   currentPipelineId,
   open,
   onOpenChange,
   onTransferred,
 }: {
-  deal: Deal
+  deals: Deal[]
   currentPipelineId: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onTransferred?: () => void
 }) => {
   const { data: pipelines } = usePipelines()
-  const update = useUpdateDeal()
+  const transfer = useBulkTransferDeals()
 
   const destinos = (pipelines ?? []).filter(p => p.id !== currentPipelineId)
   const [pipelineId, setPipelineId] = useState('')
@@ -57,36 +57,38 @@ export const TransferPipelineDialog = ({
   const estagios = [...(destino?.stages ?? [])].sort(
     (a, b) => a.position - b.position,
   )
+  const varios = deals.length > 1
 
   // trocar o funil invalida o estágio escolhido antes: ele pertencia ao outro
   const escolherPipeline = (id: string) => {
     setPipelineId(id)
-    const primeiro = pipelines?.find(p => p.id === id)?.stages
+    const stages = pipelines?.find(p => p.id === id)?.stages
     setStageId(
-      [...(primeiro ?? [])].sort((a, b) => a.position - b.position)[0]?.id ??
-        '',
+      [...(stages ?? [])].sort((a, b) => a.position - b.position)[0]?.id ?? '',
     )
   }
 
   const transferir = async () => {
-    if (!pipelineId || !stageId) return
-    // negócio que estava perdido e vai para um estágio aberto do outro funil não pode carregar o
-    // motivo da perda — é o mesmo cuidado que o kanban toma ao arrastar para fora de "Perdido"
-    const destinoPerdido = estagios.find(s => s.id === stageId)?.isLost
+    if (!pipelineId || !stageId || deals.length === 0) return
     try {
-      await update.mutateAsync({
-        id: deal.id,
-        input: {
-          pipelineId,
-          stageId,
-          ...(destinoPerdido ? {} : { lostReason: null }),
-        },
+      const { transferred } = await transfer.mutateAsync({
+        dealIds: deals.map(d => d.id),
+        pipelineId,
+        stageId,
       })
-      toast.success(`Negócio transferido para ${destino?.name}`)
+      toast.success(
+        transferred === 1
+          ? `Negócio transferido para ${destino?.name}`
+          : `${transferred} negócios transferidos para ${destino?.name}`,
+      )
       onOpenChange(false)
       onTransferred?.()
     } catch {
-      toast.error('Não foi possível transferir o negócio')
+      toast.error(
+        varios
+          ? 'Não foi possível transferir os negócios'
+          : 'Não foi possível transferir o negócio',
+      )
     }
   }
 
@@ -104,7 +106,11 @@ export const TransferPipelineDialog = ({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Transferir de funil</DialogTitle>
+          <DialogTitle>
+            {varios
+              ? `Transferir ${deals.length} negócios de funil`
+              : 'Transferir de funil'}
+          </DialogTitle>
         </DialogHeader>
 
         {destinos.length === 0 ? (
@@ -163,8 +169,9 @@ export const TransferPipelineDialog = ({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              O histórico do negócio guarda a transferência; atividades,
-              comentários e arquivos seguem com ele.
+              {varios
+                ? 'Todos entram no mesmo estágio. O histórico de cada negócio guarda a transferência; atividades, comentários e arquivos seguem com eles.'
+                : 'O histórico do negócio guarda a transferência; atividades, comentários e arquivos seguem com ele.'}
             </p>
           </div>
         )}
@@ -175,10 +182,10 @@ export const TransferPipelineDialog = ({
           </Button>
           <Button
             onClick={transferir}
-            disabled={!pipelineId || !stageId || update.isPending}
+            disabled={!pipelineId || !stageId || transfer.isPending}
           >
             <ArrowRight className="size-4" />
-            {update.isPending ? 'Transferindo…' : 'Transferir'}
+            {transfer.isPending ? 'Transferindo…' : 'Transferir'}
           </Button>
         </DialogFooter>
       </DialogContent>

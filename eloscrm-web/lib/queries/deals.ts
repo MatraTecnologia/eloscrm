@@ -131,6 +131,21 @@ export const useUpdateDeal = () => {
   });
 };
 
+/**
+ * Transferência em lote. Sem optimistic update de propósito: a API é tudo ou nada, e pintar os
+ * cartões no destino antes da resposta mostraria um resultado que ainda pode não acontecer.
+ */
+export const useBulkTransferDeals = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { dealIds: string[]; pipelineId: string; stageId: string }) => {
+      const { data } = await api.post<{ transferred: number }>("/deals/bulk-transfer", input);
+      return data;
+    },
+    onSuccess: () => invalidateDealViews(qc),
+  });
+};
+
 export const useDeleteDeal = () => {
   const qc = useQueryClient();
   return useMutation({

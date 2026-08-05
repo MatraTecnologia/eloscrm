@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Building2, Plus, Settings2, Trash2, User } from "lucide-react";
+import { ArrowRightLeft, Building2, Plus, Settings2, Trash2, User } from "lucide-react";
 import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { toast } from "sonner";
 import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
@@ -12,6 +12,7 @@ import { formatCurrency, formatPhone } from "@/lib/labels";
 import type { Deal, Pipeline, Stage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -30,6 +31,7 @@ import { LostReasonDialog } from "./lost-reason-dialog";
 import { MoveDealMenu } from "./move-deal-menu";
 import { useKanbanDrag } from "./use-kanban-drag";
 import { StageManagerDialog } from "./stage-manager-dialog";
+import { TransferPipelineDialog } from "./transfer-pipeline-dialog";
 
 export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const { data: deals, isLoading } = useDeals(pipeline.id);
@@ -40,9 +42,20 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const remove = useDeleteDeal();
   // negócio arrastado para estágio de perda espera aqui até alguém dizer o motivo
   const [pendingLoss, setPendingLoss] = useState<{ deal: Deal; stage: Stage } | null>(null);
+  const [marcados, setMarcados] = useState<string[]>([]);
+  const [transferindoLote, setTransferindoLote] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const stages = [...pipeline.stages].sort((a, b) => a.position - b.position);
+
+  // A seleção é filtrada pelos negócios em tela, não guardada como verdade: trocar de funil no
+  // painel ao lado não desmonta este componente, e negócio transferido some da lista. Derivar no
+  // render evita a barra dizendo "3 selecionados" de cartões que não estão mais aqui.
+  const selecionados = (deals ?? []).filter((deal) => marcados.includes(deal.id));
+  const alternarMarcado = (id: string) =>
+    setMarcados((atual) =>
+      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
+    );
   const clientsById = new Map((clients ?? []).map((c) => [c.id, c] as const));
   const memberNames = new Map((members ?? []).map((m) => [m.userId, m.name] as const));
   const propertyTitles = new Map((properties ?? []).map((p) => [p.id, p.title] as const));
@@ -109,6 +122,24 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
         </div>
       </div>
 
+      {selecionados.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm font-medium">
+            {selecionados.length === 1
+              ? "1 negócio selecionado"
+              : `${selecionados.length} negócios selecionados`}
+          </span>
+          <div className="ms-auto flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setMarcados([])}>
+              Limpar seleção
+            </Button>
+            <Button size="sm" onClick={() => setTransferindoLote(true)}>
+              <ArrowRightLeft className="size-4" /> Transferir de funil
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-2">
         {stages.map((stage) => {
           const stageDeals = deals?.filter((d) => d.stageId === stage.id) ?? [];
@@ -171,9 +202,13 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             className={cn(
                               "cursor-grab touch-pan-y rounded-lg border bg-card p-3 shadow-sm transition-colors select-none hover:border-primary/50 active:cursor-grabbing",
                               dragId === deal.id && "opacity-30",
+                              // a caixa marcada é pequena para uma coluna cheia; a borda diz de
+                              // longe quais cartões vão junto na transferência
+                              marcados.includes(deal.id) && "border-primary ring-1 ring-primary",
                             )}
                           >
-                            <div className="pr-14 text-sm font-medium">{deal.title}</div>
+                            {/* espaço para os três controles do canto: marcar, mover e excluir */}
+                            <div className="pr-24 text-sm font-medium">{deal.title}</div>
                             {client && (
                               <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                 <User className="size-3 shrink-0" />
@@ -225,6 +260,23 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             )}
                           </div>
                         }
+                      />
+                      {/* irmão do trigger, nunca dentro dele: aninhado, o clique de marcar abriria
+                          também o negócio — foi o que aconteceu com a lixeira. Como irmão, o
+                          `pointerdown` também não chega ao cartão, então não arma o arraste. */}
+                      <Checkbox
+                        checked={marcados.includes(deal.id)}
+                        onCheckedChange={() => alternarMarcado(deal.id)}
+                        aria-label={`Selecionar ${deal.title}`}
+                        className={cn(
+                          // `right-16` e não `right-14`: o botão de mover ocupa até 60px da borda,
+                          // e a área de toque ampliada do checkbox ficava embaixo dele
+                          "absolute top-2 right-16 bg-card transition-opacity",
+                          "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/card:opacity-100 [@media(hover:hover)]:group-hover/card:opacity-100",
+                          // com algo selecionado, todas as caixas ficam à vista: esconder as demais
+                          // no mouse deixaria o corretor sem ver o que ainda dá para incluir
+                          selecionados.length > 0 && "[@media(hover:hover)]:opacity-100",
+                        )}
                       />
                       <MoveDealMenu
                         deal={deal}
@@ -282,6 +334,14 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
           )}
         </div>
       )}
+
+      <TransferPipelineDialog
+        deals={selecionados}
+        currentPipelineId={pipeline.id}
+        open={transferindoLote}
+        onOpenChange={setTransferindoLote}
+        onTransferred={() => setMarcados([])}
+      />
 
       {pendingLoss && (
         <LostReasonDialog

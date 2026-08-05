@@ -4,6 +4,7 @@ import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
 import { actorOf } from "../../../lib/actor.js";
 import {
+  bulkTransferDealsSchema,
   createDealSchema,
   listDealsQuerySchema,
   updateDealSchema,
@@ -25,6 +26,11 @@ const dealsRoutes = async (app: FastifyInstance) => {
     const data = createDealSchema.parse(request.body);
     const deal = await service.create(request.orgId!, data, actorOf(request));
     return reply.status(201).send(deal);
+  });
+
+  app.post("/bulk-transfer", async (request) => {
+    const data = bulkTransferDealsSchema.parse(request.body);
+    return service.bulkTransfer(request.orgId!, data, actorOf(request));
   });
 
   app.get("/:id", async (request) => {

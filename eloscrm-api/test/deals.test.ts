@@ -12,6 +12,7 @@ let cookieB = "";
 let pipelineId = "";
 let stageId = "";
 let otherStageId = "";
+let pipelineBId = "";
 let stageBId = "";
 
 type Stage = { id: string };
@@ -38,6 +39,7 @@ beforeAll(async () => {
   otherStageId = pipeline.stages[1].id;
 
   const pipelineB = await getDefaultPipeline({ cookie: cookieB });
+  pipelineBId = pipelineB.id;
   stageBId = pipelineB.stages[0].id;
 });
 
@@ -230,6 +232,92 @@ describe("deals", () => {
       const depois = await app.inject({
         method: "GET",
         url: `/v1/deals/${deal.id}`,
+        headers: { cookie },
+      });
+      expect(depois.json()).toMatchObject({ pipelineId, stageId });
+    });
+
+    it("transfere vários de uma vez, de estágios de origem diferentes", async () => {
+      const primeiro = await criarNegocio("Lote A")
+      const segundo = await criarNegocio("Lote B")
+      // origens distintas: é o que prova que o histórico de cada um guarda o próprio estágio
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/deals/${segundo.id}`,
+        headers: { cookie },
+        payload: { stageId: otherStageId },
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/deals/bulk-transfer",
+        headers: { cookie },
+        payload: {
+          dealIds: [primeiro.id, segundo.id, primeiro.id],
+          pipelineId: outroPipelineId,
+          stageId: outroStageId,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      // o id repetido não conta duas vezes
+      expect(res.json()).toEqual({ transferred: 2 });
+
+      for (const deal of [primeiro, segundo]) {
+        const depois = await app.inject({
+          method: "GET",
+          url: `/v1/deals/${deal.id}`,
+          headers: { cookie },
+        });
+        expect(depois.json()).toMatchObject({
+          pipelineId: outroPipelineId,
+          stageId: outroStageId,
+        });
+      }
+
+      const audit = await app.inject({
+        method: "GET",
+        url: `/v1/audit-events?entityType=DEAL&entityId=${segundo.id}`,
+        headers: { cookie },
+      });
+      const evento = (audit.json() as { action: string; changes: Record<string, unknown> }[]).find(
+        (e) => e.action === "STAGE_CHANGED" && "pipeline" in (e.changes ?? {}),
+      );
+      // o segundo saiu do segundo estágio, não do primeiro: o lote não pode carimbar a mesma origem
+      // em todo mundo
+      expect(evento?.changes).toMatchObject({ stage: { from: "Contato", to: "Visita" } });
+    });
+
+    it("não transfere nada se um dos negócios é de outra imobiliária (404)", async () => {
+      const meu = await criarNegocio("Lote Meu");
+      const clienteB = await createClient({ cookie: cookieB }, "Cliente B Lote");
+      const alheio = await app.inject({
+        method: "POST",
+        url: "/v1/deals",
+        headers: { cookie: cookieB },
+        payload: {
+          clientId: clienteB.id,
+          title: "Negócio de outra org",
+          pipelineId: pipelineBId,
+          stageId: stageBId,
+        },
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/deals/bulk-transfer",
+        headers: { cookie },
+        payload: {
+          dealIds: [meu.id, alheio.json().id],
+          pipelineId: outroPipelineId,
+          stageId: outroStageId,
+        },
+      });
+      expect(res.statusCode).toBe(404);
+
+      // e o meu continua onde estava: o lote é tudo ou nada
+      const depois = await app.inject({
+        method: "GET",
+        url: `/v1/deals/${meu.id}`,
         headers: { cookie },
       });
       expect(depois.json()).toMatchObject({ pipelineId, stageId });

@@ -6,7 +6,12 @@ import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
 import { assertStageInOrgPipeline } from "../pipelines/pipelines.service.js";
 import * as repo from "./deals.repo.js";
-import type { CreateDealInput, ListDealsQuery, UpdateDealInput } from "./deals.schema.js";
+import type {
+  BulkTransferDealsInput,
+  CreateDealInput,
+  ListDealsQuery,
+  UpdateDealInput,
+} from "./deals.schema.js";
 
 export const list = (orgId: string, filters: ListDealsQuery) => repo.listDeals(orgId, filters);
 
@@ -109,6 +114,88 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
     changes,
   });
   return updated;
+};
+
+/**
+ * Transferir vários negócios de uma vez.
+ *
+ * Tudo ou nada: o `updateMany` e as linhas de histórico vão na mesma transação, porque metade dos
+ * negócios num funil e metade no outro é pior do que nenhum — o corretor não tem como saber quais
+ * passaram sem conferir cartão a cartão.
+ */
+export const bulkTransfer = async (
+  orgId: string,
+  { dealIds, pipelineId, stageId }: BulkTransferDealsInput,
+  actor: Actor,
+) => {
+  // a contagem é a prova de que todos são desta imobiliária: sem ela, um id de outra org no meio da
+  // lista seria ignorado em silêncio e o resto transferiria como se estivesse tudo certo
+  const deals = await repo.findDealsInOrg(orgId, dealIds);
+  if (deals.length !== dealIds.length) throw notFound("Negócio não encontrado");
+
+  const destino = await assertStageInOrgPipeline(orgId, pipelineId, stageId);
+
+  // quem já está exatamente no destino não vira linha de histórico dizendo que nada mudou
+  const alvos = deals.filter((deal) => deal.pipelineId !== pipelineId || deal.stageId !== stageId);
+  if (alvos.length === 0) return { transferred: 0 };
+
+  // uma query para os nomes de todos os estágios e funis envolvidos: a origem varia por negócio, e
+  // consultar dentro do laço multiplicaria as idas ao banco pelo tamanho do lote
+  const [stages, pipelines] = await Promise.all([
+    prisma.stage.findMany({
+      where: { id: { in: [...new Set([...alvos.map((d) => d.stageId), stageId])] }, organizationId: orgId },
+      select: { id: true, name: true },
+    }),
+    prisma.pipeline.findMany({
+      where: {
+        id: { in: [...new Set([...alvos.map((d) => d.pipelineId), pipelineId])] },
+        organizationId: orgId,
+      },
+      select: { id: true, name: true },
+    }),
+  ]);
+  const stageName = new Map(stages.map((stage) => [stage.id, stage.name]));
+  const pipelineName = new Map(pipelines.map((p) => [p.id, p.name]));
+
+  const alvoIds = alvos.map((deal) => deal.id);
+  await prisma.$transaction([
+    repo.transferDeals(orgId, alvoIds, {
+      pipelineId,
+      stageId,
+      // mesma regra do movimento unitário: negócio que sai da perda não leva junto o motivo
+      ...(destino.isLost ? {} : { lostReason: null }),
+    }),
+    prisma.auditEvent.createMany({
+      data: alvos.map((deal) => ({
+        organizationId: orgId,
+        entityType: AuditEntity.DEAL,
+        entityId: deal.id,
+        action: AuditAction.STAGE_CHANGED,
+        actorId: actor.id || null,
+        actorName: actor.name,
+        changes: {
+          ...(deal.pipelineId !== pipelineId
+            ? {
+                pipeline: {
+                  from: pipelineName.get(deal.pipelineId) ?? null,
+                  to: pipelineName.get(pipelineId) ?? null,
+                },
+              }
+            : {}),
+          ...(deal.stageId !== stageId
+            ? {
+                stage: {
+                  from: stageName.get(deal.stageId) ?? null,
+                  to: stageName.get(stageId) ?? null,
+                },
+              }
+            : {}),
+        },
+      })),
+    }),
+  ]);
+
+  return { transferred: alvos.length };
 };
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {
