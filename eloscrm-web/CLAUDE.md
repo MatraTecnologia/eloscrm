@@ -88,4 +88,4 @@ mostra dados da org anterior.
   em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
   que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 14:48 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 21:52 (-03)
