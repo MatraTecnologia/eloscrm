@@ -24,9 +24,12 @@ export type DragGhost = { dealId: string; x: number; y: number };
  * entrada vem do `pointerType` do evento, não da largura da tela: um iPad em paisagem passa dos
  * 768px do `useIsMobile` e continua sendo toque.
  *
- * Três coisas aqui existem por terem faltado na primeira versão e deixado o arraste inutilizável
- * no dedo — cada uma está comentada onde acontece: o `touchmove` não-passivo, o fantasma que
- * acompanha o ponteiro, e o aviso de que o long-press pegou.
+ * **O gesto é acompanhado pelo `document`, não pelo cartão.** Essa é a decisão que sustenta o
+ * resto: soltar o cartão numa coluna nova faz o React desmontar o elemento de origem, e um
+ * `onPointerUp` preso a ele nunca dispararia. O arraste ficava eternamente "em curso", o bloqueio
+ * de rolagem nunca era desfeito, e a tela só voltava a rolar depois de arrastar outro cartão —
+ * que rodava a limpeza atrasada. Ouvir no documento torna o fim do gesto independente de quem
+ * continua na tela.
  */
 export const useKanbanDrag = ({
   onDrop,
@@ -40,13 +43,19 @@ export const useKanbanDrag = ({
   /** Posição do cartão que acompanha o ponteiro. Sem ele, arrastar não mostra nada acontecendo. */
   const [ghost, setGhost] = useState<DragGhost | null>(null);
 
-  // refs porque os handlers de pointer leem isto fora do ciclo de render
   const armado = useRef<{ id: string; x: number; y: number; touch: boolean } | null>(null);
   const arrastando = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoScroll = useRef<number | null>(null);
   // um arraste termina em `click` no cartão; sem esta marca, soltar abriria o dialog do negócio
   const acabouDeArrastar = useRef(false);
+  // o callback pode mudar entre renders, e os listeners do documento são registrados uma vez só.
+  // A atualização vai em efeito, não no corpo: escrever ref durante o render é o que a regra
+  // `react-hooks/refs` do projeto barra.
+  const onDropRef = useRef(onDrop);
+  useEffect(() => {
+    onDropRef.current = onDrop;
+  }, [onDrop]);
 
   const pararAutoScroll = () => {
     if (autoScroll.current !== null) cancelAnimationFrame(autoScroll.current);
@@ -64,25 +73,9 @@ export const useKanbanDrag = ({
     setGhost(null);
   }, []);
 
-  /**
-   * O que faz o arraste no dedo funcionar de verdade.
-   *
-   * `preventDefault` num `onPointerMove` do React **não** cancela a rolagem: o React registra esses
-   * listeners como passivos, e o `touch-action: pan-y` do cartão já autorizou o navegador a rolar.
-   * O resultado era arrastar na diagonal e ver a coluna rolar em vez do cartão sair do lugar.
-   *
-   * Um `touchmove` próprio, com `passive: false`, é o único ponto onde dá para recusar a rolagem —
-   * e só enquanto o arraste está em curso, para o toque comum continuar rolando normalmente.
-   */
-  useEffect(() => {
-    const bloquearRolagem = (e: TouchEvent) => {
-      if (arrastando.current) e.preventDefault();
-    };
-    document.addEventListener("touchmove", bloquearRolagem, { passive: false });
-    return () => document.removeEventListener("touchmove", bloquearRolagem);
-  }, []);
-
-  useEffect(() => limpar, [limpar]);
+  const stageSob = (x: number, y: number) =>
+    (document.elementFromPoint(x, y)?.closest("[data-stage-id]") as HTMLElement | null)?.dataset
+      .stageId ?? null;
 
   /**
    * Rola a faixa de colunas quando o ponteiro encosta na borda.
@@ -90,34 +83,95 @@ export const useKanbanDrag = ({
    * Num celular de 375px uma coluna ocupa a tela inteira, então sem isto **não há como** levar um
    * cartão para o estágio seguinte — o destino nunca aparece.
    */
-  const acompanharBorda = (clientX: number) => {
-    pararAutoScroll();
-    const el = scrollRef.current;
-    if (!el) return;
+  const acompanharBorda = useCallback(
+    (clientX: number) => {
+      pararAutoScroll();
+      const el = scrollRef.current;
+      if (!el) return;
 
-    const { left, right } = el.getBoundingClientRect();
-    const direcao = clientX < left + BORDA_PX ? -1 : clientX > right - BORDA_PX ? 1 : 0;
-    if (direcao === 0) return;
+      const { left, right } = el.getBoundingClientRect();
+      const direcao = clientX < left + BORDA_PX ? -1 : clientX > right - BORDA_PX ? 1 : 0;
+      if (direcao === 0) return;
 
-    const passo = () => {
-      el.scrollLeft += direcao * PASSO_PX;
+      const passo = () => {
+        el.scrollLeft += direcao * PASSO_PX;
+        autoScroll.current = requestAnimationFrame(passo);
+      };
       autoScroll.current = requestAnimationFrame(passo);
-    };
-    autoScroll.current = requestAnimationFrame(passo);
-  };
+    },
+    [scrollRef],
+  );
 
-  const stageSob = (x: number, y: number) =>
-    (document.elementFromPoint(x, y)?.closest("[data-stage-id]") as HTMLElement | null)?.dataset
-      .stageId ?? null;
-
-  const comecar = (id: string, x: number, y: number) => {
+  const comecar = useCallback((id: string, x: number, y: number) => {
     arrastando.current = true;
     setDragId(id);
     setGhost({ dealId: id, x, y });
     setOverStage(stageSob(x, y));
-    // o dedo cobre o cartão: sem um aviso, não há como saber que a espera acabou e já dá para mover
+    // o dedo cobre o cartão: sem um aviso, não há como saber que a espera acabou
     navigator.vibrate?.(12);
-  };
+  }, []);
+
+  /**
+   * Todo o acompanhamento do gesto vive aqui, preso ao documento e registrado uma vez só.
+   *
+   * O `touchmove` com `passive: false` é o único ponto onde dá para recusar a rolagem enquanto se
+   * arrasta: `preventDefault` num handler do React não faz nada, porque o React os registra como
+   * passivos e o `touch-action: pan-y` do cartão já autorizou o navegador a rolar.
+   */
+  useEffect(() => {
+    const mover = (e: PointerEvent) => {
+      const inicio = armado.current;
+      if (!inicio) return;
+
+      if (!arrastando.current) {
+        const dx = Math.abs(e.clientX - inicio.x);
+        const dy = Math.abs(e.clientY - inicio.y);
+        // mexeu o dedo antes do tempo: era rolagem, não arraste
+        if (inicio.touch) {
+          if (dx > TOLERANCIA_PX || dy > TOLERANCIA_PX) limpar();
+          return;
+        }
+        if (dx > LIMIAR_MOUSE_PX || dy > LIMIAR_MOUSE_PX) comecar(inicio.id, e.clientX, e.clientY);
+        return;
+      }
+
+      setGhost({ dealId: inicio.id, x: e.clientX, y: e.clientY });
+      setOverStage(stageSob(e.clientX, e.clientY));
+      acompanharBorda(e.clientX);
+    };
+
+    const soltar = (e: PointerEvent) => {
+      const id = armado.current?.id;
+      const estavaArrastando = arrastando.current;
+      const destino = estavaArrastando ? stageSob(e.clientX, e.clientY) : null;
+
+      limpar();
+      if (!estavaArrastando) return;
+
+      // o `click` vem logo depois e abriria o dialog do negócio recém-movido
+      acabouDeArrastar.current = true;
+      setTimeout(() => {
+        acabouDeArrastar.current = false;
+      }, 0);
+      if (id && destino) onDropRef.current(id, destino);
+    };
+
+    const bloquearRolagem = (e: TouchEvent) => {
+      if (arrastando.current) e.preventDefault();
+    };
+
+    document.addEventListener("pointermove", mover);
+    document.addEventListener("pointerup", soltar);
+    document.addEventListener("pointercancel", limpar);
+    document.addEventListener("touchmove", bloquearRolagem, { passive: false });
+    return () => {
+      document.removeEventListener("pointermove", mover);
+      document.removeEventListener("pointerup", soltar);
+      document.removeEventListener("pointercancel", limpar);
+      document.removeEventListener("touchmove", bloquearRolagem);
+      limpar();
+    };
+  }, [acompanharBorda, comecar, limpar]);
 
   const onPointerDown = (e: React.PointerEvent, dealId: string) => {
     // só botão principal; o secundário abre menu de contexto
@@ -125,50 +179,10 @@ export const useKanbanDrag = ({
     const touch = e.pointerType !== "mouse";
     const { clientX: x, clientY: y } = e;
     armado.current = { id: dealId, x, y, touch };
-    e.currentTarget.setPointerCapture(e.pointerId);
 
-    // no toque o arraste nasce de um long-press: o dedo parado distingue "quero mover" de "quero
-    // rolar a coluna", e é o que permite manter `touch-action: pan-y` no cartão
+    // sem `setPointerCapture`: capturar no cartão amarra o gesto a um elemento que pode desmontar
+    // no meio do arraste, e é o documento que acompanha daqui em diante
     if (touch) timer.current = setTimeout(() => comecar(dealId, x, y), LONG_PRESS_MS);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const inicio = armado.current;
-    if (!inicio) return;
-
-    if (!arrastando.current) {
-      const dx = Math.abs(e.clientX - inicio.x);
-      const dy = Math.abs(e.clientY - inicio.y);
-      // mexeu o dedo antes do tempo: era rolagem, não arraste
-      if (inicio.touch) {
-        if (dx > TOLERANCIA_PX || dy > TOLERANCIA_PX) limpar();
-        return;
-      }
-      if (dx > LIMIAR_MOUSE_PX || dy > LIMIAR_MOUSE_PX) comecar(inicio.id, e.clientX, e.clientY);
-      return;
-    }
-
-    setGhost({ dealId: inicio.id, x: e.clientX, y: e.clientY });
-    setOverStage(stageSob(e.clientX, e.clientY));
-    acompanharBorda(e.clientX);
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const inicio = armado.current;
-    const estavaArrastando = arrastando.current;
-    const destino = estavaArrastando ? stageSob(e.clientX, e.clientY) : null;
-    const id = inicio?.id;
-
-    limpar();
-
-    if (!estavaArrastando) return;
-
-    // o `click` vem logo depois e abriria o dialog do negócio recém-movido
-    acabouDeArrastar.current = true;
-    setTimeout(() => {
-      acabouDeArrastar.current = false;
-    }, 0);
-    if (id && destino) onDrop(id, destino);
   };
 
   return {
@@ -177,9 +191,6 @@ export const useKanbanDrag = ({
     ghost,
     cardProps: (dealId: string) => ({
       onPointerDown: (e: React.PointerEvent) => onPointerDown(e, dealId),
-      onPointerMove,
-      onPointerUp,
-      onPointerCancel: limpar,
       /** engole o clique que fecha um arraste, senão soltar abre o dialog do negócio */
       onClickCapture: (e: React.MouseEvent) => {
         if (!acabouDeArrastar.current) return;
