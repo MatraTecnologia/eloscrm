@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Espera antes de um toque virar arraste. Abaixo disso, o dedo ainda está rolando ou tocando. */
-const LONG_PRESS_MS = 250;
+const LONG_PRESS_MS = 220;
 
 /** Movimento que cancela o long-press: quem mexeu o dedo antes do tempo queria rolar. */
 const TOLERANCIA_PX = 10;
@@ -13,18 +13,20 @@ const LIMIAR_MOUSE_PX = 4;
 
 /** Faixa junto às bordas que dispara o auto-scroll horizontal. */
 const BORDA_PX = 72;
-const PASSO_PX = 12;
+const PASSO_PX = 14;
+
+export type DragGhost = { dealId: string; x: number; y: number };
 
 /**
  * Arrastar cartão no kanban, com o mesmo código para mouse, dedo e caneta.
  *
- * Antes isto usava o drag-and-drop nativo do HTML5 (`draggable` + `onDragStart`), que **não emite
- * evento nenhum em touch** — o kanban simplesmente não funcionava em celular e tablet. Pointer
- * Events cobrem os três tipos de entrada com os mesmos handlers, então não existe um caminho para
- * mouse e outro para dedo se desencontrando com o tempo.
+ * Substituiu o drag-and-drop nativo do HTML5, que **não emite evento nenhum em touch**. O tipo de
+ * entrada vem do `pointerType` do evento, não da largura da tela: um iPad em paisagem passa dos
+ * 768px do `useIsMobile` e continua sendo toque.
  *
- * O tipo de entrada é decidido pelo `pointerType` do próprio evento, e não pela largura da tela:
- * um iPad em paisagem passa de 768px e continua sendo toque.
+ * Três coisas aqui existem por terem faltado na primeira versão e deixado o arraste inutilizável
+ * no dedo — cada uma está comentada onde acontece: o `touchmove` não-passivo, o fantasma que
+ * acompanha o ponteiro, e o aviso de que o long-press pegou.
  */
 export const useKanbanDrag = ({
   onDrop,
@@ -35,6 +37,8 @@ export const useKanbanDrag = ({
 }) => {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
+  /** Posição do cartão que acompanha o ponteiro. Sem ele, arrastar não mostra nada acontecendo. */
+  const [ghost, setGhost] = useState<DragGhost | null>(null);
 
   // refs porque os handlers de pointer leem isto fora do ciclo de render
   const armado = useRef<{ id: string; x: number; y: number; touch: boolean } | null>(null);
@@ -57,6 +61,25 @@ export const useKanbanDrag = ({
     pararAutoScroll();
     setDragId(null);
     setOverStage(null);
+    setGhost(null);
+  }, []);
+
+  /**
+   * O que faz o arraste no dedo funcionar de verdade.
+   *
+   * `preventDefault` num `onPointerMove` do React **não** cancela a rolagem: o React registra esses
+   * listeners como passivos, e o `touch-action: pan-y` do cartão já autorizou o navegador a rolar.
+   * O resultado era arrastar na diagonal e ver a coluna rolar em vez do cartão sair do lugar.
+   *
+   * Um `touchmove` próprio, com `passive: false`, é o único ponto onde dá para recusar a rolagem —
+   * e só enquanto o arraste está em curso, para o toque comum continuar rolando normalmente.
+   */
+  useEffect(() => {
+    const bloquearRolagem = (e: TouchEvent) => {
+      if (arrastando.current) e.preventDefault();
+    };
+    document.addEventListener("touchmove", bloquearRolagem, { passive: false });
+    return () => document.removeEventListener("touchmove", bloquearRolagem);
   }, []);
 
   useEffect(() => limpar, [limpar]);
@@ -87,44 +110,45 @@ export const useKanbanDrag = ({
     (document.elementFromPoint(x, y)?.closest("[data-stage-id]") as HTMLElement | null)?.dataset
       .stageId ?? null;
 
-  const comecar = (id: string) => {
+  const comecar = (id: string, x: number, y: number) => {
     arrastando.current = true;
     setDragId(id);
+    setGhost({ dealId: id, x, y });
+    setOverStage(stageSob(x, y));
+    // o dedo cobre o cartão: sem um aviso, não há como saber que a espera acabou e já dá para mover
+    navigator.vibrate?.(12);
   };
 
   const onPointerDown = (e: React.PointerEvent, dealId: string) => {
     // só botão principal; o secundário abre menu de contexto
     if (e.button !== 0) return;
     const touch = e.pointerType !== "mouse";
-    armado.current = { id: dealId, x: e.clientX, y: e.clientY, touch };
+    const { clientX: x, clientY: y } = e;
+    armado.current = { id: dealId, x, y, touch };
     e.currentTarget.setPointerCapture(e.pointerId);
 
-    // no toque, o arraste só nasce de um long-press: o dedo parado distingue "quero mover" de
-    // "quero rolar a coluna", e é o que permite manter `touch-action: pan-y` no cartão
-    if (touch) {
-      timer.current = setTimeout(() => comecar(dealId), LONG_PRESS_MS);
-    }
+    // no toque o arraste nasce de um long-press: o dedo parado distingue "quero mover" de "quero
+    // rolar a coluna", e é o que permite manter `touch-action: pan-y` no cartão
+    if (touch) timer.current = setTimeout(() => comecar(dealId, x, y), LONG_PRESS_MS);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     const inicio = armado.current;
     if (!inicio) return;
 
-    const dx = Math.abs(e.clientX - inicio.x);
-    const dy = Math.abs(e.clientY - inicio.y);
-
     if (!arrastando.current) {
+      const dx = Math.abs(e.clientX - inicio.x);
+      const dy = Math.abs(e.clientY - inicio.y);
       // mexeu o dedo antes do tempo: era rolagem, não arraste
       if (inicio.touch) {
         if (dx > TOLERANCIA_PX || dy > TOLERANCIA_PX) limpar();
         return;
       }
-      if (dx > LIMIAR_MOUSE_PX || dy > LIMIAR_MOUSE_PX) comecar(inicio.id);
+      if (dx > LIMIAR_MOUSE_PX || dy > LIMIAR_MOUSE_PX) comecar(inicio.id, e.clientX, e.clientY);
       return;
     }
 
-    // com o arraste em curso, o movimento é nosso: sem isto o navegador ainda tenta rolar
-    e.preventDefault();
+    setGhost({ dealId: inicio.id, x: e.clientX, y: e.clientY });
     setOverStage(stageSob(e.clientX, e.clientY));
     acompanharBorda(e.clientX);
   };
@@ -137,33 +161,31 @@ export const useKanbanDrag = ({
 
     limpar();
 
-    if (estavaArrastando) {
-      // o `click` vem logo depois e abriria o dialog do negócio recém-movido
-      acabouDeArrastar.current = true;
-      setTimeout(() => {
-        acabouDeArrastar.current = false;
-      }, 0);
-      if (id && destino) onDrop(id, destino);
-    }
-  };
+    if (!estavaArrastando) return;
 
-  /** Usado em `onClickCapture` no cartão: engole o clique que fecha um arraste. */
-  const bloquearCliquePosArraste = (e: React.MouseEvent) => {
-    if (!acabouDeArrastar.current) return;
-    e.preventDefault();
-    e.stopPropagation();
+    // o `click` vem logo depois e abriria o dialog do negócio recém-movido
+    acabouDeArrastar.current = true;
+    setTimeout(() => {
+      acabouDeArrastar.current = false;
+    }, 0);
+    if (id && destino) onDrop(id, destino);
   };
 
   return {
     dragId,
     overStage,
-    bloquearCliquePosArraste,
+    ghost,
     cardProps: (dealId: string) => ({
       onPointerDown: (e: React.PointerEvent) => onPointerDown(e, dealId),
       onPointerMove,
       onPointerUp,
       onPointerCancel: limpar,
-      onClickCapture: bloquearCliquePosArraste,
+      /** engole o clique que fecha um arraste, senão soltar abre o dialog do negócio */
+      onClickCapture: (e: React.MouseEvent) => {
+        if (!acabouDeArrastar.current) return;
+        e.preventDefault();
+        e.stopPropagation();
+      },
     }),
   };
 };

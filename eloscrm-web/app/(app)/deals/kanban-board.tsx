@@ -71,7 +71,8 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     await moveDeal(id, { stageId, ...reopened });
   };
 
-  const { dragId, overStage, cardProps } = useKanbanDrag({ onDrop: enviarPara, scrollRef });
+  const { dragId, overStage, ghost, cardProps } = useKanbanDrag({ onDrop: enviarPara, scrollRef });
+  const ghostDeal = ghost ? deals?.find((d) => d.id === ghost.dealId) : null;
 
   const handleDelete = async (deal: Deal) => {
     try {
@@ -168,7 +169,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             style={{ touchAction: "pan-y" }}
                             className={cn(
                               "cursor-grab touch-pan-y rounded-lg border bg-card p-3 shadow-sm transition-colors select-none hover:border-primary/50 active:cursor-grabbing",
-                              dragId === deal.id && "opacity-40 ring-2 ring-primary",
+                              dragId === deal.id && "opacity-30",
                             )}
                           >
                             <div className="pr-14 text-sm font-medium">{deal.title}</div>
@@ -254,6 +255,20 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
           );
         })}
       </div>
+
+      {ghost && ghostDeal && (
+        // fora do fluxo e sem capturar ponteiro: `elementFromPoint` precisa enxergar a coluna por
+        // baixo, senão o alvo do arraste seria sempre o próprio fantasma
+        <div
+          className="pointer-events-none fixed z-50 w-64 -translate-x-1/2 -translate-y-1/2 rotate-2 rounded-lg border bg-card p-3 shadow-lg"
+          style={{ left: ghost.x, top: ghost.y }}
+        >
+          <div className="text-sm font-medium">{ghostDeal.title}</div>
+          {ghostDeal.value != null && (
+            <div className="mt-1 text-xs font-medium">{formatCurrency(ghostDeal.value)}</div>
+          )}
+        </div>
+      )}
 
       {pendingLoss && (
         <LostReasonDialog
