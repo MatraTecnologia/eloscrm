@@ -19,10 +19,13 @@ export const PipelinePanel = ({
   pipelines,
   activeId,
   onSelect,
+  dropTargetId,
 }: {
   pipelines: Pipeline[];
   activeId: string | undefined;
   onSelect: (id: string) => void;
+  /** funil sob o cartão que está sendo arrastado no quadro ao lado */
+  dropTargetId?: string | null;
 }) => {
   const del = useDeletePipeline();
   const [renameTarget, setRenameTarget] = useState<Pipeline | null>(null);
@@ -71,9 +74,15 @@ export const PipelinePanel = ({
         {pipelines.map((p) => (
           <div
             key={p.id}
+            // é este atributo que o arraste do kanban procura com `elementFromPoint`; fica no item,
+            // nunca no `aside`, senão soltar em qualquer sobra do painel viraria transferência
+            data-pipeline-id={p.id}
             className={cn(
               "group flex shrink-0 items-center gap-1 rounded-lg md:shrink",
               activeId === p.id && "bg-accent",
+              // cartão pairando sobre este funil: cor cheia, e não só um anel — no celular o
+              // fantasma passa por cima e um contorno fino se perderia embaixo dele
+              dropTargetId === p.id && "bg-primary/15 ring-2 ring-primary ring-inset",
             )}
           >
             <button

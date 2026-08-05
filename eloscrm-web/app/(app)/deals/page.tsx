@@ -11,6 +11,7 @@ export default function DealsPage() {
   const { data: pipelines, isLoading } = usePipelines();
   const { data: org, isPending: loadingOrg } = useActiveOrganization();
   const [selectedId, setSelectedId] = useState<string>();
+  const [alvoDoArraste, setAlvoDoArraste] = useState<string | null>(null);
 
   // derivado no render: a seleção só vale se o pipeline ainda existir; senão cai no default
   const active =
@@ -42,8 +43,17 @@ export default function DealsPage() {
 
       {!!org && !isLoading && !!pipelines?.length && (
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
-          <PipelinePanel pipelines={pipelines} activeId={active?.id} onSelect={setSelectedId} />
-          <div className="min-h-0 min-w-0 flex-1">{active && <KanbanBoard pipeline={active} />}</div>
+          {/* o quadro avisa qual funil está sob o cartão arrastado e a lista acende o destino: os
+              dois são irmãos, então quem liga um ao outro é esta página */}
+          <PipelinePanel
+            pipelines={pipelines}
+            activeId={active?.id}
+            onSelect={setSelectedId}
+            dropTargetId={alvoDoArraste}
+          />
+          <div className="min-h-0 min-w-0 flex-1">
+            {active && <KanbanBoard pipeline={active} onDropTargetChange={setAlvoDoArraste} />}
+          </div>
         </div>
       )}
     </div>

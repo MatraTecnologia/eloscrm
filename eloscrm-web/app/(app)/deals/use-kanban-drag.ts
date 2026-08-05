@@ -18,6 +18,12 @@ const PASSO_PX = 14;
 export type DragGhost = { dealId: string; x: number; y: number };
 
 /**
+ * Onde o cartão pode cair: uma coluna do funil aberto ou outro funil da lista lateral — soltar
+ * sobre um funil manda o negócio para o primeiro estágio dele.
+ */
+export type DropTarget = { tipo: "stage"; id: string } | { tipo: "pipeline"; id: string };
+
+/**
  * Arrastar cartão no kanban, com o mesmo código para mouse, dedo e caneta.
  *
  * Substituiu o drag-and-drop nativo do HTML5, que **não emite evento nenhum em touch**. O tipo de
@@ -35,11 +41,11 @@ export const useKanbanDrag = ({
   onDrop,
   scrollRef,
 }: {
-  onDrop: (dealId: string, stageId: string) => void;
+  onDrop: (dealId: string, alvo: DropTarget) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
 }) => {
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overStage, setOverStage] = useState<string | null>(null);
+  const [alvo, setAlvo] = useState<DropTarget | null>(null);
   /** Posição do cartão que acompanha o ponteiro. Sem ele, arrastar não mostra nada acontecendo. */
   const [ghost, setGhost] = useState<DragGhost | null>(null);
 
@@ -69,13 +75,24 @@ export const useKanbanDrag = ({
     arrastando.current = false;
     pararAutoScroll();
     setDragId(null);
-    setOverStage(null);
+    setAlvo(null);
     setGhost(null);
   }, []);
 
-  const stageSob = (x: number, y: number) =>
-    (document.elementFromPoint(x, y)?.closest("[data-stage-id]") as HTMLElement | null)?.dataset
-      .stageId ?? null;
+  /**
+   * Coluna primeiro, funil depois: os dois nunca se sobrepõem na tela, mas a ordem deixa explícito
+   * que soltar dentro do quadro é sempre mover de estágio. O `data-pipeline-id` fica em cada item
+   * da lista, nunca no `aside` — no elemento de fora, soltar em qualquer sobra de espaço do painel
+   * viraria transferência.
+   */
+  const alvoSob = (x: number, y: number): DropTarget | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const stage = el?.closest("[data-stage-id]") as HTMLElement | null;
+    if (stage?.dataset.stageId) return { tipo: "stage", id: stage.dataset.stageId };
+    const pipeline = el?.closest("[data-pipeline-id]") as HTMLElement | null;
+    if (pipeline?.dataset.pipelineId) return { tipo: "pipeline", id: pipeline.dataset.pipelineId };
+    return null;
+  };
 
   /**
    * Rola a faixa de colunas quando o ponteiro encosta na borda.
@@ -106,7 +123,7 @@ export const useKanbanDrag = ({
     arrastando.current = true;
     setDragId(id);
     setGhost({ dealId: id, x, y });
-    setOverStage(stageSob(x, y));
+    setAlvo(alvoSob(x, y));
     // o dedo cobre o cartão: sem um aviso, não há como saber que a espera acabou
     navigator.vibrate?.(12);
   }, []);
@@ -135,15 +152,20 @@ export const useKanbanDrag = ({
         return;
       }
 
+      const atual = alvoSob(e.clientX, e.clientY);
       setGhost({ dealId: inicio.id, x: e.clientX, y: e.clientY });
-      setOverStage(stageSob(e.clientX, e.clientY));
-      acompanharBorda(e.clientX);
+      setAlvo(atual);
+      // sobre a lista de funis o auto-scroll não vale: no desktop ela fica à esquerda do quadro,
+      // então o ponteiro está permanentemente dentro da faixa de borda e o kanban rolaria sozinho
+      // enquanto se mira o funil de destino
+      if (atual?.tipo === "pipeline") pararAutoScroll();
+      else acompanharBorda(e.clientX);
     };
 
     const soltar = (e: PointerEvent) => {
       const id = armado.current?.id;
       const estavaArrastando = arrastando.current;
-      const destino = estavaArrastando ? stageSob(e.clientX, e.clientY) : null;
+      const destino = estavaArrastando ? alvoSob(e.clientX, e.clientY) : null;
 
       limpar();
       if (!estavaArrastando) return;
@@ -187,7 +209,10 @@ export const useKanbanDrag = ({
 
   return {
     dragId,
-    overStage,
+    // `overStage`/`overPipeline` separados, e não o alvo cru: o anel da coluna já compara por id no
+    // quadro, e derivar aqui evita mexer no caminho de arraste que já funciona
+    overStage: alvo?.tipo === "stage" ? alvo.id : null,
+    overPipeline: alvo?.tipo === "pipeline" ? alvo.id : null,
     ghost,
     cardProps: (dealId: string) => ({
       onPointerDown: (e: React.PointerEvent) => onPointerDown(e, dealId),

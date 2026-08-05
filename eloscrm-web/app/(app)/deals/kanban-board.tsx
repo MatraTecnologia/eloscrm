@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, Building2, Plus, Settings2, Trash2, User } from "lucide-react";
 import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { toast } from "sonner";
-import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
+import { useBulkTransferDeals, useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
+import { usePipelines } from "@/lib/queries/pipelines";
 import { useClients } from "@/lib/queries/clients";
 import { useMembers } from "@/lib/queries/members";
 import { useProperties } from "@/lib/queries/properties";
@@ -33,8 +34,17 @@ import { useKanbanDrag } from "./use-kanban-drag";
 import { StageManagerDialog } from "./stage-manager-dialog";
 import { TransferPipelineDialog } from "./transfer-pipeline-dialog";
 
-export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
+export const KanbanBoard = ({
+  pipeline,
+  onDropTargetChange,
+}: {
+  pipeline: Pipeline;
+  /** avisa a página qual funil da lista está sob o cartão arrastado, para ela destacá-lo */
+  onDropTargetChange?: (pipelineId: string | null) => void;
+}) => {
   const { data: deals, isLoading } = useDeals(pipeline.id);
+  const { data: pipelines } = usePipelines();
+  const transferir = useBulkTransferDeals();
   const { data: clients } = useClients({ status: "ALL" });
   const { data: members } = useMembers();
   const { data: properties } = useProperties();
@@ -68,6 +78,26 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     }
   };
 
+  /**
+   * Soltar sobre outro funil da lista lateral: o negócio vai para o primeiro estágio dele. É a
+   * transferência de sempre, só que sem abrir diálogo — o estágio de entrada é o começo do funil.
+   *
+   * Só o cartão arrastado vai, mesmo que ele esteja entre os selecionados: arrastar um e mover
+   * cinco seria surpresa. Para vários de uma vez existe a barra de seleção.
+   */
+  const soltarNoFunil = async (dealId: string, pipelineId: string) => {
+    if (pipelineId === pipeline.id) return;
+    const destino = pipelines?.find((p) => p.id === pipelineId);
+    const primeiro = [...(destino?.stages ?? [])].sort((a, b) => a.position - b.position)[0];
+    if (!primeiro) return;
+    try {
+      await transferir.mutateAsync({ dealIds: [dealId], pipelineId, stageId: primeiro.id });
+      toast.success(`Negócio movido para ${destino?.name} · ${primeiro.name}`);
+    } catch {
+      toast.error("Não foi possível mover o negócio de funil");
+    }
+  };
+
   /** Destino escolhido — por arraste ou pelo menu "Mover para". A regra é a mesma nos dois. */
   const enviarPara = async (id: string, stageId: string) => {
     const deal = deals?.find((d) => d.id === id);
@@ -85,8 +115,19 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     await moveDeal(id, { stageId, ...reopened });
   };
 
-  const { dragId, overStage, ghost, cardProps } = useKanbanDrag({ onDrop: enviarPara, scrollRef });
+  const { dragId, overStage, overPipeline, ghost, cardProps } = useKanbanDrag({
+    onDrop: (dealId, alvo) =>
+      alvo.tipo === "stage" ? enviarPara(dealId, alvo.id) : soltarNoFunil(dealId, alvo.id),
+    scrollRef,
+  });
   const ghostDeal = ghost ? deals?.find((d) => d.id === ghost.dealId) : null;
+
+  // o funil sob o cursor é destacado pelo painel, que é irmão deste componente: quem os junta é a
+  // página. Em efeito, e não no render, porque escrever no estado do pai durante o render do filho
+  // é o que o React proíbe.
+  useEffect(() => {
+    onDropTargetChange?.(overPipeline);
+  }, [overPipeline, onDropTargetChange]);
 
   const handleDelete = async (deal: Deal) => {
     try {
@@ -351,7 +392,12 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
         // fora do fluxo e sem capturar ponteiro: `elementFromPoint` precisa enxergar a coluna por
         // baixo, senão o alvo do arraste seria sempre o próprio fantasma
         <div
-          className="pointer-events-none fixed z-50 w-64 -translate-x-1/2 -translate-y-1/2 rotate-2 rounded-lg border bg-card p-3 shadow-lg"
+          className={cn(
+            "pointer-events-none fixed z-50 w-64 -translate-x-1/2 rotate-2 rounded-lg border bg-card p-3 shadow-lg",
+            // sobre a lista de funis o cartão sobe: centrado no dedo, ele tapava justamente o funil
+            // que está sendo mirado, e o destaque do destino ficava invisível
+            overPipeline ? "-translate-y-[135%]" : "-translate-y-1/2",
+          )}
           style={{ left: ghost.x, top: ghost.y }}
         >
           <div className="text-sm font-medium">{ghostDeal.title}</div>
