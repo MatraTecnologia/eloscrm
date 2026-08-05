@@ -32,16 +32,18 @@ export default function DealsPage() {
       )}
 
       {!!org && isLoading && (
-        <div className="flex flex-1 gap-6">
-          <Skeleton className="h-full w-60" />
+        // o esqueleto acompanha o layout real: no celular a lista de funis é uma faixa no topo,
+        // não uma coluna de 240px
+        <div className="flex flex-1 flex-col gap-4 md:flex-row md:gap-6">
+          <Skeleton className="h-12 w-full md:h-full md:w-60" />
           <Skeleton className="h-full flex-1" />
         </div>
       )}
 
       {!!org && !isLoading && !!pipelines?.length && (
-        <div className="flex min-h-0 flex-1 gap-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
           <PipelinePanel pipelines={pipelines} activeId={active?.id} onSelect={setSelectedId} />
-          <div className="min-w-0 flex-1">{active && <KanbanBoard pipeline={active} />}</div>
+          <div className="min-h-0 min-w-0 flex-1">{active && <KanbanBoard pipeline={active} />}</div>
         </div>
       )}
     </div>

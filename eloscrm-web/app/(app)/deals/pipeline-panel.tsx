@@ -44,23 +44,37 @@ export const PipelinePanel = ({
   };
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col rounded-xl border bg-card p-3">
-      <div className="flex items-center justify-between px-1 pb-2">
-        <span className="text-sm font-semibold">Pipelines</span>
+    // Coluna ao lado do funil no desktop; em tela estreita, uma faixa rolável no topo — 240px fixos
+    // tomavam mais da metade de um celular e deixavam o kanban espremido num vão de 150px.
+    <aside className="flex w-full shrink-0 items-center gap-2 rounded-xl border bg-card p-2 md:w-60 md:flex-col md:items-stretch md:p-3">
+      {/* `contents` desmancha esta linha no celular: o botão de novo funil passa a ser filho direto
+          da faixa, sem o título ocupar uma segunda linha só para ele */}
+      <div className="contents md:flex md:items-center md:justify-between md:px-1 md:pb-2">
+        <span className="hidden text-sm font-semibold md:inline">Pipelines</span>
         <PipelineFormDialog
           onCreated={onSelect}
           trigger={
-            <Button variant="ghost" size="icon" className="size-7" title="Novo pipeline">
+            <Button
+              variant="ghost"
+              size="icon"
+              // `order-last` porque, com o `contents` acima, o botão vira irmão da faixa e nasceria
+              // antes dela — criar funil é a ação menos frequente, fica no fim
+              className="order-last size-8 shrink-0 md:order-none md:size-7"
+              title="Novo pipeline"
+            >
               <Plus className="size-4" />
             </Button>
           }
         />
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto md:w-full md:flex-col md:gap-0.5 md:overflow-visible">
         {pipelines.map((p) => (
           <div
             key={p.id}
-            className={cn("group flex items-center gap-1 rounded-lg", activeId === p.id && "bg-accent")}
+            className={cn(
+              "group flex shrink-0 items-center gap-1 rounded-lg md:shrink",
+              activeId === p.id && "bg-accent",
+            )}
           >
             <button
               onClick={() => onSelect(p.id)}

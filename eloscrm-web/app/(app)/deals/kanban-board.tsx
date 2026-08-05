@@ -99,7 +99,9 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      {/* `flex-wrap`: em tela estreita os dois botões descem para a linha de baixo em vez de
+          espremerem o nome do funil até ele quebrar no meio */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{pipeline.name}</h2>
         <div className="flex gap-2">
           <StageManagerDialog
