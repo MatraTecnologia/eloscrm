@@ -31,11 +31,18 @@ import { useProperties } from '@/lib/queries/properties'
 import type { Deal, Stage } from '@/lib/types'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Building2, CalendarPlus, ExternalLink, User } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  Building2,
+  CalendarPlus,
+  ExternalLink,
+  User,
+} from 'lucide-react'
 import { WhatsappIcon } from '@/components/icons/whatsapp'
 import Link from 'next/link'
 import { useState } from 'react'
 import { DealForm } from './deal-form'
+import { TransferPipelineDialog } from './transfer-pipeline-dialog'
 
 const TAB_CLASS = 'data-active:text-primary after:bg-primary'
 
@@ -90,6 +97,7 @@ export const DealDetailDialog = ({
   nativeButton?: boolean
 }) => {
   const [open, setOpen] = useState(false)
+  const [transferindo, setTransferindo] = useState(false)
   const { data: clients } = useClients({ status: 'ALL' })
   const { data: members } = useMembers()
   const { data: properties } = useProperties()
@@ -127,6 +135,16 @@ export const DealDetailDialog = ({
               criado em{' '}
               {format(parseISO(deal.createdAt), 'dd/MM/yyyy', { locale: ptBR })}
             </span>
+            {/* fica no cabeçalho, e não no formulário: trocar de funil não é editar um campo do
+                negócio — é tirá-lo desta tela, já que o kanban aberto é de um funil só */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="ms-auto"
+              onClick={() => setTransferindo(true)}
+            >
+              <ArrowRightLeft className="size-3.5" /> Transferir de funil
+            </Button>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {client && (
@@ -147,7 +165,8 @@ export const DealDetailDialog = ({
                 rel="noreferrer"
                 className="flex items-center gap-1.5 hover:text-foreground hover:underline"
               >
-                <WhatsappIcon className="size-3.5" /> {formatPhone(client.phone)}
+                <WhatsappIcon className="size-3.5" />{' '}
+                {formatPhone(client.phone)}
               </a>
             )}
             <span className="flex items-center gap-1.5">
@@ -219,6 +238,17 @@ export const DealDetailDialog = ({
             <AuditFeed entityType="DEAL" entityId={deal.id} />
           </TabsContent>
         </Tabs>
+
+        {/* fechar o detalhe ao transferir não é cosmético: o card que renderiza este dialog pertence
+            ao kanban do funil de origem e some no refetch, levando o dialog junto — melhor sair
+            junto com a ação do que ser desmontado no meio dela */}
+        <TransferPipelineDialog
+          deal={deal}
+          currentPipelineId={pipelineId}
+          open={transferindo}
+          onOpenChange={setTransferindo}
+          onTransferred={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   )

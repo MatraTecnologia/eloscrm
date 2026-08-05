@@ -27,15 +27,32 @@ const ensureRelationsInOrg = async (orgId: string, data: CreateDealInput | Updat
   }
 };
 
-// stageId no histórico não diz nada a quem lê; o nome do estágio é o que interessa
-const stageNames = async (orgId: string, fromId: string, toId: string) => {
-  const stages = await prisma.stage.findMany({
-    where: { id: { in: [fromId, toId] }, organizationId: orgId },
-    select: { id: true, name: true },
-  });
-  const byId = new Map(stages.map((stage) => [stage.id, stage.name]));
+// id no histórico não diz nada a quem lê; o nome é o que interessa. Serve estágio e funil, que
+// mudam juntos na transferência.
+const nameChange = (rows: { id: string; name: string }[], fromId: string, toId: string) => {
+  const byId = new Map(rows.map((row) => [row.id, row.name]));
   return { from: byId.get(fromId) ?? null, to: byId.get(toId) ?? null };
 };
+
+const stageNames = async (orgId: string, fromId: string, toId: string) =>
+  nameChange(
+    await prisma.stage.findMany({
+      where: { id: { in: [fromId, toId] }, organizationId: orgId },
+      select: { id: true, name: true },
+    }),
+    fromId,
+    toId,
+  );
+
+const pipelineNames = async (orgId: string, fromId: string, toId: string) =>
+  nameChange(
+    await prisma.pipeline.findMany({
+      where: { id: { in: [fromId, toId] }, organizationId: orgId },
+      select: { id: true, name: true },
+    }),
+    fromId,
+    toId,
+  );
 
 export const create = async (orgId: string, data: CreateDealInput, actor: Actor) => {
   await ensureRelationsInOrg(orgId, data);
@@ -54,24 +71,31 @@ export const create = async (orgId: string, data: CreateDealInput, actor: Actor)
 export const update = async (orgId: string, id: string, data: UpdateDealInput, actor: Actor) => {
   const deal = await getById(orgId, id);
   await ensureRelationsInOrg(orgId, data);
-  // mover um negócio é sempre dentro do mesmo pipeline: pipelineId do update é ignorado
-  const { pipelineId: _pipelineId, ...rest } = data;
-  if (rest.stageId) await assertStageInOrgPipeline(orgId, deal.pipelineId, rest.stageId);
+  // O funil de destino manda na validação do estágio — checar contra o funil atual recusaria toda
+  // transferência. O estágio já vem obrigatório junto do funil (ver o schema), e é ele quem prova
+  // que o destino é desta imobiliária: `assertStageInOrgPipeline` só aceita estágio da org que
+  // pertença ao funil informado.
+  const targetPipelineId = data.pipelineId ?? deal.pipelineId;
+  if (data.stageId) await assertStageInOrgPipeline(orgId, targetPipelineId, data.stageId);
 
-  const updated = await repo.updateDealById(id, rest);
-  const changes = diffFields(deal, rest);
+  const updated = await repo.updateDealById(id, data);
+  const changes = diffFields(deal, data);
 
-  if (changes.stageId) {
+  if (changes.stageId || changes.pipelineId) {
     // um PATCH pode mudar estágio e dono juntos; o movimento no funil é o que a timeline destaca
-    const names = await stageNames(orgId, deal.stageId, rest.stageId!);
+    const stage = changes.stageId ? await stageNames(orgId, deal.stageId, data.stageId!) : null;
+    const pipeline = changes.pipelineId
+      ? await pipelineNames(orgId, deal.pipelineId, data.pipelineId!)
+      : null;
     delete changes.stageId;
+    delete changes.pipelineId;
     await recordAudit({
       orgId,
       entityType: AuditEntity.DEAL,
       entityId: id,
       action: AuditAction.STAGE_CHANGED,
       actor,
-      changes: { stage: names, ...changes },
+      changes: { ...(pipeline ? { pipeline } : {}), ...(stage ? { stage } : {}), ...changes },
     });
     return updated;
   }

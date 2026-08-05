@@ -180,6 +180,8 @@ export const FIELD_LABELS: Record<string, string> = {
   clientId: "Cliente",
   propertyId: "Imóvel",
   stage: "Estágio",
+  // a transferência entre funis grava os dois: "Funil: Vendas → Locação" e o estágio de entrada
+  pipeline: "Funil",
   status: "Status",
   title: "Título",
   value: "Valor",

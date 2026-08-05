@@ -99,8 +99,20 @@ export const useUpdateDeal = () => {
       return data;
     },
     // Optimistic move entre estágios (mesmo pipeline): atualiza o cache antes da resposta.
+    //
+    // Transferência entre funis fica de fora: pintar o estágio de destino nas listas do funil de
+    // origem tiraria o card de toda coluna até o refetch chegar. O gate é o pipeline **mudar**, não
+    // vir no PATCH — o formulário do negócio manda `pipelineId` em toda edição, e testar presença
+    // mataria também o arraste no kanban.
     onMutate: async ({ id, input }) => {
-      if (!input.stageId) return { snapshots: [] as [readonly unknown[], Deal[] | undefined][] };
+      const cached = qc
+        .getQueriesData<Deal[]>({ queryKey: ["deals"] })
+        .flatMap(([, deals]) => deals ?? [])
+        .find((deal) => deal.id === id);
+      const trocaDeFunil = !!input.pipelineId && !!cached && input.pipelineId !== cached.pipelineId;
+      if (!input.stageId || trocaDeFunil) {
+        return { snapshots: [] as [readonly unknown[], Deal[] | undefined][] };
+      }
       await qc.cancelQueries({ queryKey: ["deals"] });
       const snapshots = qc.getQueriesData<Deal[]>({ queryKey: ["deals"] });
       for (const [key, deals] of snapshots) {

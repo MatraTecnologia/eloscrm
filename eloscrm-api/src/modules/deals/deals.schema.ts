@@ -19,15 +19,23 @@ export const createDealSchema = z.object({
 });
 
 // `.partial()` no schema de criação daria o mesmo resultado hoje, mas escrever à mão deixa explícito
-// que os obrigatórios continuam recusando string vazia quando vêm — e que pipelineId, aceito aqui,
-// é descartado pelo service (negócio não troca de funil).
-export const updateDealSchema = z.object({
-  clientId: z.string().min(1).optional(),
-  title: z.string().min(1).optional(),
-  pipelineId: z.string().min(1).optional(),
-  stageId: z.string().min(1).optional(),
-  ...optionalFields,
-});
+// que os obrigatórios continuam recusando string vazia quando vêm.
+//
+// `pipelineId` sem `stageId` é recusado aqui, e não no service, porque o estado que ele produziria é
+// insalvável: o negócio ficaria apontando para um estágio de outro funil, sumiria de toda coluna do
+// kanban e só apareceria como "—" nas listagens. Trocar de funil é sempre escolher onde cair nele.
+export const updateDealSchema = z
+  .object({
+    clientId: z.string().min(1).optional(),
+    title: z.string().min(1).optional(),
+    pipelineId: z.string().min(1).optional(),
+    stageId: z.string().min(1).optional(),
+    ...optionalFields,
+  })
+  .refine((data) => !data.pipelineId || !!data.stageId, {
+    message: "Informe o estágio de destino ao trocar o negócio de funil",
+    path: ["stageId"],
+  });
 
 export const listDealsQuerySchema = z.object({
   pipelineId: z.string().optional(),

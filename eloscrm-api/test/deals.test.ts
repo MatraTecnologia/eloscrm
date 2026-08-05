@@ -160,4 +160,94 @@ describe("deals", () => {
     expect(movedToOtherOrg.statusCode).toBe(404);
     expect(movedToOtherOrg.json().error.code).toBe("NOT_FOUND");
   });
+
+  describe("transferência entre funis", () => {
+    let outroPipelineId = "";
+    let outroStageId = "";
+
+    const criarNegocio = async (title: string) => {
+      const client = await createClient({ cookie }, `Cliente ${title}`);
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/deals",
+        headers: { cookie },
+        payload: { clientId: client.id, title, pipelineId, stageId },
+      });
+      return res.json();
+    };
+
+    beforeAll(async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/pipelines",
+        headers: { cookie },
+        payload: { name: `Locação ${stamp}`, stages: [{ name: "Visita" }, { name: "Contrato" }] },
+      });
+      const pipeline = res.json() as Pipeline;
+      outroPipelineId = pipeline.id;
+      outroStageId = pipeline.stages[0].id;
+    });
+
+    it("transfere para outro funil e registra funil e estágio no histórico", async () => {
+      const deal = await criarNegocio("Negócio Transferido");
+
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/deals/${deal.id}`,
+        headers: { cookie },
+        payload: { pipelineId: outroPipelineId, stageId: outroStageId },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ pipelineId: outroPipelineId, stageId: outroStageId });
+
+      const audit = await app.inject({
+        method: "GET",
+        url: `/v1/audit-events?entityType=DEAL&entityId=${deal.id}`,
+        headers: { cookie },
+      });
+      const evento = (audit.json() as { action: string; changes: Record<string, unknown> }[]).find(
+        (e) => e.action === "STAGE_CHANGED",
+      );
+      // o histórico guarda nome, não id: "Funil de Vendas → Locação" é o que o corretor lê
+      expect(evento?.changes).toMatchObject({
+        pipeline: { from: expect.any(String), to: `Locação ${stamp}` },
+        stage: { from: expect.any(String), to: "Visita" },
+      });
+    });
+
+    it("recusa trocar de funil sem dizer o estágio de destino (422)", async () => {
+      const deal = await criarNegocio("Negócio Sem Estágio");
+
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/deals/${deal.id}`,
+        headers: { cookie },
+        payload: { pipelineId: outroPipelineId },
+      });
+      expect(res.statusCode).toBe(422);
+
+      // e o negócio continua inteiro no funil de origem, não meio no destino
+      const depois = await app.inject({
+        method: "GET",
+        url: `/v1/deals/${deal.id}`,
+        headers: { cookie },
+      });
+      expect(depois.json()).toMatchObject({ pipelineId, stageId });
+    });
+
+    it("recusa estágio que não é do funil de destino (404)", async () => {
+      const deal = await criarNegocio("Negócio Estágio Errado");
+
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/deals/${deal.id}`,
+        headers: { cookie },
+        // estágio do funil de origem, funil de destino: a combinação que deixaria o negócio
+        // apontando para um estágio que não existe no funil dele
+        payload: { pipelineId: outroPipelineId, stageId: otherStageId },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("NOT_FOUND");
+    });
+  });
 });
