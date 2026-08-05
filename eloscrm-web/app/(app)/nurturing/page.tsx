@@ -193,7 +193,7 @@ export default function NurturingPage() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">{memberName(client.ownerId)}</TableCell>
                         <TableCell>
-                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                          <div className="flex justify-end gap-1 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                             {digits && (
                               <Button
                                 variant="ghost"

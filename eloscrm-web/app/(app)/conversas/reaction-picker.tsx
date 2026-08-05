@@ -33,11 +33,12 @@ export const ReactionPicker = ({
             variant="ghost"
             size="icon"
             aria-label="Reagir"
-            // some até o hover, mas continua alcançável por teclado, como o botão de responder.
+            // Visível por padrão; só some onde existe mouse — e o gate é a capacidade de hover,
+            // não o breakpoint: tablet grande passa de `md`, é toque, e o botão sumiria.
             // Aberto, fica visível — senão o popover flutua ancorado no nada.
             className={cn(
-              "size-7 shrink-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
-              open ? "opacity-100" : "opacity-0",
+              "size-7 shrink-0 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100",
+              open && "[@media(hover:hover)]:opacity-100",
             )}
           >
             <SmilePlus className="size-3.5" />

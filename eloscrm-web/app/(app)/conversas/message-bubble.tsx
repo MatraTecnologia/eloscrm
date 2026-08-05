@@ -162,7 +162,7 @@ export const MessageBubble = ({
       aria-label="Responder"
       // invisível até o hover, mas continua na ordem de tabulação: quem navega por teclado
       // encontra o botão pelo foco
-      className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+      className="size-7 shrink-0 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
       onClick={() => onReply(message)}
     >
       <CornerUpLeft className="size-3.5" />

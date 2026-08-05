@@ -68,7 +68,7 @@ export const MessageActions = ({
             variant="ghost"
             size="icon"
             aria-label="Mais ações"
-            className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+            className="size-7 shrink-0 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
           />
         }
       >

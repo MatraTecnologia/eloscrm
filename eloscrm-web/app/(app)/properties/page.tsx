@@ -81,7 +81,7 @@ const PropertyCard = ({ property, onDelete }: { property: Property; onDelete: (i
           {propertyStatusLabels[property.status]}
         </span>
 
-        <div className="absolute top-3 right-3 flex gap-1 opacity-90 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+        <div className="absolute top-3 right-3 flex gap-1 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
           <PropertyDialog
             property={property}
             trigger={

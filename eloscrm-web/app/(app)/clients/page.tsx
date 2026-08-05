@@ -182,7 +182,7 @@ export default function ClientsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <div className="flex justify-end gap-1 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                           {client.status === "ACTIVE" ? (
                             <NurtureDialog
                               client={client}
