@@ -82,6 +82,10 @@ mostra dados da org anterior.
 - **Nunca emoji na UI** — ícones Lucide.
 - Cores de gráfico: usar `CHART_COLORS` de `app/(app)/dashboard/chart-colors.ts`, cuja ordem foi
   escolhida para não deixar adjacentes o par com pior separação para daltonismo.
-- Kanban usa HTML5 drag-and-drop nativo (`draggable`), sem lib de DnD.
+- Kanban usa **Pointer Events** (`use-kanban-drag.ts`), sem lib de DnD. Não use `draggable` do
+  HTML5: ele não emite evento nenhum em touch, e o board ficou inoperável em celular e tablet até
+  ser trocado. O tipo de entrada vem do `pointerType` do evento, **não** de `useIsMobile` — um iPad
+  em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
+  que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-07-27 11:15 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 14:48 (-03)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Building2, Plus, Settings2, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
@@ -26,6 +26,8 @@ import {
 import { DealDetailDialog } from "./deal-detail-dialog";
 import { DealFormDialog } from "./deal-form-dialog";
 import { LostReasonDialog } from "./lost-reason-dialog";
+import { MoveDealMenu } from "./move-deal-menu";
+import { useKanbanDrag } from "./use-kanban-drag";
 import { StageManagerDialog } from "./stage-manager-dialog";
 
 export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
@@ -35,10 +37,9 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
   const { data: properties } = useProperties();
   const move = useUpdateDeal();
   const remove = useDeleteDeal();
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overStage, setOverStage] = useState<string | null>(null);
   // negócio arrastado para estágio de perda espera aqui até alguém dizer o motivo
   const [pendingLoss, setPendingLoss] = useState<{ deal: Deal; stage: Stage } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const stages = [...pipeline.stages].sort((a, b) => a.position - b.position);
   const clientNames = new Map((clients ?? []).map((c) => [c.id, c.name] as const));
@@ -53,11 +54,8 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     }
   };
 
-  const drop = async (stageId: string) => {
-    setOverStage(null);
-    const id = dragId;
-    setDragId(null);
-    if (!id) return;
+  /** Destino escolhido — por arraste ou pelo menu "Mover para". A regra é a mesma nos dois. */
+  const enviarPara = async (id: string, stageId: string) => {
     const deal = deals?.find((d) => d.id === id);
     if (!deal || deal.stageId === stageId) return;
 
@@ -72,6 +70,8 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
     const reopened = from?.isLost && deal.lostReason ? { lostReason: null } : {};
     await moveDeal(id, { stageId, ...reopened });
   };
+
+  const { dragId, overStage, cardProps } = useKanbanDrag({ onDrop: enviarPara, scrollRef });
 
   const handleDelete = async (deal: Deal) => {
     try {
@@ -107,24 +107,16 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-2">
+      <div ref={scrollRef} className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-2">
         {stages.map((stage) => {
           const stageDeals = deals?.filter((d) => d.stageId === stage.id) ?? [];
           const stageTotal = stageDeals.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0);
           return (
             <div
               key={stage.id}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOverStage(stage.id);
-              }}
-              // relatedTarget dentro da própria coluna = passou por cima de um card filho;
-              // sem esse teste o realce pisca a cada card que o cursor cruza
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-                setOverStage((s) => (s === stage.id ? null : s));
-              }}
-              onDrop={() => drop(stage.id)}
+              // o hit-test do arraste acha a coluna por este atributo, com elementFromPoint —
+              // não há mais onDragOver/onDrop, que só existiam para mouse
+              data-stage-id={stage.id}
               className={cn(
                 "flex w-72 shrink-0 flex-col rounded-xl bg-muted/40 transition-shadow",
                 overStage === stage.id && "ring-2 ring-primary ring-inset",
@@ -151,7 +143,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                 {isLoading && <Skeleton className="h-16 w-full" />}
                 {!isLoading && stageDeals.length === 0 && (
                   <div className="rounded-lg border border-dashed py-6 text-center text-xs text-muted-foreground">
-                    Arraste um negócio para cá
+                    Nenhum negócio neste estágio
                   </div>
                 )}
                 {stageDeals.map((deal) => {
@@ -169,15 +161,17 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                         nativeButton={false}
                         trigger={
                           <div
-                            draggable
-                            onDragStart={() => setDragId(deal.id)}
-                            onDragEnd={() => setDragId(null)}
+                            {...cardProps(deal.id)}
+                            // `pan-y` deixa a coluna rolar com o dedo começando no cartão e ainda
+                            // assim entrega o movimento do arraste; `none` mataria a rolagem, que
+                            // é a maior parte do uso
+                            style={{ touchAction: "pan-y" }}
                             className={cn(
-                              "cursor-grab rounded-lg border bg-card p-3 shadow-sm transition-colors hover:border-primary/50 active:cursor-grabbing",
-                              dragId === deal.id && "opacity-40",
+                              "cursor-grab touch-pan-y rounded-lg border bg-card p-3 shadow-sm transition-colors select-none hover:border-primary/50 active:cursor-grabbing",
+                              dragId === deal.id && "opacity-40 ring-2 ring-primary",
                             )}
                           >
-                            <div className="pr-6 text-sm font-medium">{deal.title}</div>
+                            <div className="pr-14 text-sm font-medium">{deal.title}</div>
                             {clientName && (
                               <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                 <User className="size-3 shrink-0" />
@@ -218,6 +212,11 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                           </div>
                         }
                       />
+                      <MoveDealMenu
+                        deal={deal}
+                        stages={stages}
+                        onMove={(stageId) => enviarPara(deal.id, stageId)}
+                      />
                       <AlertDialog>
                         <AlertDialogTrigger
                           render={
@@ -225,7 +224,7 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                               variant="ghost"
                               size="icon-sm"
                               aria-label={`Excluir ${deal.title}`}
-                              className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100"
+                              className="absolute top-1.5 right-1.5 opacity-100 transition-opacity md:opacity-0 md:group-focus-within/card:opacity-100 md:group-hover/card:opacity-100"
                             >
                               <Trash2 className="size-3.5 text-destructive" />
                             </Button>
