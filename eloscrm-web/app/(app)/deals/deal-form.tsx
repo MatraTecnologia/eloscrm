@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { currencyToInput, formatCurrencyInput, parseCurrencyInput } from "@/lib/labels";
+import {
+  currencyToInput,
+  formatCurrencyInput,
+  parseCurrencyInput,
+} from "@/lib/labels";
 import { useClients } from "@/lib/queries/clients";
 import { useCreateDeal, useUpdateDeal } from "@/lib/queries/deals";
 import { useMembers } from "@/lib/queries/members";
@@ -46,7 +50,9 @@ export const DealForm = ({
 
   const [title, setTitle] = useState(deal?.title ?? "");
   const [clientId, setClientId] = useState(deal?.clientId ?? "");
-  const [stageId, setStageId] = useState(deal?.stageId ?? defaultStageId ?? stages[0]?.id ?? "");
+  const [stageId, setStageId] = useState(
+    deal?.stageId ?? defaultStageId ?? stages[0]?.id ?? "",
+  );
   // state guarda o valor já formatado (1.250.000,00); vira número só no submit
   const [value, setValue] = useState(currencyToInput(deal?.value));
   const [propertyId, setPropertyId] = useState(deal?.propertyId ?? NONE);
@@ -65,7 +71,6 @@ export const DealForm = ({
     const input = {
       title: title.trim(),
       clientId,
-      pipelineId,
       stageId,
       value: parseCurrencyInput(value) ?? null,
       propertyId: propertyId === NONE ? null : propertyId,
@@ -73,8 +78,13 @@ export const DealForm = ({
       lostReason: lostReason.trim() || null,
     };
     try {
+      // `pipelineId` só na criação. Editar não é lugar de trocar o negócio de funil — isso tem
+      // diálogo próprio —, e mandá-lo aqui era inofensivo só enquanto a API o descartava: agora ele
+      // transfere. Hoje o valor sempre bate com o do negócio (o kanban passa o funil aberto), mas
+      // uma tela que reaproveite este formulário com outro funil transformaria "Salvar alterações"
+      // numa transferência silenciosa — ou num 404, se o estágio for do funil de origem.
       if (editing) await update.mutateAsync({ id: deal.id, input });
-      else await create.mutateAsync(input);
+      else await create.mutateAsync({ ...input, pipelineId });
       toast.success(editing ? "Negócio atualizado" : "Negócio criado");
       onSaved?.();
     } catch {
@@ -86,7 +96,11 @@ export const DealForm = ({
     <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="deal-title">Título</Label>
-        <Input id="deal-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <Input
+          id="deal-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -96,7 +110,10 @@ export const DealForm = ({
             <SelectTrigger className="w-full">
               {/* sem a função, o trigger mostra o id cru em vez do nome */}
               <SelectValue>
-                {(v: string) => clients?.find((c) => c.id === v)?.name ?? "Selecione um cliente"}
+                {(v: string) =>
+                  clients?.find((c) => c.id === v)?.name ??
+                  "Selecione um cliente"
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -115,7 +132,10 @@ export const DealForm = ({
             <SelectTrigger className="w-full">
               <SelectValue>
                 {(v: string) =>
-                  v === NONE ? "Sem responsável" : (members?.find((m) => m.userId === v)?.name ?? "Sem responsável")
+                  v === NONE
+                    ? "Sem responsável"
+                    : (members?.find((m) => m.userId === v)?.name ??
+                      "Sem responsável")
                 }
               </SelectValue>
             </SelectTrigger>
@@ -142,11 +162,16 @@ export const DealForm = ({
               // tirar o negócio da perda apaga o motivo, igual ao arrasto no kanban: sem isto o
               // negócio reaberto seguiria carregando um "perdido porque…" que não vale mais.
               // O texto continua no histórico.
-              if (!stages.find((stage) => stage.id === next)?.isLost) setLostReason("");
+              if (!stages.find((stage) => stage.id === next)?.isLost)
+                setLostReason("");
             }}
           >
             <SelectTrigger className="w-full">
-              <SelectValue>{(v: string) => stages.find((s) => s.id === v)?.name ?? "Estágio"}</SelectValue>
+              <SelectValue>
+                {(v: string) =>
+                  stages.find((s) => s.id === v)?.name ?? "Estágio"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {stages.map((stage) => (
@@ -178,11 +203,17 @@ export const DealForm = ({
 
       <div className="space-y-1.5">
         <Label>Imóvel</Label>
-        <Select value={propertyId} onValueChange={(v) => setPropertyId(v ?? NONE)}>
+        <Select
+          value={propertyId}
+          onValueChange={(v) => setPropertyId(v ?? NONE)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue>
               {(v: string) =>
-                v === NONE ? "Sem imóvel vinculado" : (properties?.find((p) => p.id === v)?.title ?? "Sem imóvel vinculado")
+                v === NONE
+                  ? "Sem imóvel vinculado"
+                  : (properties?.find((p) => p.id === v)?.title ??
+                    "Sem imóvel vinculado")
               }
             </SelectValue>
           </SelectTrigger>
@@ -211,8 +242,15 @@ export const DealForm = ({
       )}
 
       <div className="flex justify-end pt-1">
-        <Button onClick={submit} disabled={saving || !title.trim() || !clientId || !stageId}>
-          {saving ? "Salvando…" : editing ? "Salvar alterações" : "Criar negócio"}
+        <Button
+          onClick={submit}
+          disabled={saving || !title.trim() || !clientId || !stageId}
+        >
+          {saving
+            ? "Salvando…"
+            : editing
+              ? "Salvar alterações"
+              : "Criar negócio"}
         </Button>
       </div>
     </div>

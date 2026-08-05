@@ -70,8 +70,18 @@ export const TransferPipelineDialog = ({
 
   const transferir = async () => {
     if (!pipelineId || !stageId) return
+    // negócio que estava perdido e vai para um estágio aberto do outro funil não pode carregar o
+    // motivo da perda — é o mesmo cuidado que o kanban toma ao arrastar para fora de "Perdido"
+    const destinoPerdido = estagios.find(s => s.id === stageId)?.isLost
     try {
-      await update.mutateAsync({ id: deal.id, input: { pipelineId, stageId } })
+      await update.mutateAsync({
+        id: deal.id,
+        input: {
+          pipelineId,
+          stageId,
+          ...(destinoPerdido ? {} : { lostReason: null }),
+        },
+      })
       toast.success(`Negócio transferido para ${destino?.name}`)
       onOpenChange(false)
       onTransferred?.()
