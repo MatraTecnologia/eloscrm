@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Building2, Phone, Plus, Settings2, Trash2, User } from "lucide-react";
+import { Building2, Plus, Settings2, Trash2, User } from "lucide-react";
+import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { toast } from "sonner";
 import { useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
 import { useClients } from "@/lib/queries/clients";
@@ -181,9 +182,11 @@ export const KanbanBoard = ({ pipeline }: { pipeline: Pipeline }) => {
                             )}
                             {client?.phone && (
                               // lead que entra pelo WhatsApp só tem nome e telefone; sem ele no
-                              // card, ligar exige abrir o negócio e depois a ficha
+                              // card, falar com a pessoa exige abrir o negócio e depois a ficha.
+                              // Aqui é só exibição: o card inteiro é o gatilho do negócio e a área
+                              // do arraste, então um link dentro competiria com os dois.
                               <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                                <Phone className="size-3 shrink-0" />
+                                <WhatsappIcon className="size-3 shrink-0" />
                                 <span className="truncate tabular-nums">
                                   {formatPhone(client.phone)}
                                 </span>
