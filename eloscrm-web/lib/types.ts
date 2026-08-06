@@ -207,6 +207,16 @@ export type Member = {
   role: string;
 };
 
+// Envelope paginado por cursor de GET /v1/audit-events — mesmo formato de outras listas do app.
+export type AuditSearchResult = { items: AuditEvent[]; nextCursor?: string };
+
+/**
+ * GET /v1/audit-events/actors. `actorId` é `null` para os atores sintéticos (Automação, WhatsApp,
+ * Sistema) — `recordAudit` grava `null` quando `actor.id` é vazio, então esses eventos só se
+ * distinguem entre si por `actorName`/`source`, nunca por `actorId`.
+ */
+export type AuditActor = { actorId: string | null; actorName: string; events: number };
+
 export type Comment = {
   id: string;
   organizationId: string;
