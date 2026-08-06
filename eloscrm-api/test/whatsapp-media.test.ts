@@ -93,6 +93,52 @@ describe("download de mídia", () => {
     expect(await getFile(R2_PRIVATE_BUCKET, salvo.mediaKey!)).toEqual(ARQUIVO);
   });
 
+  it("conversa excluída durante o download não deixa arquivo órfão no R2", async () => {
+    // uma conversa própria, para a exclusão deste caso não levar as mensagens dos outros testes
+    const conversaEfemera = await prisma.conversation.create({
+      data: {
+        organizationId: orgId,
+        instanceId: (await prisma.uazapiInstance.findFirstOrThrow({ where: { organizationId: orgId } })).id,
+        chatid: `efemera-${stamp}@s.whatsapp.net`,
+      },
+    });
+    const msg = await prisma.whatsappMessage.create({
+      data: {
+        organizationId: orgId,
+        conversationId: conversaEfemera.id,
+        providerId: `owner:RACE${seq++}`,
+        direction: "inbound",
+        type: "image",
+        status: "sent",
+        mediaStatus: "pending",
+        mediaMime: "image/jpeg",
+        mediaSize: 18196,
+        sentAt: new Date(),
+      },
+    });
+    remote.messages.download.mockResolvedValue({
+      success: true,
+      data: { fileURL: "https://uazapi.test/corrida.jpg", mimetype: "image/jpeg" },
+    });
+
+    // a corrida: o corretor exclui a conversa no exato intervalo entre o download e o update. É a
+    // única janela em que a chave não chega ao banco, e por isso a purga da exclusão não a alcança.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        await prisma.conversation.delete({ where: { id: conversaEfemera.id } });
+        return new Response(ARQUIVO, { status: 200 });
+      }),
+    );
+
+    await processMediaJob({ messageId: msg.id });
+
+    const key = `org/${orgId}/whatsapp/${conversaEfemera.id}/${msg.id}.jpg`;
+    // subiu (o upload já estava em curso) e foi apagado pelo próprio worker
+    await expect(getFile(R2_PRIVATE_BUCKET, key)).rejects.toThrow();
+    expect(await prisma.whatsappMessage.findUnique({ where: { id: msg.id } })).toBeNull();
+  });
+
   it("endereça o download pelo id do provedor, sem o prefixo owner:", async () => {
     const msg = await criarMensagem({ providerId: "554391834229:ABC123", providerMessageId: "ABC123" });
     remote.messages.download.mockResolvedValue({
