@@ -5,6 +5,7 @@ import { snapshotOf, truncate } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
+import * as comments from "../comments/comments.service.js";
 import * as repo from "./activities.repo.js";
 import type { CreateActivityInput, ListActivitiesQuery, UpdateActivityInput } from "./activities.schema.js";
 
@@ -88,6 +89,7 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
   // activity é alvo direto de anexo (não só colateral de cascata de cliente/deal): sem purgar aqui,
   // apagar a atividade direto deixaria o objeto correspondente esquecido no bucket privado
   await attachments.purgeForEntities(orgId, AuditEntity.ACTIVITY, [id]);
+  await comments.purgeForEntities(orgId, AuditEntity.ACTIVITY, [id]);
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({
     orgId,

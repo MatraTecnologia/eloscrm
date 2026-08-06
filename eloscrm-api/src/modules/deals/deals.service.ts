@@ -5,6 +5,7 @@ import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
+import * as comments from "../comments/comments.service.js";
 import { assertStageInOrgPipeline } from "../pipelines/pipelines.service.js";
 import * as repo from "./deals.repo.js";
 import type {
@@ -269,12 +270,11 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
     where: { organizationId: orgId, dealId: id },
     select: { id: true },
   });
+  const activityIds = dealActivities.map((activity) => activity.id);
   await attachments.purgeForEntities(orgId, AuditEntity.DEAL, [id]);
-  await attachments.purgeForEntities(
-    orgId,
-    AuditEntity.ACTIVITY,
-    dealActivities.map((activity) => activity.id),
-  );
+  await attachments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
+  await comments.purgeForEntities(orgId, AuditEntity.DEAL, [id]);
+  await comments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
 
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({

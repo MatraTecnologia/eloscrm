@@ -4,6 +4,7 @@ import { diffFields, recordAudit } from "../../lib/audit.js";
 import { labelOf, snapshotOf } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import * as attachments from "../attachments/attachments.service.js";
+import * as comments from "../comments/comments.service.js";
 import * as repo from "./properties.repo.js";
 import type { CreatePropertyInput, ListPropertiesQuery, UpdatePropertyInput } from "./properties.schema.js";
 
@@ -49,6 +50,7 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
   const property = await getById(orgId, id);
   // deal.propertyId é SetNull no schema (não cascateia): só o imóvel precisa ter os anexos purgados
   await attachments.purgeForEntities(orgId, AuditEntity.PROPERTY, [id]);
+  await comments.purgeForEntities(orgId, AuditEntity.PROPERTY, [id]);
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({
     orgId,

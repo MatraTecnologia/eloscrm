@@ -5,6 +5,7 @@ import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
+import * as comments from "../comments/comments.service.js";
 import * as repo from "./clients.repo.js";
 import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from "./clients.schema.js";
 
@@ -65,13 +66,14 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
     select: { id: true },
   });
 
+  const activityIds = clientActivities.map((activity) => activity.id);
   await attachments.purgeForEntities(orgId, AuditEntity.CLIENT, [id]);
   await attachments.purgeForEntities(orgId, AuditEntity.DEAL, dealIds);
-  await attachments.purgeForEntities(
-    orgId,
-    AuditEntity.ACTIVITY,
-    clientActivities.map((activity) => activity.id),
-  );
+  await attachments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
+  // comentário também não tem FK: sem isto, o do lead e o dos negócios dele ficam órfãos no banco
+  await comments.purgeForEntities(orgId, AuditEntity.CLIENT, [id]);
+  await comments.purgeForEntities(orgId, AuditEntity.DEAL, dealIds);
+  await comments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
 
   // o evento vem antes do delete: se gravar depois e a escrita do evento falhar, o cliente some sem deixar rastro
   await recordAudit({

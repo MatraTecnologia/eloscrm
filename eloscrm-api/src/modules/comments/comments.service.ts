@@ -123,3 +123,16 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
   );
   await repo.deleteCommentById(id);
 };
+
+/**
+ * Apaga os comentários de entidades que deixaram de existir.
+ *
+ * `Comment` não tem FK para o alvo — o par (entityType, entityId) serve lead, negócio, imóvel e
+ * atividade —, então o cascade do Postgres **não** o alcança: excluir um lead deixava os comentários
+ * dele no banco para sempre, invisíveis (o feed busca por entityType+entityId) e carregando texto
+ * escrito por pessoas. Mesmo motivo e mesma forma de `attachments.purgeForEntities`.
+ */
+export const purgeForEntities = async (orgId: string, entityType: AuditEntity, entityIds: string[]) => {
+  if (entityIds.length === 0) return;
+  await repo.deleteForEntities(orgId, entityType, entityIds);
+};
