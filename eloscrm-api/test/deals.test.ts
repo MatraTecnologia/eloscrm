@@ -207,7 +207,7 @@ describe("deals", () => {
         url: `/v1/audit-events?entityType=DEAL&entityId=${deal.id}`,
         headers: { cookie },
       });
-      const evento = (audit.json() as { action: string; changes: Record<string, unknown> }[]).find(
+      const evento = (audit.json().items as { action: string; changes: Record<string, unknown> }[]).find(
         (e) => e.action === "STAGE_CHANGED",
       );
       // o histórico guarda nome, não id: "Funil de Vendas → Locação" é o que o corretor lê
@@ -281,7 +281,7 @@ describe("deals", () => {
       });
       // o lote tem ação própria (TRANSFERRED): no log geral ela separa a transferência em massa do
       // arrasto de um cartão no kanban
-      const evento = (audit.json() as { action: string; changes: Record<string, unknown> }[]).find(
+      const evento = (audit.json().items as { action: string; changes: Record<string, unknown> }[]).find(
         (e) => e.action === "TRANSFERRED" && "pipeline" in (e.changes ?? {}),
       );
       // o segundo saiu do segundo estágio, não do primeiro: o lote não pode carimbar a mesma origem
