@@ -1,6 +1,7 @@
 import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
+import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
@@ -59,6 +60,34 @@ const pipelineNames = async (orgId: string, fromId: string, toId: string) =>
     toId,
   );
 
+/**
+ * Onde o negócio estava, por nome — vai desnormalizado no evento.
+ *
+ * A tela de auditoria mostra "no funil Vendas, estágio Proposta" sem join, e continua mostrando depois
+ * de o funil ou o lead terem sido apagados. É por isso que é nome, não id.
+ */
+const contextOf = async (
+  orgId: string,
+  deal: { clientId?: string | null; pipelineId: string; stageId: string },
+) => {
+  const [client, pipeline, stage] = await Promise.all([
+    deal.clientId ? repo.findClientInOrg(orgId, deal.clientId) : null,
+    prisma.pipeline.findFirst({
+      where: { id: deal.pipelineId, organizationId: orgId },
+      select: { name: true },
+    }),
+    prisma.stage.findFirst({
+      where: { id: deal.stageId, organizationId: orgId },
+      select: { name: true },
+    }),
+  ]);
+  const context: Record<string, unknown> = {};
+  if (client) context.clientName = client.name;
+  if (pipeline) context.pipelineName = pipeline.name;
+  if (stage) context.stageName = stage.name;
+  return Object.keys(context).length ? context : undefined;
+};
+
 export const create = async (orgId: string, data: CreateDealInput, actor: Actor) => {
   await ensureRelationsInOrg(orgId, data);
   await assertStageInOrgPipeline(orgId, data.pipelineId, data.stageId);
@@ -67,8 +96,11 @@ export const create = async (orgId: string, data: CreateDealInput, actor: Actor)
     orgId,
     entityType: AuditEntity.DEAL,
     entityId: deal.id,
+    entityLabel: deal.title,
     action: AuditAction.CREATED,
     actor,
+    context: await contextOf(orgId, deal),
+    snapshot: snapshotOf(AuditEntity.DEAL, deal),
   });
   return deal;
 };
@@ -110,9 +142,11 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
       orgId,
       entityType: AuditEntity.DEAL,
       entityId: id,
+      entityLabel: deal.title,
       action: AuditAction.STAGE_CHANGED,
       actor,
       changes: { ...(pipeline ? { pipeline } : {}), ...(stage ? { stage } : {}), ...changes },
+      context: await contextOf(orgId, { ...deal, pipelineId: targetPipelineId, stageId: data.stageId ?? deal.stageId }),
     });
     return updated;
   }
@@ -121,9 +155,11 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
     orgId,
     entityType: AuditEntity.DEAL,
     entityId: id,
+    entityLabel: (updated ?? deal).title,
     action: changes.ownerId ? AuditAction.OWNER_CHANGED : AuditAction.UPDATED,
     actor,
     changes,
+    context: await contextOf(orgId, deal),
   });
   return updated;
 };
@@ -170,6 +206,11 @@ export const bulkTransfer = async (
   const pipelineName = new Map(pipelines.map((p) => [p.id, p.name]));
 
   const alvoIds = alvos.map((deal) => deal.id);
+  // o createMany escreve os eventos na mão (é o que permite uma transação só com o updateMany), então
+  // o que o recordAudit resolveria sozinho — nome da org e origem do ator — precisa vir junto aqui
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+  const orgName = org?.name ?? null;
+
   await prisma.$transaction([
     repo.transferDeals(orgId, alvoIds, {
       pipelineId,
@@ -182,9 +223,18 @@ export const bulkTransfer = async (
         organizationId: orgId,
         entityType: AuditEntity.DEAL,
         entityId: deal.id,
-        action: AuditAction.STAGE_CHANGED,
+        entityLabel: deal.title,
+        // ação própria: no log geral, "transferiu" separa o movimento em lote do arrasto de um cartão,
+        // e o requestId comum é o que deixa a tela mostrar o lote como uma operação
+        action: AuditAction.TRANSFERRED,
+        source: actor.source ?? "USER",
         actorId: actor.id || null,
         actorName: actor.name,
+        actorEmail: actor.email ?? null,
+        organizationName: orgName,
+        ip: actor.ip ?? null,
+        userAgent: actor.userAgent ?? null,
+        requestId: actor.requestId ?? null,
         changes: {
           ...(deal.pipelineId !== pipelineId
             ? {
@@ -211,7 +261,7 @@ export const bulkTransfer = async (
 };
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {
-  await getById(orgId, id);
+  const deal = await getById(orgId, id);
 
   // activities cascateiam do deal no schema; purgar os anexos delas antes, senão o objeto no
   // bucket privado fica sem ninguém que saiba dele depois do delete em cascata
@@ -231,8 +281,12 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
     orgId,
     entityType: AuditEntity.DEAL,
     entityId: id,
+    // lidos antes do delete, junto do getById do começo: depois não há mais de onde tirar
+    entityLabel: deal.title,
     action: AuditAction.DELETED,
     actor,
+    context: await contextOf(orgId, deal),
+    snapshot: snapshotOf(AuditEntity.DEAL, deal),
   });
   await repo.deleteDealById(id);
 };

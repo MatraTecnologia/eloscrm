@@ -89,7 +89,10 @@ export const nurture = async (orgId: string, id: string, data: NurtureInput, act
     orgId,
     entityType: AuditEntity.CLIENT,
     entityId: id,
-    action: AuditAction.UPDATED,
+    entityLabel: client.name,
+    // ação própria, não UPDATED: na tela de auditoria "colocou em nutrição" é o que o gestor procura,
+    // e um "alterou" com quatro campos de diff não diz isso
+    action: AuditAction.NURTURED,
     actor,
     changes: diffFields(client, state),
   });
@@ -142,7 +145,8 @@ export const reactivate = async (
     orgId,
     entityType: AuditEntity.CLIENT,
     entityId: id,
-    action: AuditAction.UPDATED,
+    entityLabel: client.name,
+    action: AuditAction.REACTIVATED,
     actor,
     changes: diffFields(client, state),
   });

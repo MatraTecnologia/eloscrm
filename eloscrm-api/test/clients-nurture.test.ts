@@ -67,11 +67,14 @@ describe("PATCH de cliente e o estado de nutrição", () => {
     expect(updated.nurtureReason).toBe(NurtureReason.ADIADO);
     expect(updated.status).toBe(ClientStatus.NURTURING);
 
+    // UPDATED, e não NURTURED: reagendar por PATCH é edição de campo. NURTURED é só do endpoint
+    // /nurture, que passa pela regra dos negócios abertos
     const events = await prisma.auditEvent.findMany({
       where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
     });
     expect(events).toHaveLength(1);
     expect(Object.keys(events[0].changes as object)).toContain("nurtureUntil");
+    expect(events[0].entityLabel).toBe(client.name);
   });
 
   // a invariante do módulo: se o PATCH pudesse mexer no status, existiria um caminho que muda o
@@ -269,7 +272,7 @@ describe("POST /clients/:id/nurture", () => {
     });
 
     const events = await prisma.auditEvent.findMany({
-      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "NURTURED" },
     });
     expect(events).toHaveLength(1);
     const changes = events[0].changes as Record<string, { from: unknown; to: unknown }>;
@@ -640,7 +643,7 @@ describe("POST /clients/:id/reactivate", () => {
     });
 
     const events = await prisma.auditEvent.findMany({
-      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "UPDATED" },
+      where: { organizationId: orgId, entityType: "CLIENT", entityId: client.id, action: "REACTIVATED" },
       orderBy: { createdAt: "asc" },
     });
     const last = events[events.length - 1].changes as Record<string, { from: unknown; to: unknown }>;

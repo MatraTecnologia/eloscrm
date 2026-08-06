@@ -279,8 +279,10 @@ describe("deals", () => {
         url: `/v1/audit-events?entityType=DEAL&entityId=${segundo.id}`,
         headers: { cookie },
       });
+      // o lote tem ação própria (TRANSFERRED): no log geral ela separa a transferência em massa do
+      // arrasto de um cartão no kanban
       const evento = (audit.json() as { action: string; changes: Record<string, unknown> }[]).find(
-        (e) => e.action === "STAGE_CHANGED" && "pipeline" in (e.changes ?? {}),
+        (e) => e.action === "TRANSFERRED" && "pipeline" in (e.changes ?? {}),
       );
       // o segundo saiu do segundo estágio, não do primeiro: o lote não pode carimbar a mesma origem
       // em todo mundo
