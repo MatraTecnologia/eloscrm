@@ -58,9 +58,10 @@ describe("GET /v1/audit-events", () => {
       headers: { cookie },
     });
     expect(res.statusCode).toBe(200);
-    const events = res.json();
-    expect(events.map((e: { action: string }) => e.action)).toEqual(["UPDATED", "CREATED"]);
-    expect(events[0].changes).toEqual({ phone: { from: null, to: "43988887777" } });
+    // a rota devolve envelope com cursor: a tela de auditoria pagina, e o feed por entidade lê items
+    const { items } = res.json();
+    expect(items.map((e: { action: string }) => e.action)).toEqual(["UPDATED", "CREATED"]);
+    expect(items[0].changes).toEqual({ phone: { from: null, to: "43988887777" } });
   });
 
   it("não vaza histórico de outra organização", async () => {
@@ -70,6 +71,6 @@ describe("GET /v1/audit-events", () => {
       headers: { cookie: cookieB },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([]);
+    expect(res.json().items).toEqual([]);
   });
 });

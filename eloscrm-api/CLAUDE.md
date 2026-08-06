@@ -62,6 +62,8 @@ pnpm db:push                              # aplica o schema no banco de dev (sem
 pnpm db:push:test                         # o mesmo no banco de teste (.env.test)
 pnpm db:generate                          # prisma generate (client em src/generated, gitignored)
 pnpm db:seed                              # tsx prisma/seed.ts
+pnpm audit:purge [--days N] [--dry-run]   # purga da auditoria por retenção (sem Redis, é a rotina)
+pnpm audit:backfill-labels [--dry-run]    # rótulo nos eventos gravados antes da coluna existir
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
@@ -187,6 +189,49 @@ de diagnóstico e precisa de fila e limite.
 **Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
 a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
 
+## Auditoria
+
+Toda escrita do domínio, da integração e da identidade grava um `AuditEvent`. Plano completo com as
+decisões: `docs/superpowers/plans/2026-08-06-auditoria-completa.md`.
+
+- **`recordAudit` de `src/lib/audit.ts` é o único ponto de escrita.** O ator chega como último
+  parâmetro (`Actor`), e é ele que carrega a origem: `actorOf(request)` preenche `ip`, `userAgent`,
+  `requestId` e `source: USER`; `AUTOMATION_ACTOR`/`WEBHOOK_ACTOR`/`SYSTEM_ACTOR` cobrem o que ninguém
+  clicou.
+- **O evento tem de ser legível depois de o dado ser apagado.** Por isso `entityLabel` (nome no
+  momento do fato), `context` (lead/funil/estágio por nome, não id) e `snapshot`. Consequência
+  prática: **`DELETED` grava antes do delete** — depois não há mais de onde tirar rótulo nem snapshot.
+- **`snapshot` só aceita a allowlist de `src/lib/audit-snapshot.ts`**, com telefone e e-mail
+  mascarados e **sem** conteúdo de conversa. Isso sobrevive à exclusão pedida pelo titular, e quem
+  limita no tempo é `AUDIT_RETENTION_DAYS`. Nunca espalhe a entidade (`{ ...client }`).
+- **A lista do que NÃO é auditado é decisão, não esquecimento** (D7 do plano): ingestão de mensagem
+  recebida, `markRead`, download de mídia pelo worker, ecos de `messages_update`, reações,
+  `pin`/`favorite` e leituras em geral. Auditar o webhook duplicaria a tabela de mensagens — ele
+  reentrega, e a captura real da uazapi teve dez tentativas do mesmo evento. `test/audit-coverage.test.ts`
+  assere zero eventos nesses caminhos.
+- **`test/audit-coverage.test.ts` também varre o `src`** e falha se alguma ação do enum nunca é
+  emitida. Foi assim que `INVITE_REVOKED` apareceu como lacuna. Ação nova no enum precisa de emissor.
+- **Leitura:** `GET /v1/audit-events` devolve `{ items, nextCursor }`. Com `entityId` é o histórico de
+  um item e vale para qualquer membro; **sem** `entityId` é a busca da imobiliária e exige gestor. A
+  checagem é `isOrgManager` **no service** — guard de papel no arquivo de rota fecharia a aba
+  Histórico do corretor junto. `/actors` e `/export` são de gestor, e exportar se audita.
+- **Retenção:** `AUDIT_RETENTION_DAYS` (365 por padrão, mínimo 30) e `purgeOlderThan` em lotes de 5
+  mil — um `DELETE` gigante numa tabela com quatro índices segura escrita, e auditoria é escrita em
+  todo request. Com `REDIS_URL` o job é agendado no boot (03:20, America/Sao_Paulo); **sem Redis não
+  há agendamento**, e a rotina é `pnpm audit:purge` (aceita `--days` e `--dry-run`). A purga se
+  audita: um `ORGANIZATION/PURGED` por organização afetada.
+- **Auditoria de identidade engole a própria falha de propósito** (`safeRecord` em
+  `src/modules/audit/identity.audit.ts`): erro em hook do Better Auth trancaria o login. Mas conta e
+  emite `process.emitWarning`, e o número sai em `GET /health` (`auditFailures`) — sem isso, trilha
+  quebrada por schema desatualizado seria idêntica a um dia sem logins.
+- **Excluir a organização apaga tudo que é dela**, log inclusive: as 13 relações de `Organization` são
+  `onDelete: Cascade`. O que o Postgres não alcança está em
+  `src/modules/audit/organization-purge.service.ts`, chamado pelo `beforeDeleteOrganization` — objetos
+  do R2 (anexos e mídias) e a instância remota na uazapi. Roda **antes** do delete, porque depois não
+  há mais chave nem token. Quem apagar a org direto no banco continua deixando objeto órfão no bucket.
+- **Eventos antigos sem rótulo:** `pnpm audit:backfill-labels` (com `--dry-run`) preenche o que ainda
+  existe; item já apagado fica sem nome, porque ele não está em lugar nenhum.
+
 ## Erro 5xx com código próprio
 
 `httpError()` marca `expose: true`, e o `errorHandler` só mascara 5xx **sem** essa marca. É o que
@@ -208,4 +253,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   retenção/LGPD, rate limit no webhook. São decisões adiadas com o motivo registrado, não bugs;
   leia antes de propor qualquer um deles como "melhoria óbvia".
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-04 12:37 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-06 12:35 (-03)

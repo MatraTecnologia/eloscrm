@@ -1,14 +1,19 @@
 import {
+  AuditAction,
+  AuditEntity,
   UazapiInstanceLogEvent as LogEvent,
   UazapiInstanceLogSource as LogSource,
   UazapiInstanceStatus,
   type UazapiInstance,
 } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
+import { diffFields, recordAudit } from "../../lib/audit.js";
+import { maskPhone, snapshotOf } from "../../lib/audit-snapshot.js";
 import { encryptToken, hashToken, last4, newWebhookSecret } from "../../lib/crypto.js";
 import { conflict, forbidden, notFound } from "../../lib/http-error.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import { prisma } from "../../lib/prisma.js";
+import { R2_PRIVATE_BUCKET, deleteFiles } from "../../lib/storage.js";
 import type { UazapiClient } from "../../lib/uazapi/index.js";
 import { applyInstanceSnapshot, parseStatus, str } from "../../lib/uazapi/snapshot.js";
 import type { Result } from "../../lib/uazapi/types.js";
@@ -49,6 +54,11 @@ const requireInstance = async (orgId: string) => {
   if (!instance) throw notFound("Nenhum WhatsApp conectado nesta imobiliária");
   return instance;
 };
+
+// repetido em toda ação de gestão: o número do dono só entra no evento de auditoria quando já foi
+// identificado (webhook/sync já rodou) — instância recém-criada ainda não tem ownerJid
+const ownerContext = (instance: UazapiInstance) =>
+  instance.ownerJid ? { ownerJid: maskPhone(instance.ownerJid) } : undefined;
 
 const remoteDeletedError = () =>
   conflict(
@@ -150,6 +160,19 @@ export const create = async (orgId: string, data: CreateInstanceInput, actor: Ac
     payload: created.data,
   });
 
+  // ao lado do UazapiInstanceLog acima (D12), não no lugar: o log é diagnóstico técnico e cascateia
+  // com a instância, este evento é a trilha de gestão e sobrevive a ela
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: instance.name,
+    action: AuditAction.CREATED,
+    actor,
+    context: ownerContext(instance),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, instance),
+  });
+
   // A instância já existe no provedor e o token é o único jeito de alcançá-la: apagar o registro
   // local aqui deixaria uma instância órfã consumindo o limite do servidor. Falha recuperável —
   // a tela mostra o aviso e o botão Reconciliar.
@@ -205,19 +228,97 @@ export const rename = async (orgId: string, data: RenameInstanceInput, actor: Ac
       message: `${instance.name} → ${data.name}`,
     },
   );
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: updated.name,
+    action: AuditAction.UPDATED,
+    actor,
+    changes: diffFields(instance, data),
+    context: ownerContext(updated),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, updated),
+  });
+
   return serializeInstance(updated);
+};
+
+/**
+ * Apaga a instância **no provedor**.
+ *
+ * Separado de `remove` porque a exclusão da imobiliária precisa do mesmo efeito sem passar pelo
+ * `requireManager` — quem apaga a organização é `owner` por definição do Better Auth, e ali não há
+ * `actor` de rota para checar.
+ */
+export const deleteRemoteInstance = async (instance: { remoteDeletedAt: Date | null; tokenEnc: string }) => {
+  if (instance.remoteDeletedAt) return;
+  const config = requireIntegration();
+  const result = await instanceClient(config, instance.tokenEnc).instance.delete();
+  // "já sumiu do provedor" é exatamente o estado que queremos alcançar — não é erro
+  if (!result.success && !isInstanceGone(result.error)) throw uazapiError(result.error);
+};
+
+/**
+ * O que a remoção da conexão vai levar.
+ *
+ * `Conversation.instanceId` é `onDelete: Cascade`: remover a instância apaga **todo o atendimento** da
+ * imobiliária, não só o vínculo com o provedor. A tela precisa dizer isso com número, porque o texto
+ * antigo ("o histórico de conexão se perde") deixava entender que só a conexão ia embora.
+ */
+export const deletionPreview = async (orgId: string, actor: Actor) => {
+  await requireManager(orgId, actor);
+  const instance = await requireInstance(orgId);
+
+  const emConversas = { conversation: { instanceId: instance.id } };
+  const [conversations, messages, midias, bytes] = await Promise.all([
+    prisma.conversation.count({ where: { instanceId: instance.id } }),
+    prisma.whatsappMessage.count({ where: emConversas }),
+    prisma.whatsappMessage.count({ where: { ...emConversas, mediaKey: { not: null } } }),
+    prisma.whatsappMessage.aggregate({
+      where: { ...emConversas, mediaKey: { not: null } },
+      _sum: { mediaSize: true },
+    }),
+  ]);
+
+  return {
+    instance: { name: instance.name, status: instance.status, connected: !!instance.ownerJid },
+    conversations,
+    messages,
+    storage: { objects: midias, bytes: bytes._sum.mediaSize ?? 0 },
+  };
 };
 
 export const remove = async (orgId: string, actor: Actor) => {
   await requireManager(orgId, actor);
   const instance = await requireInstance(orgId);
 
-  if (!instance.remoteDeletedAt) {
-    const config = requireIntegration();
-    const result = await instanceClient(config, instance.tokenEnc).instance.delete();
-    // "já sumiu do provedor" é exatamente o estado que queremos alcançar — não é erro
-    if (!result.success && !isInstanceGone(result.error)) throw uazapiError(result.error);
-  }
+  await deleteRemoteInstance(instance);
+
+  // As conversas cascateiam da instância, e com elas as mensagens — mas o Postgres não sabe do
+  // bucket: sem purgar aqui, toda mídia já baixada fica órfã e paga no R2. Antes do delete, porque
+  // depois não há mais `mediaKey` de onde tirar a chave.
+  const comMidia = await prisma.whatsappMessage.findMany({
+    where: { conversation: { instanceId: instance.id }, mediaKey: { not: null } },
+    select: { mediaKey: true },
+  });
+  await deleteFiles(
+    R2_PRIVATE_BUCKET,
+    comMidia.flatMap((m) => (m.mediaKey ? [m.mediaKey] : [])),
+  );
+
+  // antes do delete (D6): entityLabel/snapshot só são legíveis enquanto a linha existe, e o
+  // UazapiInstanceLog some junto com a instância — este evento é o que sobra
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: instance.name,
+    action: AuditAction.DELETED,
+    actor,
+    context: ownerContext(instance),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, instance),
+  });
 
   await repo.remove(instance.id);
 };
@@ -244,6 +345,18 @@ export const connect = async (orgId: string, data: ConnectInstanceInput, actor: 
     newStatus: parseStatus(remote.status) ?? instance.status,
     payload: result,
   });
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: updated.name,
+    action: AuditAction.CONNECTED,
+    actor,
+    context: ownerContext(updated),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, updated),
+  });
+
   return serializeInstance(updated);
 };
 
@@ -275,6 +388,18 @@ export const disconnect = async (orgId: string, actor: Actor) => {
       payload: result,
     },
   );
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: updated.name,
+    action: AuditAction.DISCONNECTED,
+    actor,
+    context: ownerContext(updated),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, updated),
+  });
+
   return serializeInstance(updated);
 };
 
@@ -292,6 +417,18 @@ export const reset = async (orgId: string, actor: Actor) => {
     actorUserId: actor.id,
     payload: result,
   });
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: instance.name,
+    action: AuditAction.RESET,
+    actor,
+    context: ownerContext(instance),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, instance),
+  });
+
   return { ok: true };
 };
 
@@ -314,6 +451,18 @@ export const sync = async (orgId: string, actor: Actor) => {
     message: `sync: ${str(remote.status) ?? "desconhecido"}`,
     payload: result,
   });
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: updated.name,
+    action: AuditAction.SYNCED,
+    actor,
+    context: ownerContext(updated),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, updated),
+  });
+
   return serializeInstance(updated);
 };
 
@@ -367,6 +516,18 @@ export const reconcileWebhook = async (orgId: string, actor: Actor) => {
     actorUserId: actor.id,
     message: "webhook reconciliado",
   });
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: instance.name,
+    action: AuditAction.WEBHOOK_RECONCILED,
+    actor,
+    context: ownerContext(instance),
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, instance),
+  });
+
   return { ok: true };
 };
 
@@ -398,6 +559,18 @@ export const testSend = async (orgId: string, data: TestSendInput, actor: Actor)
     message: `teste enviado para ${data.number}`,
     // o texto da mensagem fica de fora: não tem valor de auditoria e é conteúdo de conversa
     payload: { number: data.number, messageId: result.id, status: result.status },
+  });
+
+  // mesma regra do UazapiInstanceLog acima: destino mascarado e id da mensagem, nunca o texto
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_INSTANCE,
+    entityId: instance.id,
+    entityLabel: instance.name,
+    action: AuditAction.TEST_MESSAGE_SENT,
+    actor,
+    context: { to: maskPhone(data.number), messageId: result.id },
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_INSTANCE, instance),
   });
 
   return { id: result.id, status: result.status ?? null };

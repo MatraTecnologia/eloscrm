@@ -76,11 +76,16 @@ export const deletePipelineById = (id: string) => prisma.pipeline.delete({ where
 
 export const countDealsInPipeline = (pipelineId: string) => prisma.deal.count({ where: { pipelineId } });
 
+// inclui o pipeline (só o nome): é o que o evento de auditoria usa em `context.pipelineName`
 export const findStageInOrg = (orgId: string, id: string) =>
-  prisma.stage.findFirst({ where: { id, organizationId: orgId } });
+  prisma.stage.findFirst({
+    where: { id, organizationId: orgId },
+    include: { pipeline: { select: { name: true } } },
+  });
 
+// ordenado por posição: é a ordem "from" que o evento de REORDERED grava
 export const findStagesInPipeline = (orgId: string, pipelineId: string) =>
-  prisma.stage.findMany({ where: { organizationId: orgId, pipelineId } });
+  prisma.stage.findMany({ where: { organizationId: orgId, pipelineId }, orderBy: { position: "asc" } });
 
 export const maxStagePosition = (pipelineId: string) =>
   prisma.stage.aggregate({ where: { pipelineId }, _max: { position: true } });

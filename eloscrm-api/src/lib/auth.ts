@@ -9,6 +9,8 @@ import { resetPasswordTemplate } from "./email/templates/reset-password.js";
 import { otpCodeTemplate } from "./email/templates/otp-code.js";
 import { passwordChangedTemplate } from "./email/templates/password-changed.js";
 import { changeEmailTemplate } from "./email/templates/change-email.js";
+import * as identity from "../modules/audit/identity.audit.js";
+import { purgeOrganizationAssetsSafely } from "../modules/audit/organization-purge.service.js";
 import { orgInvitationTemplate } from "./email/templates/org-invitation.js";
 
 const isProduction = env.NODE_ENV === "production";
@@ -109,6 +111,41 @@ export const auth = betterAuth({
         });
         void sendEmail({ to: email, ...mail });
       },
+      /**
+       * Excluir imobiliária **não** passa por aqui.
+       *
+       * `DELETE /v1/organization` faz isso, porque o endpoint do plugin não tem como exigir a
+       * confirmação digitada nem garantir a purga do R2 e da uazapi no mesmo caminho. Deixar os dois
+       * abertos seria uma porta lateral que apaga tudo sem confirmação nenhuma.
+       */
+      disableOrganizationDeletion: true,
+      // Só os `after`: a auditoria registra o que aconteceu, não decide se pode acontecer. Cada
+      // adaptador engole a própria falha (ver `safeRecord`), senão um erro de escrita aqui trancaria
+      // criação de organização e convite.
+      organizationHooks: {
+        // O cascade do Postgres apaga as 13 tabelas da imobiliária, mas não sabe do bucket nem da
+        // uazapi: sem isto, excluir a organização deixaria arquivo pago no R2 e o número ainda
+        // conectado no provedor. Antes do delete porque depois não há mais chave nem token.
+        //
+        // Com `disableOrganizationDeletion` acima, este hook não roda hoje — fica de propósito, como
+        // rede de proteção para quem religar a exclusão do plugin ou chamar `auth.api` no servidor.
+        beforeDeleteOrganization: async ({ organization }) =>
+          void (await purgeOrganizationAssetsSafely(organization.id)),
+        afterCreateOrganization: async ({ organization, user }) =>
+          identity.auditOrganizationCreated(organization, user),
+        afterUpdateOrganization: async ({ organization, user }) =>
+          identity.auditOrganizationUpdated(organization, user),
+        afterAddMember: async ({ member, user, organization }) =>
+          identity.auditMemberAdded(member, user, organization),
+        afterRemoveMember: async ({ member, user, organization }) =>
+          identity.auditMemberRemoved(member, user, organization),
+        afterUpdateMemberRole: async ({ member, previousRole, user, organization }) =>
+          identity.auditMemberRoleChanged(member, previousRole, user, organization),
+        afterCreateInvitation: async ({ invitation, inviter, organization }) =>
+          identity.auditInvitationCreated(invitation, inviter, organization),
+        afterCancelInvitation: async ({ invitation, cancelledBy, organization }) =>
+          identity.auditInvitationRevoked(invitation, cancelledBy, organization),
+      },
     }),
     emailOTP({
       expiresIn: OTP_EXPIRES_IN_SECONDS,
@@ -137,6 +174,14 @@ export const auth = betterAuth({
           });
           return { data: { ...session, activeOrganizationId: membership?.organizationId ?? null } };
         },
+        // sessão criada é login. O `after` recebe a linha já gravada, então o activeOrganizationId
+        // resolvido acima está lá — é dele que o evento tira o tenant.
+        after: async (session) => identity.auditSignIn(session),
+      },
+      // logout: o hook de delete entrega a linha antes de ela sumir, e é a única chance de saber de
+      // quem era a sessão
+      delete: {
+        after: async (session) => identity.auditSignOut(session),
       },
     },
   },

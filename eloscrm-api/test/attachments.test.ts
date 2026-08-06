@@ -399,3 +399,65 @@ describe("anexos", () => {
     expect(afterDelete.ok).toBe(false);
   });
 });
+
+describe("auditoria de anexos", () => {
+  it("grava UPLOADED no confirm, DOWNLOADED no link e DELETED antes de apagar", async () => {
+    const asked = await askUpload("relatorio.pdf");
+    const { attachmentId, uploadUrl } = asked.json();
+    await putToBucket(uploadUrl);
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/attachments/${attachmentId}/confirm`,
+      headers: { cookie },
+    });
+    const uploaded = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        organizationId: orgId,
+        entityType: "ATTACHMENT",
+        entityId: attachmentId,
+        action: "UPLOADED",
+      },
+    });
+    expect(uploaded.entityLabel).toBe("relatorio.pdf");
+    expect(uploaded.snapshot).toMatchObject({
+      filename: "relatorio.pdf",
+      contentType: "application/pdf",
+      size: Buffer.byteLength(BODY),
+    });
+
+    await app.inject({
+      method: "GET",
+      url: `/v1/attachments/${attachmentId}/download-url`,
+      headers: { cookie },
+    });
+    const downloaded = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        organizationId: orgId,
+        entityType: "ATTACHMENT",
+        entityId: attachmentId,
+        action: "DOWNLOADED",
+      },
+    });
+    expect(downloaded.entityLabel).toBe("relatorio.pdf");
+
+    await app.inject({
+      method: "DELETE",
+      url: `/v1/attachments/${attachmentId}`,
+      headers: { cookie },
+    });
+    expect(await prisma.attachment.findUnique({ where: { id: attachmentId } })).toBeNull();
+
+    // o evento sobrevive ao anexo apagado — rótulo e snapshot foram lidos antes do delete
+    const deleted = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        organizationId: orgId,
+        entityType: "ATTACHMENT",
+        entityId: attachmentId,
+        action: "DELETED",
+      },
+    });
+    expect(deleted.entityLabel).toBe("relatorio.pdf");
+    expect(deleted.snapshot).toMatchObject({ filename: "relatorio.pdf" });
+  });
+});

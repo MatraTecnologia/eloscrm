@@ -9,13 +9,13 @@ import { useSession } from "@/lib/auth-client";
 import { useComments, useCreateComment, useDeleteComment, useUpdateComment } from "@/lib/queries/comments";
 import { useMembers } from "@/lib/queries/members";
 import { ENTITY_NOUNS } from "@/lib/labels";
-import type { AuditEntity } from "@/lib/types";
+import type { AnnotatableEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
-export const CommentFeed = ({ entityType, entityId }: { entityType: AuditEntity; entityId: string }) => {
+export const CommentFeed = ({ entityType, entityId }: { entityType: AnnotatableEntity; entityId: string }) => {
   const { data: session } = useSession();
   const { data: comments, isLoading } = useComments(entityType, entityId);
   const create = useCreateComment();

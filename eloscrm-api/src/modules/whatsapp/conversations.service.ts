@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  AuditAction,
+  AuditEntity,
   ClientSource,
   UazapiInstanceStatus,
   WhatsappDirection,
@@ -10,6 +12,8 @@ import {
   type WhatsappReaction,
 } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
+import { recordAudit } from "../../lib/audit.js";
+import { maskPhone, snapshotOf } from "../../lib/audit-snapshot.js";
 import { conflict, notFound } from "../../lib/http-error.js";
 import { formatBrPhone, phoneKey } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
@@ -39,6 +43,20 @@ const conversationSelect = {
   createdAt: true,
   client: { select: { id: true, name: true, phone: true, status: true, temperature: true } },
 } satisfies Prisma.ConversationSelect;
+
+type ConversationLabelSource = {
+  contactName?: string | null;
+  waName?: string | null;
+  phone?: string | null;
+  client?: { name: string } | null;
+};
+
+/**
+ * Nome que identifica a conversa num evento de auditoria — mesma precedência que o header da tela
+ * usa, para o log falar a língua do corretor em vez de mostrar um chatid.
+ */
+export const conversationLabel = (conversation: ConversationLabelSource): string | null =>
+  conversation.client?.name ?? conversation.contactName ?? conversation.waName ?? maskPhone(conversation.phone);
 
 export const list = async (orgId: string, query: ListConversationsQuery) => {
   const where: Prisma.ConversationWhereInput = {
@@ -251,7 +269,7 @@ export const sendText = async (
 ) => {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId: orgId },
-    include: { instance: true },
+    include: { instance: true, client: { select: { name: true } } },
   });
   if (!conversation) throw notFound("Conversa não encontrada");
   if (conversation.instance.remoteDeletedAt) {
@@ -328,6 +346,19 @@ export const sendText = async (
     data: { lastMessageAt: updated.sentAt, lastMessageText: updated.text },
   });
 
+  // grava só depois do envio confirmado: uma tentativa que falhou já fica registrada na bolha
+  // `failed`, e não gera evento — sem `text` no snapshot, porque conteúdo de conversa não é auditoria
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_MESSAGE,
+    entityId: updated.id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.MESSAGE_SENT,
+    actor,
+    context: { conversationId },
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_MESSAGE, updated),
+  });
+
   return serializeMessage(updated, await loadQuoted(conversationId, [updated]));
 };
 
@@ -374,30 +405,68 @@ export const createClientFrom = async (
   );
 
   await prisma.conversation.update({ where: { id }, data: { clientId: client.id } });
+  // a criação do lead já gera CLIENT/CREATED (clients.create); aqui é o vínculo entre conversa e lead
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CONVERSATION,
+    entityId: id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.LINKED,
+    actor,
+    context: { clientName: client.name },
+  });
   return client;
 };
 
-export const linkClient = async (orgId: string, id: string, clientId: string) => {
-  await getById(orgId, id);
+export const linkClient = async (orgId: string, id: string, clientId: string, actor: Actor) => {
+  const conversation = await getById(orgId, id);
   // o lead precisa ser da mesma organização — sem isto, um id chutado ligaria conversa a lead alheio
   const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId } });
   if (!client) throw notFound("Lead não encontrado");
 
   await prisma.conversation.update({ where: { id }, data: { clientId } });
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CONVERSATION,
+    entityId: id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.LINKED,
+    actor,
+    context: { clientName: client.name },
+  });
   return client;
 };
 
-export const unlinkClient = async (orgId: string, id: string) => {
-  await getById(orgId, id);
+export const unlinkClient = async (orgId: string, id: string, actor: Actor) => {
+  const conversation = await getById(orgId, id);
+  // lido antes de limpar: sem isto o evento de UNLINKED não diz de quem a conversa se soltou
+  const clientName = conversation.client?.name ?? null;
   await prisma.conversation.update({ where: { id }, data: { clientId: null } });
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CONVERSATION,
+    entityId: id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.UNLINKED,
+    actor,
+    context: { clientName },
+  });
   return { ok: true };
 };
 
-export const archive = async (orgId: string, id: string, archived: boolean) => {
-  await getById(orgId, id);
+export const archive = async (orgId: string, id: string, archived: boolean, actor: Actor) => {
+  const conversation = await getById(orgId, id);
   await prisma.conversation.update({
     where: { id },
     data: { archivedAt: archived ? new Date() : null },
+  });
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CONVERSATION,
+    entityId: id,
+    entityLabel: conversationLabel(conversation),
+    action: archived ? AuditAction.ARCHIVED : AuditAction.UNARCHIVED,
+    actor,
   });
   return { ok: true };
 };
@@ -415,8 +484,8 @@ export const archive = async (orgId: string, id: string, archived: boolean) => {
  * `deleteFiles` retorna sem chamar o storage. O lead vinculado não é tocado — a relação é dele para
  * a conversa, não o contrário.
  */
-export const remove = async (orgId: string, id: string) => {
-  await getById(orgId, id);
+export const remove = async (orgId: string, id: string, actor: Actor) => {
+  const conversation = await getById(orgId, id);
 
   const comMidia = await prisma.whatsappMessage.findMany({
     where: { conversationId: id, mediaKey: { not: null } },
@@ -426,6 +495,39 @@ export const remove = async (orgId: string, id: string) => {
     R2_PRIVATE_BUCKET,
     comMidia.flatMap((m) => (m.mediaKey ? [m.mediaKey] : [])),
   );
+
+  // contado antes do delete: depois não há mais mensagem nenhuma para contar, e é essa contagem que
+  // fica como prova de que existiu um atendimento
+  const [messageCount, primeira, ultima] = await Promise.all([
+    prisma.whatsappMessage.count({ where: { conversationId: id } }),
+    prisma.whatsappMessage.findFirst({
+      where: { conversationId: id },
+      orderBy: { sentAt: "asc" },
+      select: { sentAt: true },
+    }),
+    prisma.whatsappMessage.findFirst({
+      where: { conversationId: id },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true },
+    }),
+  ]);
+
+  // evento vem antes do delete (D6): falha ao gravar não deixa a conversa sumir sem rastro, e o
+  // rótulo/snapshot só podem ser lidos enquanto a linha ainda existe
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.CONVERSATION,
+    entityId: id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.DELETED,
+    actor,
+    snapshot: snapshotOf(AuditEntity.CONVERSATION, {
+      ...conversation,
+      messageCount,
+      firstMessageAt: primeira?.sentAt ?? null,
+      lastMessageAt: ultima?.sentAt ?? null,
+    }),
+  });
 
   await prisma.conversation.delete({ where: { id } });
 };

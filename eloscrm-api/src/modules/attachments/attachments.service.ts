@@ -1,5 +1,7 @@
-import type { AuditEntity } from "../../generated/prisma/client.js";
+import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
+import { recordAudit } from "../../lib/audit.js";
+import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { httpError, notFound } from "../../lib/http-error.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import {
@@ -62,7 +64,7 @@ export const createUploadUrl = async (orgId: string, data: UploadUrlInput, actor
   return { attachmentId: attachment.id, uploadUrl, key, expiresIn: UPLOAD_EXPIRES_IN };
 };
 
-export const confirm = async (orgId: string, id: string) => {
+export const confirm = async (orgId: string, id: string, actor: Actor) => {
   const attachment = await getOwn(orgId, id);
   // HEAD de verdade: sem isto, um PUT que falhou deixaria linha READY apontando para objeto inexistente
   const head = await headFile(R2_PRIVATE_BUCKET, attachment.key).catch(() => null);
@@ -80,13 +82,23 @@ export const confirm = async (orgId: string, id: string) => {
     throw httpError(422, "UPLOAD_TYPE_MISMATCH", "O arquivo enviado não é do tipo informado");
   }
 
-  return repo.markReady(id, head.contentLength);
+  const ready = await repo.markReady(id, head.contentLength);
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ATTACHMENT,
+    entityId: id,
+    entityLabel: ready.filename,
+    action: AuditAction.UPLOADED,
+    actor,
+    snapshot: snapshotOf(AuditEntity.ATTACHMENT, ready),
+  });
+  return ready;
 };
 
 // aspas no filename quebrariam o header Content-Disposition; sem nada sobrando, um nome genérico
 const sanitizeFilename = (filename: string) => filename.replace(/"/g, "") || "arquivo";
 
-export const downloadUrl = async (orgId: string, id: string) => {
+export const downloadUrl = async (orgId: string, id: string, actor: Actor) => {
   const attachment = await getOwn(orgId, id);
   const url = await getDownloadUrl(
     R2_PRIVATE_BUCKET,
@@ -94,6 +106,15 @@ export const downloadUrl = async (orgId: string, id: string) => {
     DOWNLOAD_EXPIRES_IN,
     sanitizeFilename(attachment.filename),
   );
+  // saída de documento da imobiliária: entra na trilha mesmo sendo leitura, diferente do resto
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ATTACHMENT,
+    entityId: id,
+    entityLabel: attachment.filename,
+    action: AuditAction.DOWNLOADED,
+    actor,
+  });
   return { url, expiresIn: DOWNLOAD_EXPIRES_IN };
 };
 
@@ -103,6 +124,16 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
   if (attachment.uploadedById !== actor.id && !(await isOrgManager(orgId, actor.id))) {
     throw httpError(403, "FORBIDDEN", "Só quem enviou o arquivo ou um gestor pode removê-lo");
   }
+  // o evento vem antes do delete: rótulo e snapshot só existem enquanto a linha existe
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.ATTACHMENT,
+    entityId: id,
+    entityLabel: attachment.filename,
+    action: AuditAction.DELETED,
+    actor,
+    snapshot: snapshotOf(AuditEntity.ATTACHMENT, attachment),
+  });
   // objeto primeiro: linha órfã é recuperável, objeto órfão em bucket privado é invisível para sempre
   await deleteFile(R2_PRIVATE_BUCKET, attachment.key);
   await repo.deleteAttachmentById(id);

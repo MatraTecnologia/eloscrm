@@ -91,10 +91,19 @@ mostra dados da org anterior.
 - `useIsMobile` (`hooks/use-mobile.ts`) responde **"a janela é estreita?"**, não "tem toque?". Serve
   para escolher layout — é o que o `sidebar` faz, trocando barra fixa por drawer — e o corte está
   em 1250px por causa disso. Não use para decidir comportamento de entrada.
+- **`AUDIT_ACTION_LABELS` e `ENTITY_NOUNS` (`lib/labels.ts`) são `Record` completos dos enums da
+  API.** Valor novo em `AuditEntity`/`AuditAction` **quebra o `pnpm typecheck` do web** até ganhar
+  rótulo — é proteção, não obstáculo: nome de enum não pode aparecer na tela. `AUDIT_ENTITY_LABELS`
+  serve a coluna "Tipo" (maiúscula) e `ENTITY_NOUNS`, o meio da frase ("deste {noun}").
+- **A tela `/auditoria` não usa `useEntityNames` para o item do evento**, de propósito: ela precisa
+  funcionar para registro apagado, que é o ponto da feature — o nome vem do `entityLabel` gravado no
+  próprio evento. O hook continua valendo para resolver `ownerId`/`clientId` **dentro do diff**, onde o
+  alvo normalmente ainda existe. Se o item foi excluído, quem responde é a própria trilha (um
+  `DELETED` para o mesmo par tipo+id), não uma heurística sobre a ação aberta.
 - Kanban usa **Pointer Events** (`use-kanban-drag.ts`), sem lib de DnD. Não use `draggable` do
   HTML5: ele não emite evento nenhum em touch, e o board ficou inoperável em celular e tablet até
   ser trocado. O tipo de entrada vem do `pointerType` do evento, **não** de `useIsMobile` — um iPad
   em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
   que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-04 22:28 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-08-06 12:35 (-03)

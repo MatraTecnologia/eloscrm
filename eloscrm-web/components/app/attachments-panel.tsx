@@ -14,7 +14,7 @@ import {
 import { useSession } from "@/lib/auth-client";
 import { useMembers } from "@/lib/queries/members";
 import { ENTITY_NOUNS, formatFileSize } from "@/lib/labels";
-import type { AuditEntity } from "@/lib/types";
+import type { AnnotatableEntity } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -26,7 +26,7 @@ export const AttachmentsPanel = ({
   entityType,
   entityId,
 }: {
-  entityType: AuditEntity;
+  entityType: AnnotatableEntity;
   entityId: string;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);

@@ -64,6 +64,72 @@ describe("auditoria de clientes", () => {
     expect(afterDelete[2].action).toBe(AuditAction.DELETED);
   });
 
+  it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Cliente Que Foi Apagado", phone: "43991834229", source: "WHATSAPP" },
+    });
+    const client = created.json();
+
+    await app.inject({ method: "DELETE", url: `/v1/clients/${client.id}`, headers: { cookie } });
+
+    // o dado foi embora — é justamente aqui que o log precisa se sustentar sozinho
+    expect(await prisma.client.findUnique({ where: { id: client.id } })).toBeNull();
+
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        organizationId: orgId,
+        entityType: AuditEntity.CLIENT,
+        entityId: client.id,
+        action: AuditAction.DELETED,
+      },
+    });
+    expect(evento.entityLabel).toBe("Cliente Que Foi Apagado");
+    expect(evento.actorName).toBe("Corretor Teste");
+    expect(evento.organizationName).toBeTruthy();
+    // telefone entra mascarado: o snapshot sobrevive à exclusão pedida pelo titular
+    expect(evento.snapshot).toMatchObject({ source: "WHATSAPP", phoneMasked: "(43) *****-**29" });
+  });
+
+  it("guarda o rótulo do estado final quando o lead é renomeado", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie },
+      payload: { name: "Nome Antigo" },
+    });
+    const client = created.json();
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${client.id}`,
+      headers: { cookie },
+      payload: { name: "Nome Novo" },
+    });
+
+    const events = await eventsOf(client.id);
+    expect(events[0].entityLabel).toBe("Nome Antigo");
+    expect(events[1].entityLabel).toBe("Nome Novo");
+  });
+
+  it("registra a origem da request no evento", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/clients",
+      headers: { cookie, "user-agent": "vitest-agent" },
+      payload: { name: "Lead Com Origem" },
+    });
+    const client = created.json();
+
+    const [evento] = await eventsOf(client.id);
+    expect(evento.source).toBe("USER");
+    expect(evento.userAgent).toBe("vitest-agent");
+    expect(evento.requestId).toBeTruthy();
+    expect(evento.actorEmail).toContain("@eloscrm.test");
+  });
+
   it("não registra evento quando o PATCH não muda nada", async () => {
     const created = await app.inject({
       method: "POST",

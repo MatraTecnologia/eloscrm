@@ -22,6 +22,30 @@ fila.
 BullMQ 6, Better Auth 1.6 (+ organization plugin), Vitest 4 contra Postgres real, Next 16 + React 19 +
 TanStack Query + shadcn/ui no web.
 
+## Status da execução (2026-08-06)
+
+Executado na branch `feat/auditoria-completa`. **Fases 0 a 4 completas, mais as Tasks 17 (export CSV),
+18 (backfill) e 20 (documentação).** Suíte da API: **465 testes** (piso antes do plano: 397); web com
+lint, typecheck e build limpos.
+
+Ajustes deliberados em relação ao texto original, todos com o motivo no lugar onde valem:
+
+- **Task 10 virou guarda estática + testes da D7**, não um `it.each` sobre a matriz inteira: exercitar
+  as 30 ações por HTTP duplicaria os testes por módulo e custaria um sign-up por caso. O que só ela
+  pega é a ação que existe no enum e ninguém emite — e pegou: `INVITE_REVOKED` estava órfã.
+- **Task 19 (purga da organização) foi adiantada** para junto da Fase 1, por ser requisito levantado
+  pelo dono do produto no meio da execução.
+- **`process.emitWarning` + contador em `/health`** no lugar do `logger.error` previsto: `pino` não
+  resolve como dependência direta sob o pnpm estrito, e `console` é proibido por lint.
+- **A tela decide "item excluído" consultando a própria trilha** (um `DELETED` para o mesmo par
+  tipo+id), não pela ação do evento aberto — um `CREATED` continua existindo depois de o item ser
+  apagado, que é exatamente o caso desta tela.
+- **`DEAL`/`PROPERTY` não têm ficha por id no web** (a tela é lista + diálogo), então "abrir item"
+  leva à lista desses dois.
+
+Pendente: **Task 21** (verificação final em produção — `db push`, envs, fumaça manual e primeira
+purga), que é operação de deploy, não código.
+
 Referências: `eloscrm-api/CLAUDE.md`, `eloscrm-web/CLAUDE.md`,
 [`plans/2026-07-29-leads-360-a-auditoria.md`](2026-07-29-leads-360-a-auditoria.md) (origem do
 `AuditEvent`), [`../../../docs/2026-08-04-debitos-whatsapp.md`](../../../../docs/2026-08-04-debitos-whatsapp.md)
@@ -1466,4 +1490,4 @@ Além dos comandos, três coisas só o teste manual mostra:
 - [ ] Filtrar por "Automação" e ver o lead criado pela automação do WhatsApp.
 - [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco.
 
-> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 11:34 (-03)
+> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 12:40 (-03)

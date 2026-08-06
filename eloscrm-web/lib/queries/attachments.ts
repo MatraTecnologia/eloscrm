@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Attachment, AuditEntity } from "@/lib/types";
+import type { AnnotatableEntity, Attachment } from "@/lib/types";
 
-export const useAttachments = (entityType: AuditEntity, entityId: string) => {
+export const useAttachments = (entityType: AnnotatableEntity, entityId: string) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
     queryKey: ["attachments", org?.id, entityType, entityId],
@@ -28,7 +28,7 @@ export const useUploadAttachment = () => {
       entityId,
       file,
     }: {
-      entityType: AuditEntity;
+      entityType: AnnotatableEntity;
       entityId: string;
       file: File;
     }) => {

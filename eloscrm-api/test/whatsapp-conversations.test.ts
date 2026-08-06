@@ -1,9 +1,12 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
+import { R2_PRIVATE_BUCKET, headFile, uploadStream } from "../src/lib/storage.js";
 
 const remote = { send: { text: vi.fn() } };
 vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => remote }));
@@ -78,6 +81,15 @@ const criarMensagem = (data: Record<string, unknown> = {}) =>
   });
 
 const get = (url: string, c = cookie) => app.inject({ method: "GET", url, headers: { cookie: c } });
+
+const existeNoBucket = async (key: string) =>
+  !!(await headFile(R2_PRIVATE_BUCKET, key).catch(() => null));
+
+const eventsOf = (entityType: AuditEntity, entityId: string) =>
+  prisma.auditEvent.findMany({
+    where: { organizationId: orgId, entityType, entityId },
+    orderBy: { createdAt: "asc" },
+  });
 
 describe("GET /v1/whatsapp/conversations", () => {
   it("bloqueia sem sessão (401)", async () => {
@@ -344,6 +356,31 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
     expect(msg.quotedId).toBe("FALHA1");
   });
 
+  it("registra MESSAGE_SENT depois do envio confirmado, sem o texto no snapshot", async () => {
+    await conectar();
+    const res = await enviar({ text: "Bom dia! Já retorno com os valores." });
+    const message = res.json();
+
+    const eventos = await eventsOf(AuditEntity.WHATSAPP_MESSAGE, message.id);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0].action).toBe(AuditAction.MESSAGE_SENT);
+    expect(eventos[0].entityLabel).toBe("Fulano");
+    expect(eventos[0].context).toEqual({ conversationId });
+    expect(eventos[0].snapshot).toEqual({ direction: "outbound", type: "text", sentAt: expect.any(String) });
+    // conteúdo de conversa não é dado de auditoria (D9)
+    expect(JSON.stringify(eventos[0].snapshot)).not.toContain("Bom dia");
+  });
+
+  it("envio que falhou não gera evento de auditoria — houve tentativa, não envio", async () => {
+    await conectar();
+    remote.send.text.mockResolvedValue({ success: false, error: { status: 500, error: "boom" } });
+
+    const antes = await prisma.auditEvent.count({ where: { organizationId: orgId } });
+    await enviar({ text: "não vai sair" });
+    const depois = await prisma.auditEvent.count({ where: { organizationId: orgId } });
+    expect(depois).toBe(antes);
+  });
+
   it("bloqueio do WhatsApp tem código próprio, distinto de falha da conexão", async () => {
     await conectar();
     remote.send.text.mockResolvedValue({
@@ -412,6 +449,16 @@ describe("ligação com o lead", () => {
     expect(evento?.action).toBe("CREATED");
   });
 
+  it("registra CONVERSATION LINKED ao criar lead a partir da conversa", async () => {
+    const res = await post("create-client", { name: "Auditado" });
+    const lead = res.json();
+
+    const eventos = await eventsOf(AuditEntity.CONVERSATION, conversationId);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0].action).toBe(AuditAction.LINKED);
+    expect(eventos[0].context).toEqual({ clientName: lead.name });
+  });
+
   it("recusa criar quando a conversa já tem lead", async () => {
     await post("create-client", { name: "Primeiro" });
     const res = await post("create-client", { name: "Segundo" });
@@ -432,7 +479,7 @@ describe("ligação com o lead", () => {
     expect(res.json()).toHaveLength(2);
   });
 
-  it("vincula a um lead existente e permite desvincular", async () => {
+  it("vincula a um lead existente e permite desvincular, registrando LINKED e UNLINKED", async () => {
     const lead = await prisma.client.create({
       data: { organizationId: orgId, name: "Escolhido", phone: "(43) 98888-7777" },
     });
@@ -446,6 +493,12 @@ describe("ligação com o lead", () => {
     expect(
       (await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } })).clientId,
     ).toBeNull();
+
+    const eventos = await eventsOf(AuditEntity.CONVERSATION, conversationId);
+    expect(eventos.map((e) => e.action)).toEqual([AuditAction.LINKED, AuditAction.UNLINKED]);
+    expect(eventos[0].context).toEqual({ clientName: "Escolhido" });
+    // UNLINKED guarda o nome de quem se soltou — lido antes de limpar o clientId
+    expect(eventos[1].context).toEqual({ clientName: "Escolhido" });
   });
 
   it("não vincula a lead de outra organização", async () => {
@@ -480,7 +533,7 @@ describe("ações da conversa", () => {
     expect(conversa.unreadCount).toBe(0);
   });
 
-  it("arquiva e desarquiva", async () => {
+  it("arquiva e desarquiva, registrando ARCHIVED e UNARCHIVED", async () => {
     const url = `/v1/whatsapp/conversations/${conversationId}`;
     await app.inject({ method: "POST", url: `${url}/archive`, headers: { cookie } });
     expect(
@@ -491,16 +544,25 @@ describe("ações da conversa", () => {
     expect(
       (await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } })).archivedAt,
     ).toBeNull();
+
+    const eventos = await eventsOf(AuditEntity.CONVERSATION, conversationId);
+    expect(eventos.map((e) => e.action)).toEqual([AuditAction.ARCHIVED, AuditAction.UNARCHIVED]);
+    expect(eventos[0].entityLabel).toBe("Fulano");
   });
 
-  it("exclui a conversa e leva as mensagens com ela", async () => {
-    const mensagem = await criarMensagem();
-    // com mediaKey para exercitar a purga no bucket: chave inexistente serve, porque o
-    // DeleteObjects é idempotente e o que se prova é que a purga não derruba o delete
+  it("exclui a conversa e leva as mensagens com ela, registrando DELETED com a contagem antes de apagar", async () => {
+    const mensagem = await criarMensagem({ sentAt: new Date("2026-08-01T10:00:00Z") });
+    // objeto de verdade no bucket, não chave inventada: com uma chave inexistente o DeleteObjects
+    // devolve sucesso de qualquer forma, e o teste passaria mesmo se a purga não existisse
+    const mediaKey = `org/${orgId}/whatsapp/${conversationId}/purga-${stamp}.jpg`;
+    await uploadStream(R2_PRIVATE_BUCKET, mediaKey, Readable.from([Buffer.from("midia")]), "image/jpeg");
+    expect(await existeNoBucket(mediaKey)).toBe(true);
+
     const comMidia = await criarMensagem({
       mediaStatus: "ready",
-      mediaKey: `whatsapp/${orgId}/inexistente-${stamp}.jpg`,
+      mediaKey,
       mediaMime: "image/jpeg",
+      sentAt: new Date("2026-08-01T11:00:00Z"),
     });
     // o lead vinculado precisa sobreviver: a relação é dele para a conversa, não o contrário
     const lead = await prisma.client.create({
@@ -517,7 +579,22 @@ describe("ações da conversa", () => {
     expect(await prisma.conversation.findUnique({ where: { id: conversationId } })).toBeNull();
     expect(await prisma.whatsappMessage.findUnique({ where: { id: mensagem.id } })).toBeNull();
     expect(await prisma.whatsappMessage.findUnique({ where: { id: comMidia.id } })).toBeNull();
+    // o arquivo sai do R2 junto: a linha morrer sem o objeto deixaria mídia paga e órfã no bucket
+    expect(await existeNoBucket(mediaKey)).toBe(false);
     expect(await prisma.client.findUnique({ where: { id: lead.id } })).not.toBeNull();
+
+    // o evento sobrevive à conversa: rótulo e contagem foram lidos antes do delete
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "CONVERSATION", entityId: conversationId, action: "DELETED" },
+    });
+    expect(evento.entityLabel).toBe("Fica");
+    expect(evento.snapshot).toEqual({
+      phoneMasked: expect.any(String),
+      isGroup: false,
+      messageCount: 2,
+      firstMessageAt: "2026-08-01T10:00:00.000Z",
+      lastMessageAt: "2026-08-01T11:00:00.000Z",
+    });
   });
 
   it("excluir não atravessa organização", async () => {
@@ -537,5 +614,59 @@ describe("ações da conversa", () => {
       headers: { cookie: cookieB },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it("marcar como lida e ingerir mensagem recebida não geram evento de auditoria (D7)", async () => {
+    const antes = await prisma.auditEvent.count({ where: { organizationId: orgId } });
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/whatsapp/conversations/${conversationId}/read`,
+      headers: { cookie },
+    });
+
+    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    const instance = await prisma.uazapiInstance.findUniqueOrThrow({ where: { id: instanceId } });
+    // envelope real observado no tráfego (§2.1 do spec de conversas) — mesmo formato de
+    // test/whatsapp-ingest.test.ts, reaproveitado aqui só para provar ausência de evento
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/uazapi/${instanceId}/${instance.webhookSecret}`,
+      payload: {
+        BaseUrl: "https://matratecnologia.uazapi.com",
+        EventType: "messages",
+        instanceName: instance.name,
+        owner: "554391834229",
+        chat: {
+          wa_chatid: conversa.chatid,
+          phone: conversa.phone,
+          wa_name: conversa.waName,
+          wa_isGroup: false,
+        },
+        message: {
+          id: `554391834229:D7-${stamp}`,
+          messageid: `D7-${stamp}`,
+          chatid: conversa.chatid,
+          sender: "226070083190831@lid",
+          sender_pn: `${conversa.phone}@s.whatsapp.net`,
+          senderName: "Fulano",
+          fromMe: false,
+          isGroup: false,
+          messageTimestamp: Date.now(),
+          wasSentByApi: false,
+          type: "text",
+          messageType: "Conversation",
+          text: "mais uma mensagem",
+          content: "mais uma mensagem",
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      await prisma.whatsappMessage.findFirst({ where: { conversationId, text: "mais uma mensagem" } }),
+    ).not.toBeNull();
+
+    const depois = await prisma.auditEvent.count({ where: { organizationId: orgId } });
+    expect(depois).toBe(antes);
   });
 });

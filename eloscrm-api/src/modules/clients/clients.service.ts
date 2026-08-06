@@ -1,9 +1,11 @@
 import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
+import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
+import * as comments from "../comments/comments.service.js";
 import * as repo from "./clients.repo.js";
 import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from "./clients.schema.js";
 
@@ -21,8 +23,10 @@ export const create = async (orgId: string, data: CreateClientInput, actor: Acto
     orgId,
     entityType: AuditEntity.CLIENT,
     entityId: client.id,
+    entityLabel: client.name,
     action: AuditAction.CREATED,
     actor,
+    snapshot: snapshotOf(AuditEntity.CLIENT, client),
   });
   return client;
 };
@@ -34,6 +38,8 @@ export const update = async (orgId: string, id: string, data: UpdateClientInput,
     orgId,
     entityType: AuditEntity.CLIENT,
     entityId: id,
+    // nome do estado final: renomear o lead deve deixar o evento falando do nome novo
+    entityLabel: updated?.name ?? before.name,
     action: AuditAction.UPDATED,
     actor,
     changes: diffFields(before, data),
@@ -42,7 +48,7 @@ export const update = async (orgId: string, id: string, data: UpdateClientInput,
 };
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {
-  await getById(orgId, id);
+  const client = await getById(orgId, id);
 
   // deals e activities cascateiam do cliente no schema; sem purgar os anexos deles aqui, o delete
   // em cascata do Postgres apaga a linha mas o objeto correspondente fica esquecido no bucket
@@ -60,21 +66,27 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
     select: { id: true },
   });
 
+  const activityIds = clientActivities.map((activity) => activity.id);
   await attachments.purgeForEntities(orgId, AuditEntity.CLIENT, [id]);
   await attachments.purgeForEntities(orgId, AuditEntity.DEAL, dealIds);
-  await attachments.purgeForEntities(
-    orgId,
-    AuditEntity.ACTIVITY,
-    clientActivities.map((activity) => activity.id),
-  );
+  await attachments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
+  // comentário também não tem FK: sem isto, o do lead e o dos negócios dele ficam órfãos no banco
+  await comments.purgeForEntities(orgId, AuditEntity.CLIENT, [id]);
+  await comments.purgeForEntities(orgId, AuditEntity.DEAL, dealIds);
+  await comments.purgeForEntities(orgId, AuditEntity.ACTIVITY, activityIds);
 
   // o evento vem antes do delete: se gravar depois e a escrita do evento falhar, o cliente some sem deixar rastro
   await recordAudit({
     orgId,
     entityType: AuditEntity.CLIENT,
     entityId: id,
+    // rótulo e snapshot saem do que foi lido no começo: depois do delete não há mais de onde tirar, e
+    // é isto que faz o evento continuar legível quando o lead não existe mais
+    entityLabel: client.name,
     action: AuditAction.DELETED,
     actor,
+    context: { deals: dealIds.length, activities: clientActivities.length },
+    snapshot: snapshotOf(AuditEntity.CLIENT, client),
   });
   await repo.deleteClientById(id);
 };

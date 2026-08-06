@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { AuditEntity } from "../../generated/prisma/client.js";
+import { ANNOTATABLE_ENTITIES } from "../../lib/entity-scopes.js";
 
 export const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -16,7 +16,7 @@ export const ALLOWED_CONTENT_TYPES = [
 ] as const;
 
 export const uploadUrlSchema = z.object({
-  entityType: z.enum(AuditEntity),
+  entityType: z.enum(ANNOTATABLE_ENTITIES),
   entityId: z.string().min(1),
   filename: z.string().trim().min(1).max(200),
   contentType: z.enum(ALLOWED_CONTENT_TYPES),
@@ -24,7 +24,7 @@ export const uploadUrlSchema = z.object({
 });
 
 export const listAttachmentsQuerySchema = z.object({
-  entityType: z.enum(AuditEntity),
+  entityType: z.enum(ANNOTATABLE_ENTITIES),
   entityId: z.string().min(1),
 });
 

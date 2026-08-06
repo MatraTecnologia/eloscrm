@@ -61,6 +61,19 @@ export const enqueue = async <T>(name: string, data: T) => {
   await processor({ data } as Parameters<Processor>[0]);
 };
 
+/**
+ * Agenda um job recorrente.
+ *
+ * Sem `REDIS_URL` devolve `null` e **nada é agendado** — dev, teste e CI não ganham pré-requisito de
+ * infra, e ali a tarefa fica por conta do script CLI equivalente. `upsertJobScheduler` é idempotente:
+ * subir duas instâncias da API não cria dois agendamentos do mesmo id.
+ */
+export const scheduleCron = async (name: string, id: string, pattern: string, tz?: string) => {
+  const queue = getQueue(name);
+  if (!queue) return null;
+  return queue.upsertJobScheduler(id, { pattern, ...(tz ? { tz } : {}) }, { name: id, data: {} });
+};
+
 export const closeQueues = async () => {
   await Promise.all([...queues.values()].map((queue) => queue.close()));
   queues.clear();

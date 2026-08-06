@@ -4,6 +4,7 @@ import type {
   ActivityType,
   AuditAction,
   AuditEntity,
+  AuditSource,
   ClientSource,
   ClientStatus,
   NurtureReason,
@@ -152,21 +153,89 @@ export const formatCurrencyCompact = (value: string | number | null | undefined)
         maximumFractionDigits: 1,
       }).format(Number(value));
 
+// Verbo em 3ª pessoa: a frase montada é "<Ator> <verbo> o <substantivo> <rótulo>".
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   CREATED: "criou",
   UPDATED: "alterou",
   DELETED: "removeu",
   STAGE_CHANGED: "moveu de estágio",
   OWNER_CHANGED: "trocou o responsável",
+  TRANSFERRED: "transferiu",
+  REORDERED: "reordenou os estágios",
+  NURTURED: "colocou em nutrição",
+  REACTIVATED: "reativou",
+  ARCHIVED: "arquivou",
+  UNARCHIVED: "desarquivou",
+  LINKED: "vinculou ao lead",
+  UNLINKED: "desvinculou do lead",
+  UPLOADED: "anexou",
+  DOWNLOADED: "baixou",
+  MESSAGE_SENT: "enviou mensagem",
+  MESSAGE_DELETED: "apagou mensagem",
+  CONNECTED: "conectou",
+  DISCONNECTED: "desconectou",
+  RESET: "reiniciou",
+  SYNCED: "sincronizou",
+  WEBHOOK_RECONCILED: "reconfigurou o webhook",
+  TEST_MESSAGE_SENT: "enviou mensagem de teste",
+  SIGNED_IN: "entrou no sistema",
+  SIGNED_OUT: "saiu do sistema",
+  MEMBER_ADDED: "adicionou",
+  MEMBER_REMOVED: "removeu",
+  ROLE_CHANGED: "mudou o papel de",
+  INVITED: "convidou",
+  INVITE_REVOKED: "cancelou o convite de",
+  EXPORTED: "exportou a auditoria de",
+  PURGED: "expurgou eventos antigos de",
 };
 
 // Os painéis (arquivos, comentários, histórico, linha do tempo) servem lead e negócio; o texto vazio
 // precisa dizer de qual. Todos masculinos de propósito: o texto que os usa escreve "deste <substantivo>".
+// A tela de auditoria usa os mesmos substantivos na frase do evento, por isso o Record é completo.
 export const ENTITY_NOUNS: Record<AuditEntity, string> = {
   CLIENT: "lead",
   DEAL: "negócio",
   PROPERTY: "imóvel",
   ACTIVITY: "registro",
+  PIPELINE: "funil",
+  STAGE: "estágio",
+  COMMENT: "comentário",
+  ATTACHMENT: "arquivo",
+  CONVERSATION: "atendimento",
+  WHATSAPP_MESSAGE: "envio de WhatsApp",
+  WHATSAPP_INSTANCE: "número de WhatsApp",
+  LEAD_AUTOMATION: "atendimento automático",
+  MEMBER: "membro",
+  INVITATION: "convite",
+  ORGANIZATION: "cadastro da imobiliária",
+  SESSION: "acesso",
+};
+
+// Rótulo com maiúscula para a coluna "Tipo" da tela de auditoria — ENTITY_NOUNS é para meio de frase.
+export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
+  CLIENT: "Lead",
+  DEAL: "Negócio",
+  PROPERTY: "Imóvel",
+  ACTIVITY: "Atividade",
+  PIPELINE: "Funil",
+  STAGE: "Estágio",
+  COMMENT: "Comentário",
+  ATTACHMENT: "Arquivo",
+  CONVERSATION: "Conversa",
+  WHATSAPP_MESSAGE: "Mensagem",
+  WHATSAPP_INSTANCE: "WhatsApp",
+  LEAD_AUTOMATION: "Automação",
+  MEMBER: "Membro",
+  INVITATION: "Convite",
+  ORGANIZATION: "Imobiliária",
+  SESSION: "Acesso",
+};
+
+export const AUDIT_SOURCE_LABELS: Record<AuditSource, string> = {
+  USER: "Pessoa",
+  AUTOMATION: "Automação",
+  WEBHOOK: "WhatsApp",
+  SYSTEM: "Sistema",
 };
 
 // nome do campo do banco não pode vazar para a tela
@@ -198,14 +267,67 @@ export const FIELD_LABELS: Record<string, string> = {
   nurtureNote: "Detalhe da nutrição",
   nurtureUntil: "Retomar em",
   nurturedAt: "Em nutrição desde",
+
+  // Chaves de `snapshot` e `context` da auditoria: nome de coluna do banco não pode aparecer na
+  // tela, e o detalhe do evento mostra esses dois objetos como pares chave/valor.
+  phoneMasked: "Telefone",
+  emailMasked: "E-mail",
+  ownerMasked: "Número conectado",
+  isOpen: "Em aberto",
+  isGroup: "Grupo",
+  isWon: "Estágio de ganho",
+  isLost: "Estágio de perda",
+  position: "Posição",
+  city: "Cidade",
+  price: "Preço",
+  filename: "Arquivo",
+  contentType: "Tipo do arquivo",
+  size: "Tamanho",
+  direction: "Sentido",
+  sentAt: "Enviada em",
+  messageCount: "Mensagens",
+  firstMessageAt: "Primeira mensagem",
+  lastMessageAt: "Última mensagem",
+  clientName: "Lead",
+  dealTitle: "Negócio",
+  pipelineName: "Funil",
+  stageName: "Estágio",
+  stages: "Estágios",
+  stageCount: "Quantidade de estágios",
+  targetType: "Tipo do alvo",
+  targetLabel: "Alvo",
+  conversationId: "Conversa",
+  messageId: "Id da mensagem",
+  ownerJid: "Número conectado",
+  role: "Papel",
+  deals: "Negócios",
+  activities: "Atividades",
+  order: "Ordem",
+  removed: "Eventos removidos",
+  retentionDays: "Retenção (dias)",
+  rows: "Linhas",
+  filters: "Filtros",
+  to: "Destino",
 };
 
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
 // `resolveName` (membros, imóveis e clientes da org); id que não resolve é registro já removido.
 const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
 
+// Campos cuja ordem importa: exibidos com seta, como a prévia de template na tela de funis
+const SEQUENCE_FIELDS = new Set(["stages", "order"]);
+
 // Datas chegam do audit como ISO; sem isto o histórico mostra 2026-07-21T02:59:59.999Z na tela
-const DATE_FIELDS = new Set(["dueAt", "doneAt", "nurtureUntil", "nurturedAt"]);
+const DATE_FIELDS = new Set([
+  "dueAt",
+  "doneAt",
+  "nurtureUntil",
+  "nurturedAt",
+  // do snapshot da auditoria
+  "sentAt",
+  "firstMessageAt",
+  "lastMessageAt",
+]);
 
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
 // Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
@@ -216,7 +338,12 @@ export const formatAuditValue = (
   resolveName?: (id: string) => string | undefined,
 ) => {
   if (value === null || value === undefined || value === "") return "—";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+  if (Array.isArray(value)) {
+    if (!value.length) return "—";
+    // sequência, não conjunto: "Interessado → Visita → Contrato" é como a escolha de template
+    // mostra as colunas na tela de funis, e a ordem é parte da informação
+    return SEQUENCE_FIELDS.has(field) ? value.join(" → ") : value.join(", ");
+  }
   if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
   if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);

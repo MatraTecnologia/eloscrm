@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { useDeletePipeline } from "@/lib/queries/pipelines";
+
 import type { Pipeline } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DeletePipelineDialog } from "./delete-pipeline-dialog";
 import { PipelineFormDialog } from "./pipeline-form-dialog";
 
 export const PipelinePanel = ({
@@ -27,24 +27,11 @@ export const PipelinePanel = ({
   /** funil sob o cartão que está sendo arrastado no quadro ao lado */
   dropTargetId?: string | null;
 }) => {
-  const del = useDeletePipeline();
+  // o diálogo carrega a prévia e decide o que dizer: excluir um funil apaga os estágios, e com
+  // negócio dentro o servidor recusa — cada caso pede uma explicação diferente
+  const [deleteTarget, setDeleteTarget] = useState<Pipeline | null>(null);
   const [renameTarget, setRenameTarget] = useState<Pipeline | null>(null);
 
-  const remove = async (p: Pipeline) => {
-    try {
-      await del.mutateAsync(p.id);
-      toast.success("Pipeline excluído");
-    } catch (e) {
-      const code = (e as { code?: string })?.code;
-      toast.error(
-        code === "PIPELINE_HAS_DEALS"
-          ? "Mova ou exclua os negócios antes"
-          : code === "LAST_PIPELINE"
-            ? "Você precisa de ao menos um pipeline"
-            : "Não foi possível excluir",
-      );
-    }
-  };
 
   return (
     // Coluna ao lado do funil no desktop; em tela estreita, uma faixa rolável no topo — 240px fixos
@@ -114,7 +101,7 @@ export const PipelinePanel = ({
                 <DropdownMenuItem onClick={() => setTimeout(() => setRenameTarget(p), 0)}>
                   <Pencil className="size-4" /> Renomear
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => remove(p)}>
+                <DropdownMenuItem onClick={() => setDeleteTarget(p)}>
                   <Trash2 className="size-4" /> Excluir
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -122,6 +109,14 @@ export const PipelinePanel = ({
           </div>
         ))}
       </div>
+
+      {deleteTarget && (
+        <DeletePipelineDialog
+          pipeline={deleteTarget}
+          open
+          onOpenChange={(o) => !o && setDeleteTarget(null)}
+        />
+      )}
 
       {renameTarget && (
         <PipelineFormDialog

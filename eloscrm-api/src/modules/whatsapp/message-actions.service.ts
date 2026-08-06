@@ -1,7 +1,10 @@
-import { UazapiInstanceStatus, WhatsappDirection } from "../../generated/prisma/client.js";
+import { AuditAction, AuditEntity, UazapiInstanceStatus, WhatsappDirection } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
+import { recordAudit } from "../../lib/audit.js";
+import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { conflict, notFound } from "../../lib/http-error.js";
 import { prisma } from "../../lib/prisma.js";
+import { conversationLabel } from "./conversations.service.js";
 import { refreshPreview } from "./status.service.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
 
@@ -19,7 +22,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 const load = async (orgId: string, conversationId: string, messageId: string) => {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId: orgId },
-    include: { instance: true },
+    include: { instance: true, client: { select: { name: true } } },
   });
   if (!conversation) throw notFound("Conversa não encontrada");
 
@@ -47,7 +50,7 @@ const requireConnected = (status: UazapiInstanceStatus) => {
  * O WhatsApp impõe uma janela de tempo para apagar; mensagem antiga é recusada pelo provedor, e o
  * erro sobe traduzido em vez de virar uma exclusão que não aconteceu do outro lado.
  */
-export const remove = async (orgId: string, conversationId: string, messageId: string) => {
+export const remove = async (orgId: string, conversationId: string, messageId: string, actor: Actor) => {
   const { conversation, message } = await load(orgId, conversationId, messageId);
   requireConnected(conversation.instance.status);
 
@@ -75,6 +78,17 @@ export const remove = async (orgId: string, conversationId: string, messageId: s
   // o eco do provedor NÃO conserta isto: `applyDeletion` filtra `deletedAt: null`, e a mensagem já
   // foi marcada aqui. Sem a chamada, a lista de conversas continuaria mostrando o texto apagado.
   await refreshPreview(conversationId);
+
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_MESSAGE,
+    entityId: message.id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.MESSAGE_DELETED,
+    actor,
+    context: { conversationId },
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_MESSAGE, updated),
+  });
 
   return { deletedAt: updated.deletedAt };
 };

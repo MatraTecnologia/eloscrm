@@ -30,6 +30,11 @@ const whatsappRoutes = async (app: FastifyInstance) => {
     return service.rename(request.orgId!, data, actorOf(request));
   });
 
+  // o que a remoção vai levar: a tela mostra os números antes de pedir confirmação
+  app.get("/instance/deletion-preview", async (request) =>
+    service.deletionPreview(request.orgId!, actorOf(request)),
+  );
+
   app.delete("/instance", async (request, reply) => {
     await service.remove(request.orgId!, actorOf(request));
     return reply.status(204).send();

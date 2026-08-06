@@ -162,3 +162,44 @@ describe("comentários", () => {
     expect(del.statusCode).toBe(404);
   });
 });
+
+describe("auditoria de comentários", () => {
+  it("CREATED descreve o alvo, sem o corpo do comentário em lugar nenhum do evento", async () => {
+    const created = await post(cookie, "Fechar visita na sexta-feira");
+    const id = created.json().id;
+
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "COMMENT", entityId: id, action: "CREATED" },
+    });
+    expect(evento.entityLabel).toBe("lead Lead comentado");
+    expect(evento.context).toMatchObject({ targetType: "CLIENT", targetLabel: "Lead comentado" });
+    // o corpo é texto livre de pessoas: o comentário em si já é o registro, não entra no snapshot
+    expect(evento.snapshot).toBeNull();
+    expect(JSON.stringify(evento)).not.toContain("Fechar visita na sexta-feira");
+  });
+
+  it("UPDATED e DELETED também descrevem o alvo, e o evento sobrevive ao comentário apagado", async () => {
+    const created = await post(cookie, "Texto original da auditoria");
+    const id = created.json().id;
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/comments/${id}`,
+      headers: { cookie },
+      payload: { body: "Texto editado" },
+    });
+    const updated = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "COMMENT", entityId: id, action: "UPDATED" },
+    });
+    expect(updated.entityLabel).toBe("lead Lead comentado");
+
+    await app.inject({ method: "DELETE", url: `/v1/comments/${id}`, headers: { cookie } });
+    expect(await prisma.comment.findUnique({ where: { id } })).toBeNull();
+
+    const deleted = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "COMMENT", entityId: id, action: "DELETED" },
+    });
+    expect(deleted.entityLabel).toBe("lead Lead comentado");
+    expect(deleted.context).toMatchObject({ targetType: "CLIENT", targetLabel: "Lead comentado" });
+  });
+});

@@ -119,19 +119,142 @@ export type DashboardStats = {
   bySource: Record<ClientSource, number>;
 };
 
-export type AuditEntity = "CLIENT" | "DEAL" | "PROPERTY" | "ACTIVITY";
-export type AuditAction = "CREATED" | "UPDATED" | "DELETED" | "STAGE_CHANGED" | "OWNER_CHANGED";
+export type AuditEntity =
+  | "CLIENT"
+  | "DEAL"
+  | "PROPERTY"
+  | "ACTIVITY"
+  | "PIPELINE"
+  | "STAGE"
+  | "COMMENT"
+  | "ATTACHMENT"
+  | "CONVERSATION"
+  | "WHATSAPP_MESSAGE"
+  | "WHATSAPP_INSTANCE"
+  | "LEAD_AUTOMATION"
+  | "MEMBER"
+  | "INVITATION"
+  | "ORGANIZATION"
+  | "SESSION";
+
+/** Comentário e anexo só existem para estas quatro — espelha ANNOTATABLE_ENTITIES da API. */
+export type AnnotatableEntity = "CLIENT" | "DEAL" | "PROPERTY" | "ACTIVITY";
+
+export type AuditAction =
+  | "CREATED"
+  | "UPDATED"
+  | "DELETED"
+  | "STAGE_CHANGED"
+  | "OWNER_CHANGED"
+  | "TRANSFERRED"
+  | "REORDERED"
+  | "NURTURED"
+  | "REACTIVATED"
+  | "ARCHIVED"
+  | "UNARCHIVED"
+  | "LINKED"
+  | "UNLINKED"
+  | "UPLOADED"
+  | "DOWNLOADED"
+  | "MESSAGE_SENT"
+  | "MESSAGE_DELETED"
+  | "CONNECTED"
+  | "DISCONNECTED"
+  | "RESET"
+  | "SYNCED"
+  | "WEBHOOK_RECONCILED"
+  | "TEST_MESSAGE_SENT"
+  | "SIGNED_IN"
+  | "SIGNED_OUT"
+  | "MEMBER_ADDED"
+  | "MEMBER_REMOVED"
+  | "ROLE_CHANGED"
+  | "INVITED"
+  | "INVITE_REVOKED"
+  | "EXPORTED"
+  | "PURGED";
+
+export type AuditSource = "USER" | "AUTOMATION" | "WEBHOOK" | "SYSTEM";
 
 export type AuditEvent = {
   id: string;
   entityType: AuditEntity;
   entityId: string;
+  // nome que o item tinha no momento do fato; nulo em evento antigo, anterior ao backfill
+  entityLabel: string | null;
   action: AuditAction;
+  source: AuditSource;
   actorId: string | null;
   actorName: string | null;
+  actorEmail: string | null;
+  organizationName: string | null;
   // { campo: { from, to } } — só os campos que mudaram
   changes: Record<string, { from: unknown; to: unknown }> | null;
+  // a que o item pertencia (lead, funil, estágio…), desnormalizado no próprio evento
+  context: Record<string, unknown> | null;
+  // estado no momento do fato, por allowlist — telefone e e-mail vêm mascarados
+  snapshot: Record<string, unknown> | null;
+  ip: string | null;
+  userAgent: string | null;
+  requestId: string | null;
   createdAt: string;
+};
+
+/**
+ * GET /v1/organization/deletion-preview — o que a exclusão da imobiliária vai levar.
+ *
+ * `storage` e `whatsapp` são o que o cascade do banco **não** alcança: objetos no R2 e a conexão no
+ * provedor. Estão separados por isso, e porque são a parte que o dono não tem como recuperar.
+ */
+/**
+ * GET /v1/whatsapp/instance/deletion-preview.
+ *
+ * `conversations` e `messages` existem porque `Conversation` cascateia da instância: remover a conexão
+ * apaga o atendimento inteiro, não só o vínculo com o provedor.
+ */
+/**
+ * GET /v1/pipelines/:id/deletion-preview.
+ *
+ * `blockers` é o que impede a exclusão — negócio dentro do funil se transfere ou se fecha; "é o único
+ * funil" se resolve criando outro. São caminhos diferentes, então a tela mostra cada um.
+ */
+export type PipelineDeletionPreview = {
+  pipeline: { id: string; name: string };
+  stages: string[];
+  deals: { total: number; open: number; closed: number };
+  dealsByStage: { stage: string; count: number }[];
+  canDelete: boolean;
+  blockers: { code: string; message: string }[];
+  totalPipelines: number;
+};
+
+export type WhatsappDeletionPreview = {
+  instance: { name: string; status: string; connected: boolean };
+  conversations: number;
+  messages: number;
+  storage: { objects: number; bytes: number };
+};
+
+export type OrgDeletionPreview = {
+  organization: { id: string; name: string; slug: string };
+  counts: {
+    clients: number;
+    deals: number;
+    activities: number;
+    properties: number;
+    pipelines: number;
+    stages: number;
+    comments: number;
+    attachments: number;
+    conversations: number;
+    whatsappMessages: number;
+    members: number;
+    invitations: number;
+    auditEvents: number;
+    leadAutomation: number;
+  };
+  storage: { objects: number; bytes: number };
+  whatsapp: { name: string; status: string; connected: boolean } | null;
 };
 
 export type Member = {
@@ -140,6 +263,16 @@ export type Member = {
   email: string;
   role: string;
 };
+
+// Envelope paginado por cursor de GET /v1/audit-events — mesmo formato de outras listas do app.
+export type AuditSearchResult = { items: AuditEvent[]; nextCursor?: string };
+
+/**
+ * GET /v1/audit-events/actors. `actorId` é `null` para os atores sintéticos (Automação, WhatsApp,
+ * Sistema) — `recordAudit` grava `null` quando `actor.id` é vazio, então esses eventos só se
+ * distinguem entre si por `actorName`/`source`, nunca por `actorId`.
+ */
+export type AuditActor = { actorId: string | null; actorName: string; events: number };
 
 export type Comment = {
   id: string;

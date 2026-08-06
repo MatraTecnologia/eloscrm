@@ -6,7 +6,7 @@ import { decryptToken } from "../../lib/crypto.js";
 import { formatBytes } from "../../lib/format.js";
 import { prisma } from "../../lib/prisma.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
-import { R2_PRIVATE_BUCKET, getDownloadUrl, uploadStream } from "../../lib/storage.js";
+import { R2_PRIVATE_BUCKET, deleteFile, getDownloadUrl, uploadStream } from "../../lib/storage.js";
 import { createUazapiClient } from "../../lib/uazapi/index.js";
 import { env } from "../../env.js";
 
@@ -81,8 +81,10 @@ const measured = (source: Readable, limit: number) => {
   };
 };
 
+// updateMany, não update: a mensagem pode ter sido apagada no meio do job (a conversa excluída
+// cascateia), e ali o P2025 do update viraria retentativa de um trabalho que não existe mais
 const fail = (messageId: string, reason: string) =>
-  prisma.whatsappMessage.update({
+  prisma.whatsappMessage.updateMany({
     where: { id: messageId },
     data: { mediaStatus: WhatsappMediaStatus.failed, mediaError: reason },
   });
@@ -146,7 +148,7 @@ const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
 
   // grava a URL temporária ANTES de subir ao R2: a partir daqui a tela já exibe a mídia, sem
   // esperar o upload terminar
-  await prisma.whatsappMessage.update({
+  const ponte = await prisma.whatsappMessage.updateMany({
     where: { id: message.id },
     data: {
       mediaTempUrl: fileURL,
@@ -154,6 +156,8 @@ const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
       mediaMime: mime,
     },
   });
+  // conversa excluída entre o findUnique e aqui: nada subiu ao R2, então basta encerrar
+  if (ponte.count === 0) return;
 
   const response = await fetch(fileURL);
   if (!response.ok || !response.body) {
@@ -177,7 +181,7 @@ const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
     throw error;
   }
 
-  await prisma.whatsappMessage.update({
+  const gravado = await prisma.whatsappMessage.updateMany({
     where: { id: message.id },
     data: {
       mediaKey: key,
@@ -189,6 +193,15 @@ const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
       mediaError: null,
     },
   });
+
+  /**
+   * A conversa foi excluída enquanto este job baixava.
+   *
+   * O objeto já está no R2 e a chave nunca chegou ao banco, então a purga da exclusão não tem como
+   * alcançá-lo — ela varre `mediaKey`. Quem acabou de subir é o único que sabe onde o arquivo está,
+   * e é aqui que ele sai; sem isto, todo arquivo em voo no momento da exclusão fica órfão e pago.
+   */
+  if (gravado.count === 0) await deleteFile(R2_PRIVATE_BUCKET, key);
 };
 
 /**

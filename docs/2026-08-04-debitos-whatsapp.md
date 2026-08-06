@@ -38,6 +38,13 @@ de tudo que chega.
 
 ## 2. Política de retenção de conversa e mídia
 
+> **Parcialmente resolvido em 2026-08-06.** A **auditoria** ganhou retenção própria
+> (`AUDIT_RETENTION_DAYS`, purga em lotes e job diário — ver a seção "Auditoria" em
+> `../eloscrm-api/CLAUDE.md` e o plano `2026-08-06-auditoria-completa.md`), e a exclusão de uma
+> imobiliária passou a apagar os objetos dela no R2 e a instância na uazapi. O que continua **aberto** é
+> exatamente o que esta seção descreve: prazo para `Conversation`/`WhatsappMessage` e para as mídias de
+> conversas que seguem ativas, mais o caminho para o pedido de eliminação de um titular.
+
 **O que dói.** Nada é apagado. `Conversation`, `WhatsappMessage` e os objetos no R2 crescem
 indefinidamente. Três forças empurram para resolver, e nenhuma delas avisa antes de virar problema:
 
@@ -100,4 +107,4 @@ débito de código; é disciplina operacional que se perde com o tempo.
 
 ---
 
-> Criado em 2026-08-04 12:36 (-03) · Última modificação: 2026-08-04 12:36 (-03)
+> Criado em 2026-08-04 12:36 (-03) · Última modificação: 2026-08-06 12:35 (-03)

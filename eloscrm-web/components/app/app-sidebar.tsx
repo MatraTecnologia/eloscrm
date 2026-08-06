@@ -9,6 +9,7 @@ import {
   Handshake,
   LayoutDashboard,
   MessageSquare,
+  ScrollText,
   Settings,
   Snowflake,
   Users,
@@ -25,6 +26,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useSession } from "@/lib/auth-client";
+import { useMembers } from "@/lib/queries/members";
 import { OrgSwitcher } from "./org-switcher";
 import { UserMenu } from "./user-menu";
 
@@ -40,8 +43,18 @@ const items = [
   { title: "Configurações", href: "/settings", icon: Settings },
 ];
 
+// Só quem gerencia a imobiliária consulta a trilha da equipe — o gate real é a API (403 para
+// `member`), este é só o item de menu, mesmo padrão de gate de `comment-feed.tsx`.
+const managerItem = { title: "Auditoria", href: "/auditoria", icon: ScrollText };
+
 export const AppSidebar = () => {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const { data: members } = useMembers();
+  const myRole = members?.find((member) => member.userId === session?.user.id)?.role ?? null;
+  const isManager = myRole === "owner" || myRole === "admin";
+
+  const menuItems = isManager ? [...items, managerItem] : items;
 
   return (
     <Sidebar collapsible="icon">
@@ -55,7 +68,7 @@ export const AppSidebar = () => {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
+              {menuItems.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <SidebarMenuItem key={item.href}>

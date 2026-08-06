@@ -160,11 +160,25 @@ enum PropertyStatus {
   INATIVO
 }
 
+/// Discriminador de `AuditEvent`, `Comment` e `Attachment`. Comentário e anexo só existem para as quatro
+/// primeiras — ver ATTACHABLE_ENTITIES/COMMENTABLE_ENTITIES, que é o subconjunto que os schemas validam.
 enum AuditEntity {
   CLIENT
   DEAL
   PROPERTY
   ACTIVITY
+  PIPELINE
+  STAGE
+  COMMENT
+  ATTACHMENT
+  CONVERSATION
+  WHATSAPP_MESSAGE
+  WHATSAPP_INSTANCE
+  LEAD_AUTOMATION
+  MEMBER
+  INVITATION
+  ORGANIZATION
+  SESSION
 }
 
 enum AuditAction {
@@ -173,6 +187,42 @@ enum AuditAction {
   DELETED
   STAGE_CHANGED
   OWNER_CHANGED
+  TRANSFERRED
+  REORDERED
+  NURTURED
+  REACTIVATED
+  ARCHIVED
+  UNARCHIVED
+  LINKED
+  UNLINKED
+  UPLOADED
+  DOWNLOADED
+  MESSAGE_SENT
+  MESSAGE_DELETED
+  CONNECTED
+  DISCONNECTED
+  RESET
+  SYNCED
+  WEBHOOK_RECONCILED
+  TEST_MESSAGE_SENT
+  SIGNED_IN
+  SIGNED_OUT
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  ROLE_CHANGED
+  INVITED
+  INVITE_REVOKED
+  EXPORTED
+  PURGED
+}
+
+/// Quem originou a ação. `WEBHOOK` é a uazapi entregando evento; `SYSTEM`, o que roda sem request
+/// (purga por retenção). Espelha UazapiInstanceLogSource, em maiúsculas como os outros enums daqui.
+enum AuditSource {
+  USER
+  AUTOMATION
+  WEBHOOK
+  SYSTEM
 }
 
 enum AttachmentStatus {
@@ -340,17 +390,47 @@ model AuditEvent {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  entityType     AuditEntity
-  entityId       String
-  action         AuditAction
+  /// Desnormalização, não sobrevivência: a relação é Cascade, então excluir a imobiliária leva o log
+  /// dela. Existe para a busca e o CSV não precisarem de join — e por isso não pode ser cacheado, que
+  /// renomear a organização é caso real e auditado.
+  organizationName String?
+
+  entityType AuditEntity
+  entityId   String
+  /// Nome que o item tinha no momento do fato. É o que mantém o evento legível depois de o dado ser
+  /// apagado: sem isto a tela mostra cuid, porque não há mais linha para resolver o nome.
+  entityLabel String?
+
+  action AuditAction
+  source AuditSource @default(USER)
+
   // snapshot: o histórico mostra o nome que a pessoa tinha na hora do fato e sobrevive a ela sair da org
-  actorId        String?
-  actorName      String?
+  actorId    String?
+  actorName  String?
+  actorEmail String?
+
   // { campo: { from, to } }, só o que mudou
-  changes        Json?
-  createdAt      DateTime     @default(now())
+  changes Json?
+  /// A que o item pertencia, desnormalizado (lead, funil, estágio, conversa) — para a tela dizer "no
+  /// funil Vendas" sem depender de uma linha que pode não existir mais.
+  context Json?
+  /// Estado no momento do fato, por allowlist de campos (src/lib/audit-snapshot.ts). Telefone e e-mail
+  /// entram mascarados e conteúdo de conversa não entra: isto sobrevive à exclusão pedida pelo titular,
+  /// e quem limita no tempo é AUDIT_RETENTION_DAYS.
+  snapshot Json?
+
+  ip        String?
+  userAgent String?
+  /// request.id do Fastify: agrupa os eventos nascidos da mesma chamada (ex.: transferência em lote)
+  requestId String?
+
+  createdAt DateTime @default(now())
 
   @@index([organizationId, entityType, entityId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, actorId, createdAt])
+  // a purga por retenção varre por data, sem filtro de organização
+  @@index([createdAt])
 }
 
 model Comment {
