@@ -25,8 +25,9 @@ TanStack Query + shadcn/ui no web.
 ## Status da execução — CONCLUÍDO (2026-08-06)
 
 Executado na branch `feat/auditoria-completa`, mergeada em `main` (`948c9cc`) e marcada como
-**`v0.1.0`**. **123 dos 129 steps concluídos**; os 6 abertos são verificação manual e deploy (§10 e
-Task 21, steps 3 a 5) — nada de código pendente.
+**`v0.1.0`**. **124 dos 129 steps concluídos**; os 5 abertos são verificação manual (§10 e Task 21, steps 3 e 4) —
+nada de código pendente. **Schema aplicado em produção e aplicação no ar em 2026-08-06**; o que resta
+lá é o agendamento da purga, no fim da §9.
 
 Verificação no fim da execução: API com `oxlint` 0, `tsc` sem erro e **487 testes** (piso antes do
 plano: 397); web com lint, typecheck e build limpos.
@@ -1435,7 +1436,8 @@ git commit -m "feat: excluir a imobiliária apaga arquivos do R2 e a instância 
       o filtro por ator funciona e o CSV baixa.
 - [ ] **Step 4: Purga** — `pnpm -C eloscrm-api audit:purge --days 0 --dry-run` no banco de **dev** e
       conferir a contagem. **Nunca** com `--days 0` sem `--dry-run` fora de dev.
-- [ ] **Step 5: Deploy** — §9 abaixo, na ordem.
+- [x] **Step 5: Deploy** — §9, itens 1 e 4: schema aplicado no banco de produção e a aplicação no ar
+      (2026-08-06, confirmado pelo dono). O que resta é pós-deploy e está no fim da §9.
 
 ---
 
@@ -1504,6 +1506,18 @@ AUDIT_RETENTION_DAYS=365
 5. Primeira purga em produção: rodar `audit:purge --dry-run` antes, conferir a contagem, e só então
    deixar o job agendado assumir.
 
+### Situação em produção
+
+- **Feito (2026-08-06):** `prisma db push` aplicado e aplicação no ar.
+- **Pendente — o agendamento da purga.** É o único item com consequência silenciosa: sem `REDIS_URL`
+  no ambiente da API, `scheduleAuditRetention()` é no-op e **nada poda a tabela**. Com Redis, o job já
+  sobe agendado (03:20, America/Sao_Paulo); sem ele, entra no cron do host:
+  `20 3 * * * cd /app && pnpm -C eloscrm-api audit:purge`.
+- **Pendente — `AUDIT_RETENTION_DAYS`.** Sem a env vale o default do schema (365 dias), então a API
+  sobe normal; declará-la só importa para mudar o prazo.
+- **Opcional — backfill de rótulos.** `pnpm audit:backfill-labels --dry-run` mostra quantos eventos
+  antigos ainda dá para rotular; evento de item já apagado fica sem nome, e não há de onde tirar.
+
 ## 10. Verificação final (copiar a saída, não afirmar sem ela)
 
 ```bash
@@ -1523,4 +1537,4 @@ delas bloqueia o merge (a primeira tem cobertura automatizada equivalente):
 - [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco. Só o
       `audit:backfill-labels --dry-run` foi executado.
 
-> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 16:00 (-03)
+> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 16:12 (-03)
