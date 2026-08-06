@@ -26,8 +26,8 @@ TanStack Query + shadcn/ui no web.
 
 Executado na branch `feat/auditoria-completa`, mergeada em `main` (`948c9cc`) e marcada como
 **`v0.1.0`**. **124 dos 129 steps concluídos**; os 5 abertos são verificação manual (§10 e Task 21, steps 3 e 4) —
-nada de código pendente. **Schema aplicado em produção e aplicação no ar em 2026-08-06**; o que resta
-lá é o agendamento da purga, no fim da §9.
+nada de código pendente. **Deploy concluído em 2026-08-06** — schema aplicado, aplicação no ar e a
+purga diária agendada (§9).
 
 Verificação no fim da execução: API com `oxlint` 0, `tsc` sem erro e **487 testes** (piso antes do
 plano: 397); web com lint, typecheck e build limpos.
@@ -1506,17 +1506,28 @@ AUDIT_RETENTION_DAYS=365
 5. Primeira purga em produção: rodar `audit:purge --dry-run` antes, conferir a contagem, e só então
    deixar o job agendado assumir.
 
-### Situação em produção
+### Situação em produção — deploy completo (2026-08-06)
 
-- **Feito (2026-08-06):** `prisma db push` aplicado e aplicação no ar.
-- **Pendente — o agendamento da purga.** É o único item com consequência silenciosa: sem `REDIS_URL`
-  no ambiente da API, `scheduleAuditRetention()` é no-op e **nada poda a tabela**. Com Redis, o job já
-  sobe agendado (03:20, America/Sao_Paulo); sem ele, entra no cron do host:
-  `20 3 * * * cd /app && pnpm -C eloscrm-api audit:purge`.
-- **Pendente — `AUDIT_RETENTION_DAYS`.** Sem a env vale o default do schema (365 dias), então a API
-  sobe normal; declará-la só importa para mudar o prazo.
-- **Opcional — backfill de rótulos.** `pnpm audit:backfill-labels --dry-run` mostra quantos eventos
-  antigos ainda dá para rotular; evento de item já apagado fica sem nome, e não há de onde tirar.
+- `prisma db push` aplicado e aplicação no ar.
+- `REDIS_URL` configurada e o job diário agendado no boot (03:20, America/Sao_Paulo).
+- `AUDIT_RETENTION_DAYS` não precisa ser declarada: o default do schema de env são 365 dias. Declarar
+  só importa para mudar o prazo.
+- Opcional: `pnpm audit:backfill-labels --dry-run` mostra quantos eventos antigos ainda dá para
+  rotular. Evento de item já apagado fica sem nome — não há de onde tirar.
+
+> **A purga não vai dar sinal de vida por um ano.** O job roda todo dia, mas só grava
+> `ORGANIZATION/PURGED` quando encontra evento além do prazo — e o mais antigo da tabela nasceu em
+> 2026-08-06. Ou seja: até meados de 2027, "nenhum evento PURGED" é o resultado correto e é
+> indistinguível de um job que morreu. Para não descobrir isso só quando a tabela estiver grande,
+> exercite o caminho uma vez com prazo curto:
+>
+> ```bash
+> # em produção, sem apagar nada: quantos eventos teriam mais de 7 dias
+> DATABASE_URL="postgres://…produção…" pnpm -C eloscrm-api audit:purge --days 7 --dry-run
+> ```
+>
+> E, se quiser conferir que o agendamento existe de fato no Redis, o BullMQ responde por
+> `queue.getJobSchedulers()` na fila `audit-retention` (prefixo `eloscrm:production`).
 
 ## 10. Verificação final (copiar a saída, não afirmar sem ela)
 
@@ -1537,4 +1548,4 @@ delas bloqueia o merge (a primeira tem cobertura automatizada equivalente):
 - [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco. Só o
       `audit:backfill-labels --dry-run` foi executado.
 
-> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 16:12 (-03)
+> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 16:20 (-03)
