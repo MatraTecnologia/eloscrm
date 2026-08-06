@@ -13,6 +13,7 @@ import { encryptToken, hashToken, last4, newWebhookSecret } from "../../lib/cryp
 import { conflict, forbidden, notFound } from "../../lib/http-error.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import { prisma } from "../../lib/prisma.js";
+import { R2_PRIVATE_BUCKET, deleteFiles } from "../../lib/storage.js";
 import type { UazapiClient } from "../../lib/uazapi/index.js";
 import { applyInstanceSnapshot, parseStatus, str } from "../../lib/uazapi/snapshot.js";
 import type { Result } from "../../lib/uazapi/types.js";
@@ -258,11 +259,53 @@ export const deleteRemoteInstance = async (instance: { remoteDeletedAt: Date | n
   if (!result.success && !isInstanceGone(result.error)) throw uazapiError(result.error);
 };
 
+/**
+ * O que a remoção da conexão vai levar.
+ *
+ * `Conversation.instanceId` é `onDelete: Cascade`: remover a instância apaga **todo o atendimento** da
+ * imobiliária, não só o vínculo com o provedor. A tela precisa dizer isso com número, porque o texto
+ * antigo ("o histórico de conexão se perde") deixava entender que só a conexão ia embora.
+ */
+export const deletionPreview = async (orgId: string, actor: Actor) => {
+  await requireManager(orgId, actor);
+  const instance = await requireInstance(orgId);
+
+  const emConversas = { conversation: { instanceId: instance.id } };
+  const [conversations, messages, midias, bytes] = await Promise.all([
+    prisma.conversation.count({ where: { instanceId: instance.id } }),
+    prisma.whatsappMessage.count({ where: emConversas }),
+    prisma.whatsappMessage.count({ where: { ...emConversas, mediaKey: { not: null } } }),
+    prisma.whatsappMessage.aggregate({
+      where: { ...emConversas, mediaKey: { not: null } },
+      _sum: { mediaSize: true },
+    }),
+  ]);
+
+  return {
+    instance: { name: instance.name, status: instance.status, connected: !!instance.ownerJid },
+    conversations,
+    messages,
+    storage: { objects: midias, bytes: bytes._sum.mediaSize ?? 0 },
+  };
+};
+
 export const remove = async (orgId: string, actor: Actor) => {
   await requireManager(orgId, actor);
   const instance = await requireInstance(orgId);
 
   await deleteRemoteInstance(instance);
+
+  // As conversas cascateiam da instância, e com elas as mensagens — mas o Postgres não sabe do
+  // bucket: sem purgar aqui, toda mídia já baixada fica órfã e paga no R2. Antes do delete, porque
+  // depois não há mais `mediaKey` de onde tirar a chave.
+  const comMidia = await prisma.whatsappMessage.findMany({
+    where: { conversation: { instanceId: instance.id }, mediaKey: { not: null } },
+    select: { mediaKey: true },
+  });
+  await deleteFiles(
+    R2_PRIVATE_BUCKET,
+    comMidia.flatMap((m) => (m.mediaKey ? [m.mediaKey] : [])),
+  );
 
   // antes do delete (D6): entityLabel/snapshot só são legíveis enquanto a linha existe, e o
   // UazapiInstanceLog some junto com a instância — este evento é o que sobra

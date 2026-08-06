@@ -206,6 +206,19 @@ export type AuditEvent = {
  * `storage` e `whatsapp` são o que o cascade do banco **não** alcança: objetos no R2 e a conexão no
  * provedor. Estão separados por isso, e porque são a parte que o dono não tem como recuperar.
  */
+/**
+ * GET /v1/whatsapp/instance/deletion-preview.
+ *
+ * `conversations` e `messages` existem porque `Conversation` cascateia da instância: remover a conexão
+ * apaga o atendimento inteiro, não só o vínculo com o provedor.
+ */
+export type WhatsappDeletionPreview = {
+  instance: { name: string; status: string; connected: boolean };
+  conversations: number;
+  messages: number;
+  storage: { objects: number; bytes: number };
+};
+
 export type OrgDeletionPreview = {
   organization: { id: string; name: string; slug: string };
   counts: {

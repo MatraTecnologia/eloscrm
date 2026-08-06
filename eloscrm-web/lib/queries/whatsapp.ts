@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type {
+  WhatsappDeletionPreview,
   WhatsappInstance,
   WhatsappLimits,
   WhatsappLog,
@@ -129,6 +130,25 @@ export const useReconcileWhatsappWebhook = () =>
   useWhatsappMutation(async () => {
     await api.post("/whatsapp/instance/webhook/reconcile");
   });
+
+/**
+ * O que a remoção da conexão vai levar.
+ *
+ * Buscada só quando o diálogo abre, e sem cache: o número é a promessa feita ao gestor, e confirmar
+ * com uma contagem velha seria pior do que não mostrar nada.
+ */
+export const useWhatsappDeletionPreview = (enabled: boolean) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: ["whatsapp", org?.id, "deletion-preview"],
+    queryFn: async () => {
+      const { data } = await api.get<WhatsappDeletionPreview>("/whatsapp/instance/deletion-preview");
+      return data;
+    },
+    enabled: enabled && !!org?.id,
+    staleTime: 0,
+  });
+};
 
 export const useDeleteWhatsappInstance = () =>
   useWhatsappMutation(async () => {

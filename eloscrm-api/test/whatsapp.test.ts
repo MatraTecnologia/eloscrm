@@ -1,5 +1,7 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { R2_PRIVATE_BUCKET, headFile, uploadStream } from "../src/lib/storage.js";
 import { makeApp } from "./helpers/app.js";
 import { signIn, signUp, signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -617,6 +619,74 @@ describe("auditoria da gestão da instância de WhatsApp", () => {
     });
     expect(JSON.stringify(testSent)).not.toContain("sigiloso");
     expect(JSON.stringify(testSent)).not.toContain("999140409");
+  });
+
+  it("a prévia diz quantas conversas e mídias a remoção vai levar", async () => {
+    const created = await createInstance();
+    const instanceId = created.json().id;
+    const conversation = await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId, chatid: `prev-${stamp}@s.whatsapp.net` },
+    });
+    await prisma.whatsappMessage.create({
+      data: {
+        organizationId: orgId,
+        conversationId: conversation.id,
+        providerId: `owner:PREV-${stamp}`,
+        direction: "inbound",
+        type: "image",
+        mediaKey: `org/${orgId}/whatsapp/${conversation.id}/prev-${stamp}.jpg`,
+        mediaStatus: "ready",
+        mediaSize: 2048,
+        sentAt: new Date(),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/whatsapp/instance/deletion-preview",
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    // é o número que a tela mostra antes de confirmar: remover a conexão apaga o atendimento inteiro
+    expect(res.json()).toMatchObject({
+      conversations: 1,
+      messages: 1,
+      storage: { objects: 1, bytes: 2048 },
+    });
+  });
+
+  it("remover a instância apaga as mídias no R2 junto com as conversas", async () => {
+    const created = await createInstance();
+    const instanceId = created.json().id;
+    const conversation = await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId, chatid: `midia-${stamp}@s.whatsapp.net` },
+    });
+    // objeto de verdade: chave inventada faria o DeleteObjects devolver sucesso sem provar nada
+    const mediaKey = `org/${orgId}/whatsapp/${conversation.id}/foto-${stamp}.jpg`;
+    await uploadStream(R2_PRIVATE_BUCKET, mediaKey, Readable.from([Buffer.from("foto")]), "image/jpeg");
+    await prisma.whatsappMessage.create({
+      data: {
+        organizationId: orgId,
+        conversationId: conversation.id,
+        providerId: `owner:MIDIA-${stamp}`,
+        direction: "inbound",
+        type: "image",
+        mediaKey,
+        mediaStatus: "ready",
+        mediaSize: 4,
+        sentAt: new Date(),
+      },
+    });
+    expect(await headFile(R2_PRIVATE_BUCKET, mediaKey).catch(() => null)).toBeTruthy();
+
+    remote.instance.delete.mockResolvedValue(ok({}));
+    expect(
+      (await app.inject({ method: "DELETE", url: "/v1/whatsapp/instance", headers: { cookie } })).statusCode,
+    ).toBe(204);
+
+    // as conversas cascateiam da instância; o bucket não cascateia, e é isto que o service faz
+    expect(await prisma.conversation.count({ where: { id: conversation.id } })).toBe(0);
+    expect(await headFile(R2_PRIVATE_BUCKET, mediaKey).catch(() => null)).toBeNull();
   });
 
   it("apaga a instância mas os eventos de auditoria continuam legíveis (D6)", async () => {
