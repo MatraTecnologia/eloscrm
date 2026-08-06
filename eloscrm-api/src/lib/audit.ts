@@ -1,4 +1,4 @@
-import type { AuditAction, AuditEntity, Prisma } from "../generated/prisma/client.js";
+import { AuditSource, type AuditAction, type AuditEntity, type Prisma } from "../generated/prisma/client.js";
 import { prisma } from "./prisma.js";
 import type { Actor } from "./actor.js";
 
@@ -29,28 +29,54 @@ export const diffFields = (before: Record<string, unknown>, after: Record<string
   return changes;
 };
 
-export const recordAudit = async (input: {
+export type AuditInput = {
   orgId: string;
   entityType: AuditEntity;
   entityId: string;
+  /** Nome do item no momento do fato: é o que mantém o evento legível depois de o dado ser apagado. */
+  entityLabel?: string | null;
   action: AuditAction;
   actor: Actor;
   changes?: Changes;
-}): Promise<void> => {
-  // PATCH que não mudou nada não vira linha no histórico — senão a timeline enche de ruído
+  /** A que o item pertencia (lead, funil, estágio, conversa), desnormalizado. */
+  context?: Record<string, unknown>;
+  /** Estado no momento do fato — montar com `snapshotOf`, nunca espalhar a entidade. */
+  snapshot?: Record<string, unknown>;
+};
+
+export const recordAudit = async (input: AuditInput): Promise<void> => {
+  // PATCH que não mudou nada não vira linha no histórico — senão a timeline enche de ruído. Só vale
+  // quando `changes` foi passado: ARCHIVED, LINKED e afins não têm diff e precisam gravar mesmo assim.
   if (input.changes && Object.keys(input.changes).length === 0) return;
+
+  // sem cache: renomear a imobiliária é caso real (e auditado), então um Map por processo devolveria
+  // nome velho. Se aparecer em perfil de latência, o caminho é receber o nome de quem já carregou a org
+  const org = await prisma.organization.findUnique({
+    where: { id: input.orgId },
+    select: { name: true },
+  });
+
   await prisma.auditEvent.create({
     data: {
       organizationId: input.orgId,
+      organizationName: org?.name ?? null,
       entityType: input.entityType,
       entityId: input.entityId,
+      entityLabel: input.entityLabel ?? null,
       action: input.action,
+      source: input.actor.source ?? AuditSource.USER,
       // id vazio é o ator sintético da automação: a coluna guarda null, não uma string que nunca
       // vai casar com um usuário
       actorId: input.actor.id || null,
       actorName: input.actor.name,
+      actorEmail: input.actor.email ?? null,
       // Changes usa `unknown` em from/to pra aceitar qualquer valor normalizado; a coluna é Json
       changes: input.changes as Prisma.InputJsonValue | undefined,
+      context: input.context as Prisma.InputJsonValue | undefined,
+      snapshot: input.snapshot as Prisma.InputJsonValue | undefined,
+      ip: input.actor.ip ?? null,
+      userAgent: input.actor.userAgent ?? null,
+      requestId: input.actor.requestId ?? null,
     },
   });
 };

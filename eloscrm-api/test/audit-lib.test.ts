@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { AuditAction, AuditEntity, Prisma } from "../src/generated/prisma/client.js";
+import { AuditAction, AuditEntity, AuditSource, Prisma } from "../src/generated/prisma/client.js";
 import { diffFields, recordAudit } from "../src/lib/audit.js";
+import { labelOf, maskEmail, maskPhone, snapshotOf } from "../src/lib/audit-snapshot.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -86,5 +87,103 @@ describe("recordAudit", () => {
       where: { organizationId: orgId, entityId: "cliente-sem-mudanca" },
     });
     expect(events).toHaveLength(0);
+  });
+
+  it("grava ação sem diff — arquivar não tem `changes` e não pode ser suprimido", async () => {
+    await recordAudit({
+      orgId,
+      entityType: AuditEntity.CONVERSATION,
+      entityId: "conversa-arquivada",
+      entityLabel: "Ana Paula",
+      action: AuditAction.ARCHIVED,
+      actor: { id: "user-9", name: "Corretora Ana" },
+    });
+
+    const [event] = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityId: "conversa-arquivada" },
+    });
+    expect(event.action).toBe(AuditAction.ARCHIVED);
+    expect(event.entityLabel).toBe("Ana Paula");
+  });
+
+  it("copia origem e e-mail do ator, e o nome da organização", async () => {
+    await recordAudit({
+      orgId,
+      entityType: AuditEntity.CLIENT,
+      entityId: "cliente-com-origem",
+      action: AuditAction.CREATED,
+      actor: {
+        id: "",
+        name: "Automação",
+        source: AuditSource.AUTOMATION,
+        ip: "203.0.113.7",
+        requestId: "req-42",
+      },
+    });
+
+    const [event] = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityId: "cliente-com-origem" },
+    });
+    expect(event.source).toBe(AuditSource.AUTOMATION);
+    // id vazio é o ator sintético: a coluna guarda null em vez de string que não casa com usuário
+    expect(event.actorId).toBeNull();
+    expect(event.ip).toBe("203.0.113.7");
+    expect(event.requestId).toBe("req-42");
+    expect(event.organizationName).toBeTruthy();
+  });
+});
+
+describe("audit-snapshot", () => {
+  it("mascara telefone preservando DDD e os dois últimos dígitos", () => {
+    expect(maskPhone("(43) 99183-4229")).toBe("(43) *****-**29");
+    expect(maskPhone("554391834229")).toBe("(43) ****-**29");
+    expect(maskPhone(null)).toBeNull();
+  });
+
+  it("mascara e-mail preservando o domínio", () => {
+    expect(maskEmail("ana.paula@gmail.com")).toBe("an***@gmail.com");
+    expect(maskEmail("sem-arroba")).toBe("***");
+    expect(maskEmail(undefined)).toBeNull();
+  });
+
+  it("copia só o que a allowlist permite e mascara os derivados", () => {
+    const snapshot = snapshotOf(AuditEntity.CLIENT, {
+      name: "Ana Paula",
+      phone: "(43) 99183-4229",
+      email: "ana@gmail.com",
+      source: "WHATSAPP",
+      temperature: "HOT",
+      // fora da allowlist: não pode aparecer no snapshot
+      notes: "anotação interna que não é dado de auditoria",
+    });
+
+    expect(snapshot).toEqual({
+      source: "WHATSAPP",
+      temperature: "HOT",
+      phoneMasked: "(43) *****-**29",
+      emailMasked: "an***@gmail.com",
+    });
+  });
+
+  it("não guarda texto de mensagem", () => {
+    const snapshot = snapshotOf(AuditEntity.WHATSAPP_MESSAGE, {
+      direction: "outbound",
+      type: "text",
+      text: "proposta enviada ao cliente",
+      mediaKey: "org/x/y.jpg",
+      sentAt: new Date("2026-08-06T12:00:00.000Z"),
+    });
+
+    expect(snapshot).toEqual({
+      direction: "outbound",
+      type: "text",
+      sentAt: "2026-08-06T12:00:00.000Z",
+    });
+  });
+
+  it("rótulo cai no primeiro campo informativo e trunca texto longo", () => {
+    expect(labelOf({ title: "Apto 302" })).toBe("Apto 302");
+    expect(labelOf({ description: "x".repeat(200) })).toHaveLength(120);
+    expect(labelOf({ id: "cly123" })).toBeNull();
   });
 });

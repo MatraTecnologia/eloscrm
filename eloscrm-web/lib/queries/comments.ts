@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { AuditEntity, Comment } from "@/lib/types";
+import type { AnnotatableEntity, Comment } from "@/lib/types";
 
-export const useComments = (entityType: AuditEntity, entityId: string) => {
+export const useComments = (entityType: AnnotatableEntity, entityId: string) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
     queryKey: ["comments", org?.id, entityType, entityId],
@@ -18,7 +18,7 @@ export const useComments = (entityType: AuditEntity, entityId: string) => {
 export const useCreateComment = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { entityType: AuditEntity; entityId: string; body: string }) => {
+    mutationFn: async (input: { entityType: AnnotatableEntity; entityId: string; body: string }) => {
       const { data } = await api.post<Comment>("/comments", input);
       return data;
     },

@@ -46,11 +46,24 @@ export const deleteForEntities = (orgId: string, entityType: AuditEntity, entity
     where: { organizationId: orgId, entityType, entityId: { in: entityIds } },
   });
 
-// o anexo aponta para cliente, negócio, imóvel ou atividade; a existência dentro da org é checada aqui
+/**
+ * O anexo aponta para cliente, negócio, imóvel ou atividade; a existência dentro da org é checada aqui.
+ *
+ * Exaustivo de propósito: `AuditEntity` tem valores que não são anexáveis, e um `else` final os mandava
+ * para `activity.findFirst` — falhava fechado, mas por acidente. Tipo desconhecido não existe.
+ */
 export const entityExistsInOrg = async (orgId: string, entityType: AuditEntity, entityId: string) => {
   const where = { id: entityId, organizationId: orgId };
-  if (entityType === "CLIENT") return !!(await prisma.client.findFirst({ where }));
-  if (entityType === "DEAL") return !!(await prisma.deal.findFirst({ where }));
-  if (entityType === "PROPERTY") return !!(await prisma.property.findFirst({ where }));
-  return !!(await prisma.activity.findFirst({ where }));
+  switch (entityType) {
+    case "CLIENT":
+      return !!(await prisma.client.findFirst({ where }));
+    case "DEAL":
+      return !!(await prisma.deal.findFirst({ where }));
+    case "PROPERTY":
+      return !!(await prisma.property.findFirst({ where }));
+    case "ACTIVITY":
+      return !!(await prisma.activity.findFirst({ where }));
+    default:
+      return false;
+  }
 };

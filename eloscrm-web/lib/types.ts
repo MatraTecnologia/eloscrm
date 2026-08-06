@@ -119,18 +119,84 @@ export type DashboardStats = {
   bySource: Record<ClientSource, number>;
 };
 
-export type AuditEntity = "CLIENT" | "DEAL" | "PROPERTY" | "ACTIVITY";
-export type AuditAction = "CREATED" | "UPDATED" | "DELETED" | "STAGE_CHANGED" | "OWNER_CHANGED";
+export type AuditEntity =
+  | "CLIENT"
+  | "DEAL"
+  | "PROPERTY"
+  | "ACTIVITY"
+  | "PIPELINE"
+  | "STAGE"
+  | "COMMENT"
+  | "ATTACHMENT"
+  | "CONVERSATION"
+  | "WHATSAPP_MESSAGE"
+  | "WHATSAPP_INSTANCE"
+  | "LEAD_AUTOMATION"
+  | "MEMBER"
+  | "INVITATION"
+  | "ORGANIZATION"
+  | "SESSION";
+
+/** Comentário e anexo só existem para estas quatro — espelha ANNOTATABLE_ENTITIES da API. */
+export type AnnotatableEntity = "CLIENT" | "DEAL" | "PROPERTY" | "ACTIVITY";
+
+export type AuditAction =
+  | "CREATED"
+  | "UPDATED"
+  | "DELETED"
+  | "STAGE_CHANGED"
+  | "OWNER_CHANGED"
+  | "TRANSFERRED"
+  | "REORDERED"
+  | "NURTURED"
+  | "REACTIVATED"
+  | "ARCHIVED"
+  | "UNARCHIVED"
+  | "LINKED"
+  | "UNLINKED"
+  | "UPLOADED"
+  | "DOWNLOADED"
+  | "MESSAGE_SENT"
+  | "MESSAGE_DELETED"
+  | "CONNECTED"
+  | "DISCONNECTED"
+  | "RESET"
+  | "SYNCED"
+  | "WEBHOOK_RECONCILED"
+  | "TEST_MESSAGE_SENT"
+  | "SIGNED_IN"
+  | "SIGNED_OUT"
+  | "MEMBER_ADDED"
+  | "MEMBER_REMOVED"
+  | "ROLE_CHANGED"
+  | "INVITED"
+  | "INVITE_REVOKED"
+  | "EXPORTED"
+  | "PURGED";
+
+export type AuditSource = "USER" | "AUTOMATION" | "WEBHOOK" | "SYSTEM";
 
 export type AuditEvent = {
   id: string;
   entityType: AuditEntity;
   entityId: string;
+  // nome que o item tinha no momento do fato; nulo em evento antigo, anterior ao backfill
+  entityLabel: string | null;
   action: AuditAction;
+  source: AuditSource;
   actorId: string | null;
   actorName: string | null;
+  actorEmail: string | null;
+  organizationName: string | null;
   // { campo: { from, to } } — só os campos que mudaram
   changes: Record<string, { from: unknown; to: unknown }> | null;
+  // a que o item pertencia (lead, funil, estágio…), desnormalizado no próprio evento
+  context: Record<string, unknown> | null;
+  // estado no momento do fato, por allowlist — telefone e e-mail vêm mascarados
+  snapshot: Record<string, unknown> | null;
+  ip: string | null;
+  userAgent: string | null;
+  requestId: string | null;
   createdAt: string;
 };
 
