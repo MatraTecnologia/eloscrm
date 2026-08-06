@@ -205,7 +205,13 @@ export const AuditDetailSheet = ({ event, onOpenChange, onFilterByRequestId }: P
                     Este registro foi excluído. O que está aqui é o que a auditoria guardou dele.
                   </p>
                 ) : href ? (
-                  <Button variant="outline" className="w-full" render={<Link href={href} />}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    // o render é um <a>: sem isto o Base UI avisa que perdeu a semântica de button
+                    nativeButton={false}
+                    render={<Link href={href} />}
+                  >
                     <ExternalLink className="size-4" />
                     Abrir item
                   </Button>

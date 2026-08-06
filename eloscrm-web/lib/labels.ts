@@ -267,6 +267,46 @@ export const FIELD_LABELS: Record<string, string> = {
   nurtureNote: "Detalhe da nutrição",
   nurtureUntil: "Retomar em",
   nurturedAt: "Em nutrição desde",
+
+  // Chaves de `snapshot` e `context` da auditoria: nome de coluna do banco não pode aparecer na
+  // tela, e o detalhe do evento mostra esses dois objetos como pares chave/valor.
+  phoneMasked: "Telefone",
+  emailMasked: "E-mail",
+  ownerMasked: "Número conectado",
+  isOpen: "Em aberto",
+  isGroup: "Grupo",
+  isWon: "Estágio de ganho",
+  isLost: "Estágio de perda",
+  position: "Posição",
+  city: "Cidade",
+  price: "Preço",
+  filename: "Arquivo",
+  contentType: "Tipo do arquivo",
+  size: "Tamanho",
+  direction: "Sentido",
+  sentAt: "Enviada em",
+  messageCount: "Mensagens",
+  firstMessageAt: "Primeira mensagem",
+  lastMessageAt: "Última mensagem",
+  clientName: "Lead",
+  dealTitle: "Negócio",
+  pipelineName: "Funil",
+  stageName: "Estágio",
+  stageCount: "Estágios",
+  targetType: "Tipo do alvo",
+  targetLabel: "Alvo",
+  conversationId: "Conversa",
+  messageId: "Id da mensagem",
+  ownerJid: "Número conectado",
+  role: "Papel",
+  deals: "Negócios",
+  activities: "Atividades",
+  order: "Ordem",
+  removed: "Eventos removidos",
+  retentionDays: "Retenção (dias)",
+  rows: "Linhas",
+  filters: "Filtros",
+  to: "Destino",
 };
 
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
@@ -274,7 +314,16 @@ export const FIELD_LABELS: Record<string, string> = {
 const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
 
 // Datas chegam do audit como ISO; sem isto o histórico mostra 2026-07-21T02:59:59.999Z na tela
-const DATE_FIELDS = new Set(["dueAt", "doneAt", "nurtureUntil", "nurturedAt"]);
+const DATE_FIELDS = new Set([
+  "dueAt",
+  "doneAt",
+  "nurtureUntil",
+  "nurturedAt",
+  // do snapshot da auditoria
+  "sentAt",
+  "firstMessageAt",
+  "lastMessageAt",
+]);
 
 // null/undefined viram travessão; o resto é texto puro — o valor vem de uma coluna Json sem forma fixa.
 // Usada tanto pelo histórico de auditoria quanto pela timeline unificada do Resumo, para as duas
