@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -8,6 +9,8 @@ let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let cookie = "";
 let cookieB = "";
+let orgId = "";
+let orgIdB = "";
 
 type Stage = { id: string; name: string; pipelineId: string };
 type Pipeline = { id: string; name: string; stages: Stage[] };
@@ -24,8 +27,8 @@ const createClient = async (headers: { cookie: string }, name: string) => {
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ cookie } = await signUpWithOrg(app, `pipelines-a-${stamp}@eloscrm.test`, `pipelines-a-${stamp}`));
-  ({ cookie: cookieB } = await signUpWithOrg(
+  ({ cookie, orgId } = await signUpWithOrg(app, `pipelines-a-${stamp}@eloscrm.test`, `pipelines-a-${stamp}`));
+  ({ cookie: cookieB, orgId: orgIdB } = await signUpWithOrg(
     app,
     `pipelines-b-${stamp}@eloscrm.test`,
     `pipelines-b-${stamp}`,
@@ -183,5 +186,179 @@ describe("pipelines", () => {
     });
     expect(patchByB.statusCode).toBe(404);
     expect(patchByB.json().error.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("auditoria de pipelines e estágios", () => {
+  it("audita criação de pipeline", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Pipeline Auditado" },
+    });
+    const pipeline = created.json();
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.CREATED },
+    });
+    expect(event.entityLabel).toBe("Pipeline Auditado");
+    expect(event.context).toEqual({ stageCount: 3 });
+    expect(event.actorName).toBeTruthy();
+  });
+
+  it("audita atualização de pipeline", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Pipeline Original" },
+    });
+    const pipeline = created.json();
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/pipelines/${pipeline.id}`,
+      headers: { cookie },
+      payload: { name: "Pipeline Renomeado" },
+    });
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.UPDATED },
+    });
+    expect(event.entityLabel).toBe("Pipeline Renomeado");
+    expect(event.changes).toEqual({ name: { from: "Pipeline Original", to: "Pipeline Renomeado" } });
+  });
+
+  it("audita remoção de pipeline e o rótulo sobrevive à exclusão", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Pipeline Para Apagar" },
+    });
+    const pipeline = created.json();
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/v1/pipelines/${pipeline.id}`,
+      headers: { cookie },
+    });
+    expect(removed.statusCode).toBe(204);
+    expect(await prisma.pipeline.findUnique({ where: { id: pipeline.id } })).toBeNull();
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.DELETED },
+    });
+    expect(event.entityLabel).toBe("Pipeline Para Apagar");
+  });
+
+  it("audita criação, atualização e remoção de estágio com o nome do pipeline no contexto", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Pipeline Dos Estágios" },
+    });
+    const pipeline = created.json();
+
+    const addStage = await app.inject({
+      method: "POST",
+      url: `/v1/pipelines/${pipeline.id}/stages`,
+      headers: { cookie },
+      payload: { name: "Estágio Novo" },
+    });
+    const stage = addStage.json();
+
+    const createdEvent = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.STAGE, entityId: stage.id, action: AuditAction.CREATED },
+    });
+    expect(createdEvent.entityLabel).toBe("Estágio Novo");
+    expect(createdEvent.context).toEqual({ pipelineName: "Pipeline Dos Estágios" });
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/stages/${stage.id}`,
+      headers: { cookie },
+      payload: { name: "Estágio Renomeado" },
+    });
+
+    const updatedEvent = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.STAGE, entityId: stage.id, action: AuditAction.UPDATED },
+    });
+    expect(updatedEvent.entityLabel).toBe("Estágio Renomeado");
+    expect(updatedEvent.changes).toEqual({ name: { from: "Estágio Novo", to: "Estágio Renomeado" } });
+    expect(updatedEvent.context).toEqual({ pipelineName: "Pipeline Dos Estágios" });
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/v1/stages/${stage.id}`,
+      headers: { cookie },
+    });
+    expect(removed.statusCode).toBe(204);
+    expect(await prisma.stage.findUnique({ where: { id: stage.id } })).toBeNull();
+
+    const deletedEvent = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.STAGE, entityId: stage.id, action: AuditAction.DELETED },
+    });
+    expect(deletedEvent.entityLabel).toBe("Estágio Renomeado");
+    expect(deletedEvent.context).toEqual({ pipelineName: "Pipeline Dos Estágios" });
+  });
+
+  it("audita reordenação de estágios com nomes, não ids", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Pipeline Para Reordenar" },
+    });
+    const pipeline = created.json();
+    const stages = pipeline.stages as Stage[];
+    const originalNames = stages.map((s) => s.name);
+    const reversedIds = [...stages].reverse().map((s) => s.id);
+    const reversedNames = [...originalNames].reverse();
+
+    const reordered = await app.inject({
+      method: "PATCH",
+      url: `/v1/pipelines/${pipeline.id}/reorder-stages`,
+      headers: { cookie },
+      payload: { stageIds: reversedIds },
+    });
+    expect(reordered.statusCode).toBe(200);
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.REORDERED },
+    });
+    expect(event.changes).toEqual({ order: { from: originalNames, to: reversedNames } });
+
+    // depois de um estágio ser apagado, o evento de reorder continua legível — não depende do id
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/v1/stages/${reversedIds[0]}`,
+      headers: { cookie },
+    });
+    expect(removed.statusCode).toBe(204);
+    const stillThere = await prisma.auditEvent.findFirstOrThrow({ where: { id: event.id } });
+    expect(stillThere.changes).toEqual({ order: { from: originalNames, to: reversedNames } });
+  });
+
+  it("isola eventos de auditoria de pipeline por organização", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie: cookieB },
+      payload: { name: "Pipeline Da Org B" },
+    });
+    const pipeline = created.json();
+
+    const eventInB = await prisma.auditEvent.findFirst({
+      where: { organizationId: orgIdB, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.CREATED },
+    });
+    expect(eventInB).not.toBeNull();
+
+    const eventInA = await prisma.auditEvent.findFirst({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id },
+    });
+    expect(eventInA).toBeNull();
   });
 });

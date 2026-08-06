@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { actorOf } from "../../../lib/actor.js";
 import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
 import {
@@ -17,33 +18,33 @@ const pipelinesRoutes = async (app: FastifyInstance) => {
 
   app.post("/", async (request, reply) => {
     const data = createPipelineSchema.parse(request.body);
-    const pipeline = await service.create(request.orgId!, data);
+    const pipeline = await service.create(request.orgId!, data, actorOf(request));
     return reply.status(201).send(pipeline);
   });
 
   app.patch("/:id", async (request) => {
     const { id } = request.params as { id: string };
     const data = updatePipelineSchema.parse(request.body);
-    return service.update(request.orgId!, id, data);
+    return service.update(request.orgId!, id, data, actorOf(request));
   });
 
   app.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    await service.remove(request.orgId!, id);
+    await service.remove(request.orgId!, id, actorOf(request));
     return reply.status(204).send();
   });
 
   app.post("/:id/stages", async (request, reply) => {
     const { id } = request.params as { id: string };
     const data = createStageSchema.parse(request.body);
-    const stage = await service.addStage(request.orgId!, id, data);
+    const stage = await service.addStage(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(stage);
   });
 
   app.patch("/:id/reorder-stages", async (request) => {
     const { id } = request.params as { id: string };
     const data = reorderStagesSchema.parse(request.body);
-    return service.reorderStages(request.orgId!, id, data);
+    return service.reorderStages(request.orgId!, id, data, actorOf(request));
   });
 };
 
