@@ -10,6 +10,7 @@ import { otpCodeTemplate } from "./email/templates/otp-code.js";
 import { passwordChangedTemplate } from "./email/templates/password-changed.js";
 import { changeEmailTemplate } from "./email/templates/change-email.js";
 import * as identity from "../modules/audit/identity.audit.js";
+import { purgeOrganizationAssetsSafely } from "../modules/audit/organization-purge.service.js";
 import { orgInvitationTemplate } from "./email/templates/org-invitation.js";
 
 const isProduction = env.NODE_ENV === "production";
@@ -114,6 +115,11 @@ export const auth = betterAuth({
       // adaptador engole a própria falha (ver `safeRecord`), senão um erro de escrita aqui trancaria
       // criação de organização e convite.
       organizationHooks: {
+        // O cascade do Postgres apaga as 13 tabelas da imobiliária, mas não sabe do bucket nem da
+        // uazapi: sem isto, excluir a organização deixaria arquivo pago no R2 e o número ainda
+        // conectado no provedor. Antes do delete porque depois não há mais chave nem token.
+        beforeDeleteOrganization: async ({ organization }) =>
+          void (await purgeOrganizationAssetsSafely(organization.id)),
         afterCreateOrganization: async ({ organization, user }) =>
           identity.auditOrganizationCreated(organization, user),
         afterUpdateOrganization: async ({ organization, user }) =>
@@ -126,6 +132,8 @@ export const auth = betterAuth({
           identity.auditMemberRoleChanged(member, previousRole, user, organization),
         afterCreateInvitation: async ({ invitation, inviter, organization }) =>
           identity.auditInvitationCreated(invitation, inviter, organization),
+        afterCancelInvitation: async ({ invitation, cancelledBy, organization }) =>
+          identity.auditInvitationRevoked(invitation, cancelledBy, organization),
       },
     }),
     emailOTP({

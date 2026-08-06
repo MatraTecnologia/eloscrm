@@ -19,19 +19,31 @@ const actorFrom = (user: { id: string; name?: string | null; email?: string | nu
 });
 
 /**
+ * Quantos eventos de identidade foram perdidos por falha de escrita.
+ *
+ * Exposto em `/health` de propósito: engolir a falha em silêncio faria uma auditoria de identidade
+ * sistematicamente quebrada (FK errada, schema novo sem `db push`) parecer igual a "ninguém entrou
+ * hoje". Este contador é o sinal de que a diferença existe.
+ */
+export const identityAuditFailures = { count: 0, lastMessage: null as string | null };
+
+/**
  * Auditar identidade **não pode derrubar a autenticação**.
  *
  * Exceção deliberada à regra de "falha de auditoria aborta a operação" (D5 do plano): aqui o
  * `recordAudit` roda dentro de hook do Better Auth, e erro propagado ali tranca login, criação de
  * organização e convite. Perder um evento é menos grave que ninguém conseguir entrar — então a falha
- * vira log e a operação segue.
+ * é contabilizada e a operação segue.
  */
 const safeRecord = async (input: AuditInput) => {
   try {
     await recordAudit(input);
-  } catch {
-    // sem logger aqui: `lib/auth.ts` é montado antes do Fastify e não tem request.log. O evento
-    // perdido aparece como lacuna na trilha, e a operação de auth continua de pé.
+  } catch (error) {
+    identityAuditFailures.count += 1;
+    identityAuditFailures.lastMessage = error instanceof Error ? error.message : String(error);
+    // `lib/auth.ts` é montado antes do Fastify e não tem `request.log`; emitWarning põe a falha no
+    // stderr do processo sem depender de logger nem de console (proibido por lint)
+    process.emitWarning(`auditoria de identidade falhou: ${identityAuditFailures.lastMessage}`);
   }
 };
 
@@ -168,8 +180,10 @@ export const auditMemberRoleChanged = (
     changes: { role: { from: previousRole, to: member.role } },
   });
 
+type HookInvitation = { id: string; email: string; role?: string | null };
+
 export const auditInvitationCreated = (
-  invitation: { id: string; email: string; role?: string | null },
+  invitation: HookInvitation,
   inviter: HookUser,
   organization: HookOrg,
 ) =>
@@ -181,5 +195,20 @@ export const auditInvitationCreated = (
     entityLabel: maskEmail(invitation.email),
     action: AuditAction.INVITED,
     actor: actorFrom(inviter),
+    context: { role: invitation.role ?? null },
+  });
+
+export const auditInvitationRevoked = (
+  invitation: HookInvitation,
+  cancelledBy: HookUser,
+  organization: HookOrg,
+) =>
+  safeRecord({
+    orgId: organization.id,
+    entityType: AuditEntity.INVITATION,
+    entityId: invitation.id,
+    entityLabel: maskEmail(invitation.email),
+    action: AuditAction.INVITE_REVOKED,
+    actor: actorFrom(cancelledBy),
     context: { role: invitation.role ?? null },
   });
