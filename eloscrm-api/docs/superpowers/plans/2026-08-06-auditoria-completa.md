@@ -92,18 +92,25 @@ apagou o histórico dele. O que falta é o evento continuar **legível** depois:
 | `source AuditSource` | quem originou: pessoa, automação, webhook, sistema | `USER` |
 | `ip`, `userAgent`, `requestId` | origem técnica e correlação entre eventos da mesma request | — |
 
-**A relação com `Organization` fica.** Considerei removê-la para o log sobreviver à exclusão da
-imobiliária, e rejeitei: (a) o pedido é sobre o dado de domínio, não sobre apagar a org; (b) `db push`
-dropando constraint entra no território de `--accept-data-loss`, que o `CLAUDE.md` manda parar e revisar;
-(c) linha órfã fica invisível para toda query com `organizationId` — **inclusive a purga**, que nunca
-mais a alcançaria.
-Se o dono do produto quiser auditoria sobrevivendo à exclusão da org, isso é uma mudança separada e
-precisa de uma rotina própria de expurgo de órfãos.
+**A relação com `Organization` fica em `Cascade`, e isso é o comportamento pedido.** Decisão do dono do
+produto (2026-08-06): **excluir a imobiliária apaga tudo que é dela** — arquivos no R2, mensagens,
+conversas, negócios e a auditoria. A independência que o pedido exige é em relação ao **dado de
+domínio** (apagar um lead não pode apagar o histórico dele), não em relação ao tenant. Isso também é o
+que mantém a purga funcionando: linha órfã ficaria invisível a toda query com `organizationId`.
 
-**Consequência a não confundir:** com a relação em `Cascade`, `organizationName` **não** sobrevive à
-exclusão da imobiliária — nada na tabela sobrevive. Ele é desnormalização de conveniência (busca e CSV
-sem join), e por isso **não** pode ser cacheado por processo: a Task 9 audita
-`afterUpdateOrganization`, ou seja, renomear a imobiliária é caso real e um cache ficaria velho.
+Só que o cascade do Postgres **não alcança tudo**. Duas coisas ficam para trás hoje e são fechadas na
+**Task 19**:
+
+1. **Objetos no R2** — `Attachment.key` e `WhatsappMessage.mediaKey` apontam para o bucket privado. A
+   linha some, o arquivo continua pago e acessível por chave.
+2. **A instância na uazapi** — `UazapiInstance` cascateia no banco, mas a instância remota continua de pé
+   no provedor, conectada ao WhatsApp do cliente. `whatsapp.service.remove:211-223` já faz a exclusão
+   remota; o caminho de exclusão da org não passa por lá.
+
+**Consequência a não confundir:** `organizationName` **não** sobrevive à exclusão da imobiliária — nada
+na tabela sobrevive. Ele é desnormalização de conveniência (busca e CSV sem join), e por isso **não**
+pode ser cacheado por processo: a Task 9 audita `afterUpdateOrganization`, ou seja, renomear a
+imobiliária é caso real e um cache ficaria velho.
 
 **Não guardo `actorRole`.** Seria uma query em `member` por evento (N+1 no caminho de escrita) para
 informação que `actorEmail` + a tela de membros já dão.
@@ -351,6 +358,7 @@ Contrato do que precisa emitir evento. Coluna "hoje" = o que existe antes deste 
 | papel alterado | MEMBER | ROLE_CHANGED | `organizationHooks.afterUpdateMemberRole` | 9 |
 | convite enviado | INVITATION | INVITED | `organizationHooks.afterCreateInvitation` | 9 |
 | convite cancelado | INVITATION | INVITE_REVOKED | hook correspondente | 9 |
+| org **excluída** | — | — (não se audita: o evento morreria no mesmo cascade; o rastro vai para o log da aplicação) | `beforeDeleteOrganization` | 19 |
 
 ### Sistema
 
@@ -1226,7 +1234,119 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 
 ---
 
-### Task 19: Documentação
+### Task 19: Excluir a imobiliária apaga tudo que é dela
+
+Decisão do dono do produto (D2): excluir a organização leva arquivos, mensagens, conversas e auditoria.
+O cascade do Postgres já cobre as **13 tabelas** de domínio (`Organization` tem 13 relações com
+`onDelete: Cascade`, incluindo `auditEvents`, `attachments`, `conversations` e `whatsappMessages`) — esta
+task fecha o que ele não alcança: objetos no R2 e a instância remota na uazapi.
+
+**Files:**
+- Create: `eloscrm-api/src/modules/audit/organization-purge.service.ts`
+- Modify: `eloscrm-api/src/lib/auth.ts` (`organizationHooks.beforeDeleteOrganization`)
+- Modify: `eloscrm-api/src/modules/whatsapp/whatsapp.service.ts` (extrair a exclusão remota)
+- Test: `eloscrm-api/test/organization-purge.test.ts` (novo)
+
+**Interfaces:**
+- Consumes: Tasks 1-2 (`SYSTEM_ACTOR`), `deleteFiles`/`R2_PRIVATE_BUCKET` de `src/lib/storage.js`.
+- Produces: `purgeOrganizationAssets(orgId)` — apaga os objetos do R2 e a instância remota **antes** de o
+  Better Auth apagar a org; hook registrado.
+
+**Contexto verificado:** o plugin `organization` expõe `beforeDeleteOrganization(data, ctx)` e
+`afterDeleteOrganization` (doc oficial), e hoje o projeto **não** configura nenhum dos dois nem
+`disableOrganizationDeletion` — ou seja, o endpoint de exclusão está aberto para o `owner` por default,
+e o web ainda não tem tela para ele (`grep -rn "organization.delete" eloscrm-web` → nada). A purga
+precisa existir **antes** de essa tela existir.
+
+- [ ] **Step 1: Extrair a exclusão remota da instância**
+
+`whatsapp.service.remove` faz duas coisas: valida gestor e apaga na uazapi + no banco. Extrair o miolo
+para `deleteRemoteInstance(instance)` (sem `requireManager` — quem exclui a org é `owner` por definição
+do Better Auth) e chamar dos dois lugares. `isInstanceGone` continua sendo tratado como sucesso.
+
+- [ ] **Step 2: `purgeOrganizationAssets(orgId)`**
+
+```ts
+/**
+ * O que o cascade do Postgres não alcança quando a imobiliária é excluída.
+ *
+ * Ordem: primeiro o que é externo (R2 e uazapi), depois o Better Auth apaga a org e o banco cascateia.
+ * Invertido, as chaves dos objetos e o token da instância já teriam sumido — e o arquivo continuaria
+ * pago no bucket, com a instância ainda conectada ao WhatsApp do cliente.
+ */
+export const purgeOrganizationAssets = async (orgId: string) => {
+  const [anexos, midias] = await Promise.all([
+    prisma.attachment.findMany({ where: { organizationId: orgId }, select: { key: true } }),
+    prisma.whatsappMessage.findMany({
+      where: { organizationId: orgId, mediaKey: { not: null } },
+      select: { mediaKey: true },
+    }),
+  ]);
+  const keys = [
+    ...anexos.map((a) => a.key),
+    ...midias.flatMap((m) => (m.mediaKey ? [m.mediaKey] : [])),
+  ];
+  // deleteFiles já lida com lote de 1000 e com lista vazia
+  const falhas = await deleteFiles(R2_PRIVATE_BUCKET, keys);
+
+  const instance = await prisma.uazapiInstance.findUnique({ where: { organizationId: orgId } });
+  if (instance) await deleteRemoteInstance(instance);
+
+  return { objects: keys.length, failedObjects: falhas, instanceRemoved: !!instance };
+};
+```
+
+- [ ] **Step 3: Registrar o hook**
+
+```ts
+organizationHooks: {
+  beforeDeleteOrganization: async ({ organization }) => {
+    // antes do delete de propósito: depois dele não há mais chave de objeto nem token de instância
+    await purgeOrganizationAssets(organization.id);
+  },
+},
+```
+
+- [ ] **Step 4: O que fazer quando a purga falha**
+
+Falha do R2 **não** pode impedir a exclusão da imobiliária (o titular pediu para sair; travar isso é pior
+do que deixar objeto órfão), mas também não pode passar em silêncio: `try/catch` com
+`logger.error({ orgId, err }, "purga de assets da organização falhou")` e as chaves que sobraram no log,
+que é o que permite um expurgo manual depois. Exceção à D5 pelo mesmo motivo da Task 9, Step 4 — e o
+motivo vai comentado no código.
+
+- [ ] **Step 5: Rastro da exclusão**
+
+Não gravar `AuditEvent` da exclusão da própria org: ele seria apagado no mesmo cascade, segundos depois.
+O rastro é uma linha de `logger.warn` com `orgId`, nome, contagem de objetos apagados e o ator — e essa é
+a razão pela qual esta linha da matriz §4 fica vazia de propósito.
+
+- [ ] **Step 6: Testes**
+
+- cria org com anexo (`READY`, `key` real no SeaweedFS local) e mensagem com `mediaKey`, chama
+  `purgeOrganizationAssets` e confere que `headFile` de cada chave passa a falhar;
+- org sem anexo nenhum: não chama o R2 e não lança;
+- org com instância: `deleteRemoteInstance` é chamado (uazapi mockada, como em `whatsapp.test.ts`);
+- **cascade completo**: `prisma.organization.delete` e então contar `auditEvent`, `attachment`,
+  `conversation`, `whatsappMessage`, `client`, `deal` da org → **zero em todas**. É o teste que prova a
+  decisão da D2.
+
+- [ ] **Step 7: Verificar** — `pnpm vitest run test/organization-purge.test.ts && pnpm test`
+- [ ] **Step 8: Commit**
+
+```bash
+git add eloscrm-api/src/modules/audit/organization-purge.service.ts eloscrm-api/src/lib/auth.ts eloscrm-api/src/modules/whatsapp/whatsapp.service.ts eloscrm-api/test/organization-purge.test.ts
+git commit -m "feat: excluir a imobiliária apaga arquivos do R2 e a instância remota"
+```
+
+> **Débito que esta task deixa explícito:** o `beforeDeleteOrganization` cobre a exclusão pela API. Quem
+> apagar a org **direto no banco** (`DELETE FROM organization`) continua deixando objeto órfão no R2 — o
+> Postgres não sabe do bucket. Se isso virar rotina de operação, o caminho é um script
+> `scripts/purge-org.ts` que chame a mesma função antes do delete.
+
+---
+
+### Task 20: Documentação
 
 **Files:**
 - Modify: `eloscrm-api/CLAUDE.md`, `eloscrm-web/CLAUDE.md`, `CLAUDE.md` (raiz)
@@ -1252,7 +1372,7 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 
 ---
 
-### Task 20: Verificação final e deploy
+### Task 21: Verificação final e deploy
 
 - [ ] **Step 1: API** — `cd eloscrm-api && pnpm lint && pnpm typecheck && pnpm test`
       Expected: 0 erro de lint, "No errors found" no tsc, **todos** os testes passando. Piso medido em
@@ -1272,15 +1392,16 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| `db push` de produção esquecido | média (já aconteceu) | rotas novas em 500 | §9 é passo obrigatório antes da imagem; Task 19 Step 3 põe na doc de deploy |
+| `db push` de produção esquecido | média (já aconteceu) | rotas novas em 500 | §9 é passo obrigatório antes da imagem; Task 20 Step 3 põe na doc de deploy |
 | Enum novo sem rótulo no web | alta se as fases forem separadas | `pnpm build` do web quebra | Task 3 na **mesma fase** do schema; o typecheck é o detector |
 | Volume da tabela | média | consulta lenta, disco | 4 índices (Task 1) + retenção (Fase 2) + lista de exclusão (D7) |
 | Purga apagando demais | baixa | perda de trilha | `min(30)` na env, `--dry-run` no script, teste do laço em lotes |
 | Purga não rodando (sem Redis) | **alta em produção** | tabela cresce igual | §9 exige checar `REDIS_URL` **ou** cron do host |
 | `snapshot` retendo dado pessoal além do necessário | média | exposição LGPD | allowlist + máscara (D9) + retenção como teto |
 | Hook do Better Auth derrubando login | baixa | ninguém entra | `try/catch` exclusivo da Task 9, Step 4, com o porquê comentado |
-| Escrita de auditoria dobrando latência | baixa | p95 pior | 1 insert por ação, `organizationName` em cache de processo; medir no Step 3 da Task 20 |
+| Escrita de auditoria dobrando latência | baixa | p95 pior | 1 insert por ação, `organizationName` resolvido por evento; medir no Step 3 da Task 21 |
 | Rota de leitura mudando de forma | certa | `AuditFeed` quebra | Task 14 Step 1 na mesma fase; teste ajustado (Task 13 Step 6) |
+| Org apagada direto no banco, sem passar pela API | média (rotina de suporte) | objeto órfão pago no R2 e instância viva na uazapi | Task 19 registra o débito e indica `scripts/purge-org.ts` se virar rotina |
 
 ## 7. Ordem de execução e paralelismo
 
@@ -1291,7 +1412,7 @@ Fase 0 (Tasks 1→2→3)         sequencial, bloqueia tudo
    ├── Fase 2 (11→12)        independente da Fase 1
    └── Fase 3 (13)           independente da Fase 1
           └── Fase 4 (14→15→16)
-                 └── Fase 5 (17, 18, 19, 20)
+                 └── Fase 5 (17, 18, 19, 20, 21)
 ```
 
 Task 10 (matriz viva) tem que ser a **última** da Fase 1 — ela é o fecho de cobertura.
@@ -1303,7 +1424,9 @@ Task 10 (matriz viva) tem que ser a **última** da Fase 1 — ela é o fecho de 
 2. **Não audita leitura de tela** (quem abriu qual lead). Volume alto e valor baixo; a exceção é
    `DOWNLOADED` de anexo.
 3. **Não faz retenção por organização** nem tela de configuração dela (D8).
-4. **Não sobrevive à exclusão da organização** (D2) — decisão consciente, com o custo documentado.
+4. **Não sobrevive à exclusão da organização** — e isso é intencional (D2): excluir a imobiliária apaga
+   tudo que é dela, arquivos e auditoria incluídos. A Task 19 garante que a parte que o Postgres não
+   alcança (R2 e instância na uazapi) vá junto.
 5. **Não substitui `UazapiInstanceLog`** (D12).
 6. **Não resolve a retenção das mensagens de WhatsApp** — segue aberta em
    `docs/2026-08-04-debitos-whatsapp.md`.
@@ -1343,4 +1466,4 @@ Além dos comandos, três coisas só o teste manual mostra:
 - [ ] Filtrar por "Automação" e ver o lead criado pela automação do WhatsApp.
 - [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco.
 
-> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 10:58 (-03)
+> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 11:34 (-03)
