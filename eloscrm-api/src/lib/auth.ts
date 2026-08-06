@@ -9,6 +9,7 @@ import { resetPasswordTemplate } from "./email/templates/reset-password.js";
 import { otpCodeTemplate } from "./email/templates/otp-code.js";
 import { passwordChangedTemplate } from "./email/templates/password-changed.js";
 import { changeEmailTemplate } from "./email/templates/change-email.js";
+import * as identity from "../modules/audit/identity.audit.js";
 import { orgInvitationTemplate } from "./email/templates/org-invitation.js";
 
 const isProduction = env.NODE_ENV === "production";
@@ -109,6 +110,23 @@ export const auth = betterAuth({
         });
         void sendEmail({ to: email, ...mail });
       },
+      // Só os `after`: a auditoria registra o que aconteceu, não decide se pode acontecer. Cada
+      // adaptador engole a própria falha (ver `safeRecord`), senão um erro de escrita aqui trancaria
+      // criação de organização e convite.
+      organizationHooks: {
+        afterCreateOrganization: async ({ organization, user }) =>
+          identity.auditOrganizationCreated(organization, user),
+        afterUpdateOrganization: async ({ organization, user }) =>
+          identity.auditOrganizationUpdated(organization, user),
+        afterAddMember: async ({ member, user, organization }) =>
+          identity.auditMemberAdded(member, user, organization),
+        afterRemoveMember: async ({ member, user, organization }) =>
+          identity.auditMemberRemoved(member, user, organization),
+        afterUpdateMemberRole: async ({ member, previousRole, user, organization }) =>
+          identity.auditMemberRoleChanged(member, previousRole, user, organization),
+        afterCreateInvitation: async ({ invitation, inviter, organization }) =>
+          identity.auditInvitationCreated(invitation, inviter, organization),
+      },
     }),
     emailOTP({
       expiresIn: OTP_EXPIRES_IN_SECONDS,
@@ -137,6 +155,14 @@ export const auth = betterAuth({
           });
           return { data: { ...session, activeOrganizationId: membership?.organizationId ?? null } };
         },
+        // sessão criada é login. O `after` recebe a linha já gravada, então o activeOrganizationId
+        // resolvido acima está lá — é dele que o evento tira o tenant.
+        after: async (session) => identity.auditSignIn(session),
+      },
+      // logout: o hook de delete entrega a linha antes de ela sumir, e é a única chance de saber de
+      // quem era a sessão
+      delete: {
+        after: async (session) => identity.auditSignOut(session),
       },
     },
   },
