@@ -189,6 +189,94 @@ describe("pipelines", () => {
   });
 });
 
+describe("GET /v1/pipelines/:id/deletion-preview", () => {
+  it("diz que pode excluir quando o funil está vazio e não é o único", async () => {
+    await app.inject({ method: "POST", url: "/v1/pipelines", headers: { cookie }, payload: { name: "Outro Qualquer" } });
+    const criado = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/pipelines",
+        headers: { cookie },
+        payload: { name: "Funil Vazio", stages: [{ name: "Entrada" }, { name: "Saída" }] },
+      })
+    ).json();
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/v1/pipelines/${criado.id}/deletion-preview`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      pipeline: { name: "Funil Vazio" },
+      stages: ["Entrada", "Saída"],
+      deals: { total: 0, open: 0, closed: 0 },
+      canDelete: true,
+      blockers: [],
+    });
+  });
+
+  it("lista os negócios por estágio quando eles impedem a exclusão", async () => {
+    const criado = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/pipelines",
+        headers: { cookie },
+        payload: {
+          name: "Funil Com Negócio",
+          stages: [{ name: "Contato" }, { name: "Proposta" }, { name: "Perdido", isLost: true }],
+        },
+      })
+    ).json();
+    const [contato, proposta, perdido] = criado.stages;
+    const client = await prisma.client.create({
+      data: { organizationId: orgId, name: "Lead Do Funil" },
+    });
+    for (const stage of [contato, contato, proposta, perdido]) {
+      await prisma.deal.create({
+        data: {
+          organizationId: orgId,
+          clientId: client.id,
+          title: `Negócio em ${stage.name}`,
+          pipelineId: criado.id,
+          stageId: stage.id,
+        },
+      });
+    }
+
+    const body = (
+      await app.inject({
+        method: "GET",
+        url: `/v1/pipelines/${criado.id}/deletion-preview`,
+        headers: { cookie },
+      })
+    ).json();
+
+    expect(body.canDelete).toBe(false);
+    // aberto e fechado separados: o gestor decide diferente para cada um
+    expect(body.deals).toEqual({ total: 4, open: 3, closed: 1 });
+    // na ordem do kanban, e só os estágios que têm negócio
+    expect(body.dealsByStage).toEqual([
+      { stage: "Contato", count: 2 },
+      { stage: "Proposta", count: 1 },
+      { stage: "Perdido", count: 1 },
+    ]);
+    expect(body.blockers.map((b: { code: string }) => b.code)).toEqual(["PIPELINE_HAS_DEALS"]);
+  });
+
+  it("não vaza prévia de funil de outra imobiliária (404)", async () => {
+    const criado = (
+      await app.inject({ method: "POST", url: "/v1/pipelines", headers: { cookie }, payload: { name: "Meu Funil" } })
+    ).json();
+    const res = await app.inject({
+      method: "GET",
+      url: `/v1/pipelines/${criado.id}/deletion-preview`,
+      headers: { cookie: cookieB },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe("auditoria de pipelines e estágios", () => {
   it("audita criação de pipeline", async () => {
     const created = await app.inject({

@@ -212,6 +212,22 @@ export type AuditEvent = {
  * `conversations` e `messages` existem porque `Conversation` cascateia da instância: remover a conexão
  * apaga o atendimento inteiro, não só o vínculo com o provedor.
  */
+/**
+ * GET /v1/pipelines/:id/deletion-preview.
+ *
+ * `blockers` é o que impede a exclusão — negócio dentro do funil se transfere ou se fecha; "é o único
+ * funil" se resolve criando outro. São caminhos diferentes, então a tela mostra cada um.
+ */
+export type PipelineDeletionPreview = {
+  pipeline: { id: string; name: string };
+  stages: string[];
+  deals: { total: number; open: number; closed: number };
+  dealsByStage: { stage: string; count: number }[];
+  canDelete: boolean;
+  blockers: { code: string; message: string }[];
+  totalPipelines: number;
+};
+
 export type WhatsappDeletionPreview = {
   instance: { name: string; status: string; connected: boolean };
   conversations: number;

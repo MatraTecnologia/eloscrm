@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Pipeline } from "@/lib/types";
+import type { Pipeline, PipelineDeletionPreview } from "@/lib/types";
 import type { TemplateStage } from "@/lib/pipeline-templates";
 
 export const usePipelines = () => {
@@ -41,6 +41,22 @@ export const useUpdatePipeline = () => {
       return data;
     },
     onSuccess: () => invalidate(qc),
+  });
+};
+
+/** O que impede a exclusão do funil. Buscada só quando o diálogo abre, e sem cache. */
+export const usePipelineDeletionPreview = (pipelineId: string | null) => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: ["pipelines", org?.id, "deletion-preview", pipelineId],
+    queryFn: async () => {
+      const { data } = await api.get<PipelineDeletionPreview>(
+        `/pipelines/${pipelineId}/deletion-preview`,
+      );
+      return data;
+    },
+    enabled: !!org?.id && !!pipelineId,
+    staleTime: 0,
   });
 };
 

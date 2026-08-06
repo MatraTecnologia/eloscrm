@@ -3,6 +3,7 @@ import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
 import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { httpError, notFound } from "../../lib/http-error.js";
+import { prisma } from "../../lib/prisma.js";
 import * as repo from "./pipelines.repo.js";
 import type {
   CreatePipelineInput,
@@ -71,6 +72,62 @@ export const update = async (orgId: string, id: string, data: UpdatePipelineInpu
     snapshot: snapshotOf(AuditEntity.PIPELINE, updated),
   });
   return updated;
+};
+
+/**
+ * Se o funil pode ser excluído, e o que impede.
+ *
+ * A tela precisa disto porque as duas recusas do `remove` são situações que o gestor resolve de
+ * formas diferentes: negócio dentro do funil se **transfere** (ou se fecha), e "é o único funil" se
+ * resolve criando outro. Um toast de uma linha não distingue as duas nem diz quanto trabalho dá.
+ */
+export const deletionPreview = async (orgId: string, id: string) => {
+  const pipeline = await getById(orgId, id);
+  const stages = await repo.findStagesInPipeline(orgId, id);
+
+  const [totalPipelines, deals, abertos, porEstagio] = await Promise.all([
+    repo.countPipelines(orgId),
+    prisma.deal.count({ where: { organizationId: orgId, pipelineId: id } }),
+    prisma.deal.count({
+      where: { organizationId: orgId, pipelineId: id, stage: { isWon: false, isLost: false } },
+    }),
+    prisma.deal.groupBy({
+      by: ["stageId"],
+      where: { organizationId: orgId, pipelineId: id },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const blockers: { code: string; message: string }[] = [];
+  if (deals > 0) {
+    blockers.push({
+      code: "PIPELINE_HAS_DEALS",
+      message: "Transfira ou feche os negócios deste funil antes de excluí-lo",
+    });
+  }
+  if (totalPipelines <= 1) {
+    blockers.push({
+      code: "LAST_PIPELINE",
+      message: "A imobiliária precisa de pelo menos um funil",
+    });
+  }
+
+  return {
+    pipeline: { id: pipeline.id, name: pipeline.name },
+    stages: stages.map((stage) => stage.name),
+    deals: { total: deals, open: abertos, closed: deals - abertos },
+    // ordenado pela posição do estágio, para a lista ler na mesma ordem do kanban
+    dealsByStage: stages
+      .map((stage) => ({
+        stage: stage.name,
+        count: porEstagio.find((row) => row.stageId === stage.id)?._count._all ?? 0,
+      }))
+      .filter((row) => row.count > 0),
+    canDelete: blockers.length === 0,
+    blockers,
+    // eco para a tela não precisar de outra consulta só para saber se é o último
+    totalPipelines,
+  };
 };
 
 export const remove = async (orgId: string, id: string, actor: Actor) => {

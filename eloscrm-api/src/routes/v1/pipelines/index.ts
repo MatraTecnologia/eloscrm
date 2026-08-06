@@ -28,6 +28,12 @@ const pipelinesRoutes = async (app: FastifyInstance) => {
     return service.update(request.orgId!, id, data, actorOf(request));
   });
 
+  // o que impede a exclusão, e quanto trabalho dá resolver: a tela mostra antes de tentar
+  app.get("/:id/deletion-preview", async (request) => {
+    const { id } = request.params as { id: string };
+    return service.deletionPreview(request.orgId!, id);
+  });
+
   app.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     await service.remove(request.orgId!, id, actorOf(request));
