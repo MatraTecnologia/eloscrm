@@ -79,6 +79,8 @@ Os dois jobs passam `package_json_file` ao `pnpm/action-setup`: `defaults.run.wo
 
 **Todo deploy que leva schema novo exige `prisma db push` no banco de produção, à mão, antes ou junto de subir a imagem.** Não há migrations (é o Padrão A) e nada no pipeline aplica schema: o `Dockerfile` roda `db:generate` com um `DATABASE_URL` de fachada (que não conecta) e o runner só executa `node dist/src/server.js`.
 
+A auditoria de 2026-08-06 é o caso mais recente: `AuditEvent` ganhou colunas e os enums `AuditEntity`/`AuditAction` ganharam valores (mais `AuditSource`), e sem o push as rotas de auditoria e toda escrita instrumentada respondem 500. Junto do deploy vão duas envs novas — `AUDIT_RETENTION_DAYS` (365) e, se houver, `REDIS_URL` para o job diário de purga; sem Redis, agendar `pnpm -C eloscrm-api audit:purge` no cron do host.
+
 Esquecer isso não dá erro de boot — a API sobe normal e só as rotas que tocam as colunas novas respondem **500**. Já aconteceu: o schema de nutrição (`ClientStatus`, `NurtureReason`, `client.nurtureUntil`…) chegou em produção sem ser aplicado e derrubou `/v1/dashboard/stats` e `/v1/agenda`, que filtram por `status`.
 
 ```bash
@@ -129,4 +131,4 @@ do provedor, autenticado por segredo na URL + hash do token no corpo.
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-03 21:59 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-06 12:35 (-03)
