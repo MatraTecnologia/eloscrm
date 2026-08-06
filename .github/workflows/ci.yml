@@ -41,6 +41,7 @@ jobs:
       UAZAPI_BASE_URL: http://uazapi.invalid
       UAZAPI_ADMIN_TOKEN: ci-admin-token
       UAZAPI_TOKEN_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      AUDIT_RETENTION_DAYS: 365
       PUBLIC_API_URL: http://localhost:3333
 
     steps:

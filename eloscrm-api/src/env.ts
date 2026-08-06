@@ -45,6 +45,10 @@ export const env = createEnv({
     // Fila das conversas de WhatsApp. Sem ela o processamento é inline — o que mantém teste e CI
     // sem infra, mas em produção devolve o problema que a fila existe para resolver.
     REDIS_URL: z.string().trim().min(1).optional(),
+    // Quanto tempo o log de auditoria fica. A tabela cresce a cada ação e nada mais a poda: sem isto
+    // ela só aumenta. 365 dias cobre o ciclo de uma negociação imobiliária com folga, e é também o
+    // teto do dado pessoal que o snapshot de um registro apagado carrega.
+    AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

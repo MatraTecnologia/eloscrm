@@ -18,6 +18,7 @@
     "db:push": "prisma db push",
     "db:push:test": "DOTENV_CONFIG_PATH=.env.test prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "audit:purge": "tsx scripts/purge-audit.ts",
     "auth:generate": "pnpm dlx @better-auth/cli@1.4.21 generate --output prisma/schema.prisma -y"
   },
   "dependencies": {
