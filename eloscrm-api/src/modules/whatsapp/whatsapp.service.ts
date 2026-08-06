@@ -243,16 +243,26 @@ export const rename = async (orgId: string, data: RenameInstanceInput, actor: Ac
   return serializeInstance(updated);
 };
 
+/**
+ * Apaga a instância **no provedor**.
+ *
+ * Separado de `remove` porque a exclusão da imobiliária precisa do mesmo efeito sem passar pelo
+ * `requireManager` — quem apaga a organização é `owner` por definição do Better Auth, e ali não há
+ * `actor` de rota para checar.
+ */
+export const deleteRemoteInstance = async (instance: { remoteDeletedAt: Date | null; tokenEnc: string }) => {
+  if (instance.remoteDeletedAt) return;
+  const config = requireIntegration();
+  const result = await instanceClient(config, instance.tokenEnc).instance.delete();
+  // "já sumiu do provedor" é exatamente o estado que queremos alcançar — não é erro
+  if (!result.success && !isInstanceGone(result.error)) throw uazapiError(result.error);
+};
+
 export const remove = async (orgId: string, actor: Actor) => {
   await requireManager(orgId, actor);
   const instance = await requireInstance(orgId);
 
-  if (!instance.remoteDeletedAt) {
-    const config = requireIntegration();
-    const result = await instanceClient(config, instance.tokenEnc).instance.delete();
-    // "já sumiu do provedor" é exatamente o estado que queremos alcançar — não é erro
-    if (!result.success && !isInstanceGone(result.error)) throw uazapiError(result.error);
-  }
+  await deleteRemoteInstance(instance);
 
   // antes do delete (D6): entityLabel/snapshot só são legíveis enquanto a linha existe, e o
   // UazapiInstanceLog some junto com a instância — este evento é o que sobra
