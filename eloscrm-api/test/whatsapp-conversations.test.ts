@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
@@ -5,6 +6,7 @@ import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
+import { R2_PRIVATE_BUCKET, headFile, uploadStream } from "../src/lib/storage.js";
 
 const remote = { send: { text: vi.fn() } };
 vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => remote }));
@@ -79,6 +81,9 @@ const criarMensagem = (data: Record<string, unknown> = {}) =>
   });
 
 const get = (url: string, c = cookie) => app.inject({ method: "GET", url, headers: { cookie: c } });
+
+const existeNoBucket = async (key: string) =>
+  !!(await headFile(R2_PRIVATE_BUCKET, key).catch(() => null));
 
 const eventsOf = (entityType: AuditEntity, entityId: string) =>
   prisma.auditEvent.findMany({
@@ -547,11 +552,15 @@ describe("ações da conversa", () => {
 
   it("exclui a conversa e leva as mensagens com ela, registrando DELETED com a contagem antes de apagar", async () => {
     const mensagem = await criarMensagem({ sentAt: new Date("2026-08-01T10:00:00Z") });
-    // com mediaKey para exercitar a purga no bucket: chave inexistente serve, porque o
-    // DeleteObjects é idempotente e o que se prova é que a purga não derruba o delete
+    // objeto de verdade no bucket, não chave inventada: com uma chave inexistente o DeleteObjects
+    // devolve sucesso de qualquer forma, e o teste passaria mesmo se a purga não existisse
+    const mediaKey = `org/${orgId}/whatsapp/${conversationId}/purga-${stamp}.jpg`;
+    await uploadStream(R2_PRIVATE_BUCKET, mediaKey, Readable.from([Buffer.from("midia")]), "image/jpeg");
+    expect(await existeNoBucket(mediaKey)).toBe(true);
+
     const comMidia = await criarMensagem({
       mediaStatus: "ready",
-      mediaKey: `whatsapp/${orgId}/inexistente-${stamp}.jpg`,
+      mediaKey,
       mediaMime: "image/jpeg",
       sentAt: new Date("2026-08-01T11:00:00Z"),
     });
@@ -570,6 +579,8 @@ describe("ações da conversa", () => {
     expect(await prisma.conversation.findUnique({ where: { id: conversationId } })).toBeNull();
     expect(await prisma.whatsappMessage.findUnique({ where: { id: mensagem.id } })).toBeNull();
     expect(await prisma.whatsappMessage.findUnique({ where: { id: comMidia.id } })).toBeNull();
+    // o arquivo sai do R2 junto: a linha morrer sem o objeto deixaria mídia paga e órfã no bucket
+    expect(await existeNoBucket(mediaKey)).toBe(false);
     expect(await prisma.client.findUnique({ where: { id: lead.id } })).not.toBeNull();
 
     // o evento sobrevive à conversa: rótulo e contagem foram lidos antes do delete
