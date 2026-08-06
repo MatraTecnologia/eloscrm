@@ -99,7 +99,7 @@ const Inbox = () => {
 
           {conversa ? (
             <>
-              <ConversationHeader conversation={conversa} />
+              <ConversationHeader conversation={conversa} onDeleted={() => setSelecionada(null)} />
               <MessageThread
                 conversationId={conversa.id}
                 onReply={(message) => setCitacao({ conversationId: conversa.id, message })}

@@ -493,6 +493,43 @@ describe("ações da conversa", () => {
     ).toBeNull();
   });
 
+  it("exclui a conversa e leva as mensagens com ela", async () => {
+    const mensagem = await criarMensagem();
+    // com mediaKey para exercitar a purga no bucket: chave inexistente serve, porque o
+    // DeleteObjects é idempotente e o que se prova é que a purga não derruba o delete
+    const comMidia = await criarMensagem({
+      mediaStatus: "ready",
+      mediaKey: `whatsapp/${orgId}/inexistente-${stamp}.jpg`,
+      mediaMime: "image/jpeg",
+    });
+    // o lead vinculado precisa sobreviver: a relação é dele para a conversa, não o contrário
+    const lead = await prisma.client.create({
+      data: { organizationId: orgId, name: "Fica", phone: "(43) 98888-0000" },
+    });
+    await prisma.conversation.update({ where: { id: conversationId }, data: { clientId: lead.id } });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/whatsapp/conversations/${conversationId}`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(await prisma.conversation.findUnique({ where: { id: conversationId } })).toBeNull();
+    expect(await prisma.whatsappMessage.findUnique({ where: { id: mensagem.id } })).toBeNull();
+    expect(await prisma.whatsappMessage.findUnique({ where: { id: comMidia.id } })).toBeNull();
+    expect(await prisma.client.findUnique({ where: { id: lead.id } })).not.toBeNull();
+  });
+
+  it("excluir não atravessa organização", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/whatsapp/conversations/${conversationId}`,
+      headers: { cookie: cookieB },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(await prisma.conversation.findUnique({ where: { id: conversationId } })).not.toBeNull();
+  });
+
   it("marcar como lida não atravessa organização", async () => {
     const res = await app.inject({
       method: "POST",

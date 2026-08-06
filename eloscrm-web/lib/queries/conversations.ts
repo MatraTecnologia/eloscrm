@@ -242,3 +242,9 @@ export const useArchiveConversation = () =>
   useConversationMutation(async ({ id, archived }: { id: string; archived: boolean }) => {
     await api.post(`/whatsapp/conversations/${id}/${archived ? "archive" : "unarchive"}`);
   });
+
+/** Apaga a conversa do CRM. Não apaga nada no WhatsApp do lead — a API só mexe no nosso banco. */
+export const useDeleteConversation = () =>
+  useConversationMutation(async (id: string) => {
+    await api.delete(`/whatsapp/conversations/${id}`);
+  });

@@ -117,6 +117,13 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     return service.archive(request.orgId!, id, false);
   });
 
+  // exclusão local: apaga o histórico daqui, não do WhatsApp do lead
+  app.delete("/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await service.remove(request.orgId!, id);
+    return reply.status(204).send();
+  });
+
   // a presigned expira em minutos; este endpoint existe para o front renovar sem recarregar a thread
   // `?download=1` devolve a URL como anexo; sem ele, a URL serve para exibir na bolha
   app.get("/messages/:messageId/media", async (request) => {

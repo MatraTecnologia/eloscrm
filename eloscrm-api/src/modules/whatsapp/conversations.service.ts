@@ -13,6 +13,7 @@ import type { Actor } from "../../lib/actor.js";
 import { conflict, notFound } from "../../lib/http-error.js";
 import { formatBrPhone, phoneKey } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
+import { R2_PRIVATE_BUCKET, deleteFiles } from "../../lib/storage.js";
 import * as clients from "../clients/clients.service.js";
 import { resolveMediaUrl } from "./media.service.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
@@ -399,4 +400,32 @@ export const archive = async (orgId: string, id: string, archived: boolean) => {
     data: { archivedAt: archived ? new Date() : null },
   });
   return { ok: true };
+};
+
+/**
+ * Apaga a conversa do CRM — mensagens e reações incluídas.
+ *
+ * **Só daqui.** A uazapi não tem endpoint de apagar chat e nada nesta função fala com o provedor: o
+ * histórico continua inteiro no aparelho do lead. E como a conversa é reencontrada por
+ * `(instanceId, chatid)`, a próxima mensagem do mesmo contato faz o `upsert` da ingestão criar uma
+ * nova, vazia — excluir não é bloquear. Arquivar continua sendo o caminho não destrutivo.
+ *
+ * A mídia sai do R2 **antes** do delete: depois dele os `mediaKey` não existem mais e o objeto
+ * ficaria pago e órfão no bucket, como em `attachments.purgeForEntities`. Sem mídia nenhuma o
+ * `deleteFiles` retorna sem chamar o storage. O lead vinculado não é tocado — a relação é dele para
+ * a conversa, não o contrário.
+ */
+export const remove = async (orgId: string, id: string) => {
+  await getById(orgId, id);
+
+  const comMidia = await prisma.whatsappMessage.findMany({
+    where: { conversationId: id, mediaKey: { not: null } },
+    select: { mediaKey: true },
+  });
+  await deleteFiles(
+    R2_PRIVATE_BUCKET,
+    comMidia.flatMap((m) => (m.mediaKey ? [m.mediaKey] : [])),
+  );
+
+  await prisma.conversation.delete({ where: { id } });
 };
