@@ -4,6 +4,7 @@ import { makeApp } from "./helpers/app.js";
 import { signIn, signUp, signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { hashToken } from "../src/lib/crypto.js";
+import { maskPhone } from "../src/lib/audit-snapshot.js";
 
 // A uazapi é serviço de terceiro: mockar o client HTTP é a única forma de exercitar o fluxo sem
 // criar instância de verdade a cada run. O banco segue real, como no resto da suíte — a regra
@@ -496,5 +497,144 @@ describe("GET /v1/whatsapp/instance/webhook", () => {
     expect(hook.isOurs).toBe(true);
     expect(hook.url).toContain("••••");
     expect(res.payload).not.toContain(saved.webhookSecret);
+  });
+});
+
+describe("auditoria da gestão da instância de WhatsApp", () => {
+  // entityId muda por teste (instância nova a cada createInstance): filtrar por ele, e não só por
+  // organizationId/entityType, evita que os eventos gravados em outro teste deste arquivo poluam a
+  // asserção — o AuditEvent não é limpo por dropInstance, só a tabela UazapiInstance é
+  const auditEventsFor = (instanceId: string) =>
+    prisma.auditEvent.findMany({
+      where: { entityType: "WHATSAPP_INSTANCE", entityId: instanceId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+
+  beforeEach(dropInstance);
+
+  it("grava um evento por ação de gestão, ao lado do UazapiInstanceLog, com rótulo/contexto/diff corretos", async () => {
+    const created = await createInstance();
+    const instanceId = created.json().id;
+
+    remote.instance.updateName.mockResolvedValue(ok({}));
+    await app.inject({
+      method: "PATCH",
+      url: "/v1/whatsapp/instance",
+      headers: { cookie },
+      payload: { name: "Nome Novo" },
+    });
+
+    remote.instance.connect.mockResolvedValue(
+      ok({ instance: { status: "connecting", qrcode: "data:image/png;base64,AAA" } }),
+    );
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/connect",
+      headers: { cookie },
+      payload: {},
+    });
+
+    remote.instance.disconnect.mockResolvedValue(ok({}));
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/disconnect",
+      headers: { cookie },
+      payload: {},
+    });
+
+    remote.instance.reset.mockResolvedValue(ok({}));
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/reset",
+      headers: { cookie },
+      payload: {},
+    });
+
+    remote.instance.status.mockResolvedValue(
+      ok({ instance: { status: "connected", owner: "5543999140409@s.whatsapp.net" } }),
+    );
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/sync",
+      headers: { cookie },
+      payload: {},
+    });
+
+    remote.webhook.upsert.mockResolvedValue(ok([]));
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/webhook/reconcile",
+      headers: { cookie },
+      payload: {},
+    });
+
+    remote.send.text.mockResolvedValue(ok({ id: "msg-1", status: "Sent" }));
+    await app.inject({
+      method: "POST",
+      url: "/v1/whatsapp/instance/test-send",
+      headers: { cookie },
+      payload: { number: "5543999140409", text: "conteúdo sigiloso do teste" },
+    });
+
+    const events = await auditEventsFor(instanceId);
+    expect(events.map((e) => e.action)).toEqual([
+      "CREATED",
+      "UPDATED",
+      "CONNECTED",
+      "DISCONNECTED",
+      "RESET",
+      "SYNCED",
+      "WEBHOOK_RECONCILED",
+      "TEST_MESSAGE_SENT",
+    ]);
+    // fonte já era USER em todo o resto da suíte, mas aqui é o que garante que actorOf(request)
+    // chegou até o recordAudit — não só o actor sintético
+    expect(events.every((e) => e.source === "USER" && e.actorName)).toBe(true);
+
+    const [creation, rename, connect, disconnect, reset, sync, reconcile, testSent] = events;
+
+    expect(creation.entityLabel).toMatch(/^wa-/);
+    // instância recém-criada ainda não tem ownerJid: o context é omitido, não `{ ownerJid: null }`
+    expect(creation.context).toBeNull();
+
+    expect(rename.entityLabel).toBe("Nome Novo");
+    expect(rename.changes).toMatchObject({ name: { from: creation.entityLabel, to: "Nome Novo" } });
+
+    for (const event of [connect, disconnect, reset, sync, reconcile, testSent]) {
+      expect(event.entityLabel).toBe("Nome Novo");
+    }
+
+    // sync populou o ownerJid a partir do `owner` devolvido pela uazapi — o evento seguinte
+    // (reconcileWebhook) já enxerga isso no context
+    expect((reconcile.context as Record<string, unknown> | null)?.ownerJid).toBe(
+      maskPhone("5543999140409@s.whatsapp.net"),
+    );
+
+    // testSend: destino mascarado e id da mensagem, nunca o texto
+    expect(testSent.context).toMatchObject({
+      to: maskPhone("5543999140409"),
+      messageId: "msg-1",
+    });
+    expect(JSON.stringify(testSent)).not.toContain("sigiloso");
+    expect(JSON.stringify(testSent)).not.toContain("999140409");
+  });
+
+  it("apaga a instância mas os eventos de auditoria continuam legíveis (D6)", async () => {
+    const created = await createInstance();
+    const instanceId = created.json().id;
+
+    remote.instance.delete.mockResolvedValue(ok({}));
+    const res = await app.inject({ method: "DELETE", url: "/v1/whatsapp/instance", headers: { cookie } });
+    expect(res.statusCode).toBe(204);
+
+    expect(await prisma.uazapiInstance.findUnique({ where: { id: instanceId } })).toBeNull();
+    // o UazapiInstanceLog da criação cascateia com a instância
+    expect(await prisma.uazapiInstanceLog.count({ where: { instanceId } })).toBe(0);
+
+    const events = await auditEventsFor(instanceId);
+    expect(events.map((e) => e.action)).toEqual(["CREATED", "DELETED"]);
+    const deleted = events.find((e) => e.action === "DELETED")!;
+    expect(deleted.entityLabel).toMatch(/^wa-/);
+    expect(deleted.actorName).toBeTruthy();
   });
 });
