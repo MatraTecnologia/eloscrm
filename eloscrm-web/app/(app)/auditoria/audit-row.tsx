@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { AUDIT_ACTION_LABELS, AUDIT_ENTITY_LABELS, AUDIT_SOURCE_LABELS, ENTITY_NOUNS, FIELD_LABELS } from "@/lib/labels";
-import type { AuditEvent } from "@/lib/types";
+import type { AuditAction, AuditEvent } from "@/lib/types";
 
 /** Nome do item no momento do fato; sem ele, o id truncado — evento anterior ao backfill ou sem rótulo. */
 export const auditEntityLabel = (event: Pick<AuditEvent, "entityLabel" | "entityId">) =>
@@ -17,8 +17,23 @@ export const auditEntityLabel = (event: Pick<AuditEvent, "entityLabel" | "entity
  * A frase do evento. **Não** resolve nome por id (sem `useEntityNames`): a tela precisa continuar
  * legível quando o item já foi apagado, que é o motivo de existir `entityLabel`/`context`/`snapshot`.
  */
-export const auditEventPhrase = (event: AuditEvent) =>
-  `${event.actorName ?? "Alguém"} ${AUDIT_ACTION_LABELS[event.action]} o ${ENTITY_NOUNS[event.entityType]} ${auditEntityLabel(event)}`;
+/**
+ * Ações cujo verbo já diz tudo. Sem esta lista a frase sai redundante — "Gestora QA entrou no sistema
+ * o acesso Gestora QA" —, porque o complemento repetiria o próprio ator.
+ */
+const SEM_COMPLEMENTO = new Set<AuditAction>([
+  "SIGNED_IN",
+  "SIGNED_OUT",
+  "REORDERED",
+  "EXPORTED",
+  "PURGED",
+]);
+
+export const auditEventPhrase = (event: AuditEvent) => {
+  const inicio = `${event.actorName ?? "Alguém"} ${AUDIT_ACTION_LABELS[event.action]}`;
+  if (SEM_COMPLEMENTO.has(event.action)) return inicio;
+  return `${inicio} o ${ENTITY_NOUNS[event.entityType]} ${auditEntityLabel(event)}`;
+};
 
 /** Resumo curto do diff para a coluna/linha "Resumo" — o detalhe (Task 16) mostra o diff completo. */
 export const auditChangeSummary = (event: AuditEvent) => {

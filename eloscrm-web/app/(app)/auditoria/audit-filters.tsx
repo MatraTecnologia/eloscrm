@@ -94,6 +94,12 @@ const FilterControls = ({ state }: { state: FiltersState }) => {
   // é `null` para os três (D4), então só o nome distingue um do outro.
   const actorValue = filters.actorId ? filters.actorId : filters.source ? `source:${filters.source}` : "ALL";
 
+  // o gatilho precisa do nome, não do id: o value é `actorId` ou `source:<ORIGEM>` para os sintéticos
+  const actorLabel = (value: string) =>
+    value.startsWith("source:")
+      ? AUDIT_SOURCE_LABELS[value.slice("source:".length) as AuditSource]
+      : actors?.find((actor) => actor.actorId === value)?.actorName;
+
   const onActorChange = (value: string | null) => {
     if (!value || value === "ALL") return void setFilters({ actorId: null, source: null });
     if (value.startsWith("source:")) {
@@ -167,7 +173,15 @@ const FilterControls = ({ state }: { state: FiltersState }) => {
 
         <Select value={actorValue} onValueChange={onActorChange}>
           <SelectTrigger size="sm">
-            <SelectValue placeholder="Ator" />
+            {/* função de render, e não `SelectValue` puro: sem ela o gatilho mostra o value cru
+                ("ALL") em vez do rótulo do item — mesmo padrão de `property-dialog.tsx` */}
+            <SelectValue>
+              {(value: string) =>
+                value === "ALL"
+                  ? "Todos os atores"
+                  : (actorLabel(value) ?? "Todos os atores")
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Todos os atores</SelectItem>
@@ -189,7 +203,11 @@ const FilterControls = ({ state }: { state: FiltersState }) => {
           }
         >
           <SelectTrigger size="sm">
-            <SelectValue placeholder="Origem" />
+            <SelectValue>
+              {(value: string) =>
+                value === "ALL" ? "Toda origem" : AUDIT_SOURCE_LABELS[value as AuditSource]
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Toda origem</SelectItem>

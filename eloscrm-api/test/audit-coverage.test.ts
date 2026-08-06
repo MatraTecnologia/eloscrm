@@ -22,12 +22,10 @@ let conversationId = "";
 let messageId = "";
 
 /**
- * Ações que **não** nascem de um ponto instrumentado no código de domínio:
- *
- * - `EXPORTED` sai da rota de export da auditoria (Fase 5 do plano, ainda não implementada);
- * - `PURGED` é da retenção, que grava via `recordAudit` com a ação montada em variável.
+ * Nenhuma ação está fora da varredura hoje — o conjunto existe para o caso de nascer uma ação cujo
+ * emissor não seja código nosso, e vazio é o estado correto: toda ação do enum tem emissor em `src`.
  */
-const FORA_DO_SRC = new Set<AuditAction>([AuditAction.EXPORTED]);
+const FORA_DO_SRC = new Set<AuditAction>();
 
 const listarArquivos = async (dir: string): Promise<string[]> => {
   const entradas = await readdir(dir, { withFileTypes: true });
@@ -107,11 +105,6 @@ describe("cobertura da auditoria", () => {
     );
 
     expect(orfas).toEqual([]);
-  });
-
-  it("as ações ainda não implementadas estão declaradas como pendência", () => {
-    // se alguém implementar o export da auditoria e esquecer de tirar daqui, este teste cobra
-    expect([...FORA_DO_SRC]).toEqual([AuditAction.EXPORTED]);
   });
 });
 
