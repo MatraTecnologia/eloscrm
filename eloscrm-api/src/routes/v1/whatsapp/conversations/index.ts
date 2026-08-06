@@ -76,7 +76,7 @@ const conversationsRoutes = async (app: FastifyInstance) => {
 
   app.delete("/:id/messages/:messageId", async (request) => {
     const { id, messageId } = request.params as { id: string; messageId: string };
-    return actions.remove(request.orgId!, id, messageId);
+    return actions.remove(request.orgId!, id, messageId, actorOf(request));
   });
 
   app.get("/:id/candidates", async (request) => {
@@ -94,12 +94,12 @@ const conversationsRoutes = async (app: FastifyInstance) => {
   app.post("/:id/link-client", async (request) => {
     const { id } = request.params as { id: string };
     const { clientId } = linkClientSchema.parse(request.body);
-    return service.linkClient(request.orgId!, id, clientId);
+    return service.linkClient(request.orgId!, id, clientId, actorOf(request));
   });
 
   app.post("/:id/unlink-client", async (request) => {
     const { id } = request.params as { id: string };
-    return service.unlinkClient(request.orgId!, id);
+    return service.unlinkClient(request.orgId!, id, actorOf(request));
   });
 
   app.post("/:id/read", async (request) => {
@@ -109,18 +109,18 @@ const conversationsRoutes = async (app: FastifyInstance) => {
 
   app.post("/:id/archive", async (request) => {
     const { id } = request.params as { id: string };
-    return service.archive(request.orgId!, id, true);
+    return service.archive(request.orgId!, id, true, actorOf(request));
   });
 
   app.post("/:id/unarchive", async (request) => {
     const { id } = request.params as { id: string };
-    return service.archive(request.orgId!, id, false);
+    return service.archive(request.orgId!, id, false, actorOf(request));
   });
 
   // exclusão local: apaga o histórico daqui, não do WhatsApp do lead
   app.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    await service.remove(request.orgId!, id);
+    await service.remove(request.orgId!, id, actorOf(request));
     return reply.status(204).send();
   });
 

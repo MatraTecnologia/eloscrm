@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -134,6 +135,36 @@ describe("apagar mensagem", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("MESSAGE_NOT_DELETABLE");
     expect(remote.messages.delete).not.toHaveBeenCalled();
+  });
+
+  it("registra MESSAGE_DELETED com o rótulo da conversa e sem o texto no snapshot", async () => {
+    const msg = await criarMensagem();
+
+    const res = await apagar(msg.id);
+    expect(res.statusCode).toBe(200);
+
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.WHATSAPP_MESSAGE, entityId: msg.id },
+    });
+    expect(evento.action).toBe(AuditAction.MESSAGE_DELETED);
+    expect(evento.context).toEqual({ conversationId });
+    expect(evento.snapshot).toEqual({
+      direction: "outbound",
+      type: "text",
+      sentAt: expect.any(String),
+    });
+    expect(JSON.stringify(evento.snapshot)).not.toContain("combinado");
+  });
+
+  it("apagar já apagada não gera evento novo", async () => {
+    const msg = await criarMensagem({ deletedAt: new Date() });
+
+    await apagar(msg.id);
+
+    const eventos = await prisma.auditEvent.findMany({
+      where: { organizationId: orgId, entityType: AuditEntity.WHATSAPP_MESSAGE, entityId: msg.id },
+    });
+    expect(eventos).toHaveLength(0);
   });
 
   it("apagar de novo não chama o provedor outra vez", async () => {
