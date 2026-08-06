@@ -292,7 +292,8 @@ export const FIELD_LABELS: Record<string, string> = {
   dealTitle: "Negócio",
   pipelineName: "Funil",
   stageName: "Estágio",
-  stageCount: "Estágios",
+  stages: "Estágios",
+  stageCount: "Quantidade de estágios",
   targetType: "Tipo do alvo",
   targetLabel: "Alvo",
   conversationId: "Conversa",
@@ -312,6 +313,9 @@ export const FIELD_LABELS: Record<string, string> = {
 // Campos que guardam id: sem tradução o histórico mostra cuid na tela. Quem chama passa o
 // `resolveName` (membros, imóveis e clientes da org); id que não resolve é registro já removido.
 const ID_FIELDS = new Set(["ownerId", "propertyId", "clientId"]);
+
+// Campos cuja ordem importa: exibidos com seta, como a prévia de template na tela de funis
+const SEQUENCE_FIELDS = new Set(["stages", "order"]);
 
 // Datas chegam do audit como ISO; sem isto o histórico mostra 2026-07-21T02:59:59.999Z na tela
 const DATE_FIELDS = new Set([
@@ -334,7 +338,12 @@ export const formatAuditValue = (
   resolveName?: (id: string) => string | undefined,
 ) => {
   if (value === null || value === undefined || value === "") return "—";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+  if (Array.isArray(value)) {
+    if (!value.length) return "—";
+    // sequência, não conjunto: "Interessado → Visita → Contrato" é como a escolha de template
+    // mostra as colunas na tela de funis, e a ordem é parte da informação
+    return SEQUENCE_FIELDS.has(field) ? value.join(" → ") : value.join(", ");
+  }
   if (field === "source") return clientSourceLabels[value as ClientSource] ?? String(value);
   if (field === "temperature") return leadTemperatureLabels[value as LeadTemperature] ?? String(value);
   if (field === "budgetMin" || field === "budgetMax") return formatCurrency(value as string);

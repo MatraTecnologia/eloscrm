@@ -203,8 +203,59 @@ describe("auditoria de pipelines e estágios", () => {
       where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.CREATED },
     });
     expect(event.entityLabel).toBe("Pipeline Auditado");
-    expect(event.context).toEqual({ stageCount: 3 });
+    // os nomes das colunas, na ordem: sem template escolhido, o funil nasce com os genéricos
+    expect(event.context).toEqual({ stages: ["Novo", "Ganho", "Perdido"] });
     expect(event.actorName).toBeTruthy();
+  });
+
+  it("registra as colunas do template escolhido na criação", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: {
+        name: "Locação Auditada",
+        stages: [
+          { name: "Interessado" },
+          { name: "Visita" },
+          { name: "Contrato" },
+          { name: "Ativo", isWon: true },
+          { name: "Recusado", isLost: true },
+        ],
+      },
+    });
+    const pipeline = created.json();
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.CREATED },
+    });
+    // é o que identifica o template no log: o id dele não chega à API, só os estágios
+    expect(event.context).toEqual({
+      stages: ["Interessado", "Visita", "Contrato", "Ativo", "Recusado"],
+    });
+  });
+
+  it("a exclusão guarda as colunas que foram com o funil", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pipelines",
+      headers: { cookie },
+      payload: { name: "Funil Que Some", stages: [{ name: "Entrada" }, { name: "Saída" }] },
+    });
+    const pipeline = created.json();
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/v1/pipelines/${pipeline.id}`,
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const event = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: AuditEntity.PIPELINE, entityId: pipeline.id, action: AuditAction.DELETED },
+    });
+    // os estágios cascateiam com o funil; se o evento não os guardasse, ninguém mais saberia quais eram
+    expect(event.context).toEqual({ stages: ["Entrada", "Saída"] });
   });
 
   it("audita atualização de pipeline", async () => {

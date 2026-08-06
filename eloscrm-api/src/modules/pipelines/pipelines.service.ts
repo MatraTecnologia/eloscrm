@@ -49,7 +49,9 @@ export const create = async (orgId: string, data: CreatePipelineInput, actor: Ac
     entityLabel: pipeline.name,
     action: AuditAction.CREATED,
     actor,
-    context: { stageCount: result?.stages.length ?? 0 },
+    // os nomes, não a contagem: funil nasce de um template (ou dos genéricos), e "6" não diz qual.
+    // O template escolhido não chega à API — só os estágios —, então a lista É o registro dele.
+    context: { stages: (result?.stages ?? []).map((stage) => stage.name) },
     snapshot: snapshotOf(AuditEntity.PIPELINE, pipeline),
   });
   return result;
@@ -79,6 +81,8 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
   }
   const dealsCount = await repo.countDealsInPipeline(id);
   if (dealsCount > 0) throw httpError(409, "PIPELINE_HAS_DEALS", "Não é possível remover um pipeline com negócios");
+  // os estágios cascateiam com o funil: lidos aqui, ou o evento não diz quais colunas existiam
+  const stages = await repo.findStagesInPipeline(orgId, id);
   // o evento vem antes do delete: gravado depois, uma falha na escrita apagaria o registro sem rastro
   await recordAudit({
     orgId,
@@ -87,6 +91,7 @@ export const remove = async (orgId: string, id: string, actor: Actor) => {
     entityLabel: pipeline.name,
     action: AuditAction.DELETED,
     actor,
+    context: { stages: stages.map((stage) => stage.name) },
     snapshot: snapshotOf(AuditEntity.PIPELINE, pipeline),
   });
   await repo.deletePipelineById(id);
