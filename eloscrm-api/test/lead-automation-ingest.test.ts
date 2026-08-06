@@ -166,6 +166,15 @@ describe("automação na entrada de mensagem", () => {
     expect(evt.actorName).toBe("Automação");
     // id vazio viraria string vazia na coluna e se passaria por usuário
     expect(evt.actorId).toBeNull();
+    // é o que a tela usa para separar "ninguém clicou" de uma ação de pessoa
+    expect(evt.source).toBe("AUTOMATION");
+
+    // o negócio que a mesma automação abre também sai marcado — a origem vem do ator, não é forçada
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+    const evtDeal = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "DEAL", entityId: negocio.id },
+    });
+    expect(evtDeal.source).toBe("AUTOMATION");
   });
 
   it("lead que já existe ganha negócio e mantém o dono", async () => {

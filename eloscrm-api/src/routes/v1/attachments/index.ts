@@ -25,12 +25,12 @@ const attachmentsRoutes = async (app: FastifyInstance) => {
 
   app.post("/:id/confirm", async (request) => {
     const { id } = request.params as { id: string };
-    return service.confirm(request.orgId!, id);
+    return service.confirm(request.orgId!, id, actorOf(request));
   });
 
   app.get("/:id/download-url", async (request) => {
     const { id } = request.params as { id: string };
-    return service.downloadUrl(request.orgId!, id);
+    return service.downloadUrl(request.orgId!, id, actorOf(request));
   });
 
   app.delete("/:id", async (request, reply) => {

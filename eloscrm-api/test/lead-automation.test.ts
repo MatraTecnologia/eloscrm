@@ -238,4 +238,32 @@ describe("PUT /v1/lead-automation", () => {
     });
     expect(membro.active).toBe(false);
   });
+
+  it("grava UPDATED com o que mudou na configuração", async () => {
+    const { id: pipelineId, stages } = await funil();
+
+    // primeiro PUT parte do estado inicial (tudo desligado) para o mesmo estado — sem diff, sem evento
+    await put(base);
+    await put({
+      ...base,
+      autoCreateDeal: true,
+      pipelineId,
+      stageId: stages[0]!.id,
+      autoAssign: true,
+      memberUserIds: [userId],
+    });
+
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: orgId, entityType: "LEAD_AUTOMATION", action: "UPDATED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(evento.entityLabel).toBe("Automação de leads");
+    expect(evento.changes).toMatchObject({
+      autoCreateDeal: { from: false, to: true },
+      autoAssign: { from: false, to: true },
+      pipelineId: { from: null, to: pipelineId },
+      stageId: { from: null, to: stages[0]!.id },
+      memberUserIds: { from: [], to: [userId] },
+    });
+  });
 });

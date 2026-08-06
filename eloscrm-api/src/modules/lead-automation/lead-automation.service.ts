@@ -1,4 +1,6 @@
+import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
+import { diffFields, recordAudit } from "../../lib/audit.js";
 import { forbidden, httpError, notFound } from "../../lib/http-error.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import { prisma } from "../../lib/prisma.js";
@@ -92,10 +94,47 @@ const validateMembers = async (orgId: string, userIds: string[]) => {
   }
 };
 
+type ConfigLike = {
+  autoCreateClient: boolean;
+  autoCreateDeal: boolean;
+  pipelineId: string | null;
+  stageId: string | null;
+  autoAssign: boolean;
+  memberUserIds: string[];
+};
+
+// campos simples da configuração, na mesma forma dos dois lados: `memberUserIds` ordenado, senão a
+// roleta salva com a mesma gente em ordem diferente apareceria como mudança que não houve
+const configFields = (automation: ConfigLike) => ({
+  autoCreateClient: automation.autoCreateClient,
+  autoCreateDeal: automation.autoCreateDeal,
+  pipelineId: automation.pipelineId,
+  stageId: automation.stageId,
+  autoAssign: automation.autoAssign,
+  memberUserIds: [...automation.memberUserIds].sort(),
+});
+
 export const update = async (orgId: string, data: UpdateLeadAutomationInput, actor: Actor) => {
   await requireManager(orgId, actor);
   await validateTarget(orgId, data);
   await validateMembers(orgId, data.memberUserIds);
 
-  return serialize(orgId, await repo.save(orgId, data));
+  const before = await repo.findOrCreate(orgId);
+  const beforeFields = configFields({
+    ...before,
+    memberUserIds: before.members.filter((m) => m.active).map((m) => m.userId),
+  });
+
+  const saved = await repo.save(orgId, data);
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.LEAD_AUTOMATION,
+    entityId: saved.id,
+    entityLabel: "Automação de leads",
+    action: AuditAction.UPDATED,
+    actor,
+    changes: diffFields(beforeFields, configFields(data)),
+  });
+
+  return serialize(orgId, saved);
 };
