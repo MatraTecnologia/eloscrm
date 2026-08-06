@@ -22,13 +22,34 @@ fila.
 BullMQ 6, Better Auth 1.6 (+ organization plugin), Vitest 4 contra Postgres real, Next 16 + React 19 +
 TanStack Query + shadcn/ui no web.
 
-## Status da execução (2026-08-06)
+## Status da execução — CONCLUÍDO (2026-08-06)
 
-Executado na branch `feat/auditoria-completa`. **Fases 0 a 4 completas, mais as Tasks 17 (export CSV),
-18 (backfill) e 20 (documentação).** Suíte da API: **465 testes** (piso antes do plano: 397); web com
-lint, typecheck e build limpos.
+Executado na branch `feat/auditoria-completa`, mergeada em `main` (`948c9cc`) e marcada como
+**`v0.1.0`**. **123 dos 129 steps concluídos**; os 6 abertos são verificação manual e deploy (§10 e
+Task 21, steps 3 a 5) — nada de código pendente.
 
-Ajustes deliberados em relação ao texto original, todos com o motivo no lugar onde valem:
+Verificação no fim da execução: API com `oxlint` 0, `tsc` sem erro e **487 testes** (piso antes do
+plano: 397); web com lint, typecheck e build limpos.
+
+| Task | Entrega | Commit |
+|---|---|---|
+| 1–3 | Fundação: colunas, enums, ator com origem, allowlist de snapshot, blindagem do enum | `5818d99` |
+| 4 | Domínio com rótulo/contexto e ações próprias (`NURTURED`, `REACTIVATED`, `TRANSFERRED`) | `1bd8d7d` |
+| 5 | Funis e estágios | `63c6ba6` |
+| 6 | Comentários, anexos e automação | `fa66c09` |
+| 7 | Instância de WhatsApp | `72089d6` |
+| 8 | Conversas e mensagens | `e0448b2` |
+| 9 | Identidade (login, organização, membros, convites) | `ca9cd73`, `da51660` |
+| 10 | Guarda de cobertura + testes da D7; falha de trilha deixa de ser silenciosa | `da51660` |
+| 11–12 | Retenção: purga em lotes, job diário, `audit:purge` | `930988c` |
+| 13, 17 | Busca com filtros/cursor, `/actors` e export CSV na API | `537cbed` |
+| 14–16 | Tela `/auditoria`: dados, página, filtros, detalhe | `f3ebc05`, `9369343`, `71cc66f` |
+| 17 | Botão "Exportar CSV" na tela (a rota já existia desde `537cbed`) | `948c9cc`+ |
+| 18, 20 | Backfill de rótulos e documentação | `bea2be9` |
+| 19 | Exclusão da imobiliária purga R2 e instância remota | `5f532cc` |
+| 21 | Verificação: lint, typecheck e suíte nos dois projetos | steps 1–2 |
+
+### Ajustes deliberados em relação ao texto original
 
 - **Task 10 virou guarda estática + testes da D7**, não um `it.each` sobre a matriz inteira: exercitar
   as 30 ações por HTTP duplicaria os testes por módulo e custaria um sign-up por caso. O que só ela
@@ -42,16 +63,22 @@ Ajustes deliberados em relação ao texto original, todos com o motivo no lugar 
   apagado, que é exatamente o caso desta tela.
 - **`DEAL`/`PROPERTY` não têm ficha por id no web** (a tela é lista + diálogo), então "abrir item"
   leva à lista desses dois.
+- **A auditoria do funil guarda os nomes dos estágios**, não a contagem: o funil nasce de um template
+  e "6" não diz qual. O id do template não chega à API, então a lista É o registro dele (`edd08a8`).
 
-Pendente: **Task 21** (verificação final em produção — `db push`, envs, fumaça manual e primeira
-purga), que é operação de deploy, não código.
+### Nascido depois do plano, na mesma linha de trabalho
 
-Referências: `eloscrm-api/CLAUDE.md`, `eloscrm-web/CLAUDE.md`,
-[`plans/2026-07-29-leads-360-a-auditoria.md`](2026-07-29-leads-360-a-auditoria.md) (origem do
-`AuditEvent`), [`../../../docs/2026-08-04-debitos-whatsapp.md`](../../../../docs/2026-08-04-debitos-whatsapp.md)
-(retenção/LGPD adiada — este plano fecha a parte da auditoria).
+A revisão das exclusões saiu da auditoria — instrumentar cada delete expôs o que eles deixavam para
+trás:
 
----
+| O que | Commit |
+|---|---|
+| Exclusão de conversa apaga a mídia no R2 (teste provado por sabotagem) | `5538139` |
+| Mídia em voo não fica órfã quando a conversa é excluída no meio do download | `048577b` |
+| Excluir lead, negócio, imóvel ou atividade leva os **comentários** (não tinham FK, nada os apagava) | `ef5cff1` |
+| Excluir a imobiliária pela tela, com inventário, confirmação digitada e o endpoint do Better Auth desligado | `4284431` |
+| Remover a conexão de WhatsApp diz o que leva e purga as mídias | `a535556` |
+| Exclusão de funil explica o impedimento com números e oferece a transferência em lote | `17533ee` |
 
 ## 1. Estado atual
 
@@ -429,12 +456,12 @@ Contrato do que precisa emitir evento. Coluna "hoje" = o que existe antes deste 
   `actorEmail`, `source`, `ip`, `userAgent`, `requestId`; enums `AuditEntity` (16), `AuditAction` (32),
   `AuditSource` (4) exportados de `src/generated/prisma/client.js`.
 
-- [ ] **Step 1: Ampliar os enums**
+- [x] **Step 1: Ampliar os enums**
 
 Em `prisma/schema.prisma`, substituir `enum AuditEntity` e `enum AuditAction` pelos valores da D3 (um por
 linha, ordem da D3) e acrescentar `enum AuditSource { USER AUTOMATION WEBHOOK SYSTEM }`.
 
-- [ ] **Step 2: Ampliar o model**
+- [x] **Step 2: Ampliar o model**
 
 ```prisma
 model AuditEvent {
@@ -482,21 +509,21 @@ model AuditEvent {
 }
 ```
 
-- [ ] **Step 3: Aplicar e gerar**
+- [x] **Step 3: Aplicar e gerar**
 
 ```bash
 cd eloscrm-api && pnpm db:generate && pnpm db:push && pnpm db:push:test
 ```
 Expected: os três sem erro e **sem** pedir `--accept-data-loss` (tudo aditivo). Se pedir: parar e revisar.
 
-- [ ] **Step 4: Teste do modelo**
+- [x] **Step 4: Teste do modelo**
 
 Em `test/audit-model.test.ts`, acrescentar um caso que grava um evento com todas as colunas novas e lê de
 volta: `entityLabel`, `context`, `snapshot`, `source: "SYSTEM"`, `ip`, `requestId`.
 
 Run: `pnpm vitest run test/audit-model.test.ts` → PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add eloscrm-api/prisma/schema.prisma eloscrm-api/test/audit-model.test.ts
@@ -519,7 +546,7 @@ git commit -m "feat: auditoria guarda rótulo, contexto e origem do que foi mexi
   devolvendo `ip`/`userAgent`/`requestId`/`email`; `AUTOMATION_ACTOR`, `WEBHOOK_ACTOR`, `SYSTEM_ACTOR`;
   `snapshotOf(entityType, row)` com allowlist; `maskPhone`/`maskEmail`.
 
-- [ ] **Step 1: Ampliar `Actor`**
+- [x] **Step 1: Ampliar `Actor`**
 
 ```ts
 export type Actor = {
@@ -551,7 +578,7 @@ export const SYSTEM_ACTOR: Actor = { id: "", name: "Sistema", source: AuditSourc
 > `request.user` vem do `authGuard`; `request.id` é o id de request do Fastify (já existe, não precisa de
 > `requestIdHeader`).
 
-- [ ] **Step 2: Allowlist de snapshot**
+- [x] **Step 2: Allowlist de snapshot**
 
 `src/lib/audit-snapshot.ts`:
 
@@ -578,7 +605,7 @@ export const snapshotOf = (entityType: AuditEntity, row: Record<string, unknown>
 export const labelOf = (entityType: AuditEntity, row: Record<string, unknown>) => …; // name ?? title ?? …
 ```
 
-- [ ] **Step 3: Ampliar `recordAudit`**
+- [x] **Step 3: Ampliar `recordAudit`**
 
 Campos novos no input, todos opcionais; `source` cai em `input.actor.source ?? USER`; a supressão de
 `changes` vazio **continua valendo só quando `changes` foi passado** (senão `ARCHIVED` e afins, que não
@@ -588,7 +615,7 @@ têm diff, nunca gravariam).
 real e auditado (Task 9), e um `Map` por processo entregaria nome velho. Se essa query aparecer em perfil
 de latência, a saída é passá-la de quem já carregou a org, não cachear.
 
-- [ ] **Step 4: Testes**
+- [x] **Step 4: Testes**
 
 Em `test/audit-lib.test.ts`: `maskPhone`/`maskEmail` (incluindo nulo e formato curto), `snapshotOf`
 ignorando campo fora da allowlist, `recordAudit` gravando `source` do ator, e o caso de `changes: {}`
@@ -596,7 +623,7 @@ com `action: ARCHIVED` **gravando** o evento.
 
 Run: `pnpm vitest run test/audit-lib.test.ts` → PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add eloscrm-api/src/lib/audit.ts eloscrm-api/src/lib/actor.ts eloscrm-api/src/lib/audit-snapshot.ts eloscrm-api/test/audit-lib.test.ts
@@ -623,7 +650,7 @@ Sem esta task, o enum ampliado deixa `POST /v1/attachments/upload-url` aceitar
   `entityExistsInOrg` exaustivo; `AuditEntity`/`AuditAction`/`AuditSource` espelhados no web com todos os
   rótulos.
 
-- [ ] **Step 1: Subconjunto para anexo e comentário**
+- [x] **Step 1: Subconjunto para anexo e comentário**
 
 ```ts
 export const ATTACHABLE_ENTITIES = [
@@ -633,18 +660,18 @@ export const ATTACHABLE_ENTITIES = [
 
 Nos schemas: `entityType: z.enum(ATTACHABLE_ENTITIES)`. Mesmo para comentários.
 
-- [ ] **Step 2: `entityExistsInOrg` exaustivo**
+- [x] **Step 2: `entityExistsInOrg` exaustivo**
 
 Trocar o `else` que assume `ACTIVITY` por `switch` com `default: return false` — hoje um tipo novo cairia
 em `activity.findFirst` por acidente.
 
-- [ ] **Step 3: Espelhar os enums no web**
+- [x] **Step 3: Espelhar os enums no web**
 
 `eloscrm-web/lib/types.ts`: ampliar `AuditEntity` e `AuditAction`, acrescentar `AuditSource` e os campos
 novos em `AuditEvent` (`entityLabel`, `context`, `snapshot`, `source`, `ip`, `userAgent`, `requestId`,
 `organizationName`, `actorEmail`).
 
-- [ ] **Step 4: Rótulos em pt-BR**
+- [x] **Step 4: Rótulos em pt-BR**
 
 `eloscrm-web/lib/labels.ts`:
 - `AUDIT_ACTION_LABELS`: verbo na 3ª pessoa para cada uma das 32 ações ("criou", "arquivou",
@@ -656,7 +683,7 @@ novos em `AuditEvent` (`entityLabel`, `context`, `snapshot`, `source`, `ip`, `us
   `AUDIT_SOURCE_LABELS` (`USER: "Pessoa"`, `AUTOMATION: "Automação"`, `WEBHOOK: "WhatsApp"`,
   `SYSTEM: "Sistema"`).
 
-- [ ] **Step 5: Verificar os dois lados**
+- [x] **Step 5: Verificar os dois lados**
 
 ```bash
 cd eloscrm-api && pnpm lint && pnpm typecheck && pnpm vitest run test/attachments.test.ts test/comments.test.ts
@@ -664,7 +691,7 @@ cd ../eloscrm-web && pnpm lint && pnpm typecheck
 ```
 Expected: PASS nos dois. O typecheck do web é o que prova que nenhum valor de enum ficou sem rótulo.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add eloscrm-api/src/modules/attachments eloscrm-api/src/modules/comments eloscrm-api/test/attachments.test.ts eloscrm-api/test/comments.test.ts eloscrm-web/lib/types.ts eloscrm-web/lib/labels.ts
@@ -706,19 +733,19 @@ await recordAudit({
 - Produces: todos os eventos existentes com `entityLabel`/`snapshot`/`context`; `NURTURED`,
   `REACTIVATED` e `TRANSFERRED` no lugar de `UPDATED` genérico.
 
-- [ ] **Step 1: `entityLabel` em todos os `recordAudit` atuais** — `client.name`, `deal.title`,
+- [x] **Step 1: `entityLabel` em todos os `recordAudit` atuais** — `client.name`, `deal.title`,
       `property.title`, `activity.description` (truncada em 120 caracteres).
-- [ ] **Step 2: `context` onde há pai** — `DEAL` leva `{ clientName, pipelineName, stageName }`;
+- [x] **Step 2: `context` onde há pai** — `DEAL` leva `{ clientName, pipelineName, stageName }`;
       `ACTIVITY` leva `{ clientName, dealTitle }`.
-- [ ] **Step 3: Ações específicas** — `nurture.nurture` → `NURTURED`, `nurture.reactivate` →
+- [x] **Step 3: Ações específicas** — `nurture.nurture` → `NURTURED`, `nurture.reactivate` →
       `REACTIVATED`, `deals.bulkTransfer` → `TRANSFERRED` (um evento por negócio, todos com o mesmo
       `requestId`, o que é o que permite a tela agrupar). **Trocar a ação quebra assert existente**: antes
       de escrever, `grep -n '"UPDATED"' test/clients-nurture.test.ts` e ajustar os três casos — o teste
       falhando aqui é a mudança pretendida, não regressão.
-- [ ] **Step 4: `DELETED` lê o rótulo antes do delete** — em `clients.remove`, `deals.remove`,
+- [x] **Step 4: `DELETED` lê o rótulo antes do delete** — em `clients.remove`, `deals.remove`,
       `properties.remove`, `activities.remove`, montar `entityLabel`/`snapshot` a partir do
       `getById` que já roda no começo da função. Nada de ler depois.
-- [ ] **Step 5: Teste do requisito central** — em `test/clients-audit.test.ts`:
+- [x] **Step 5: Teste do requisito central** — em `test/clients-audit.test.ts`:
 
 ```ts
 it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
@@ -732,8 +759,8 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 });
 ```
 
-- [ ] **Step 6: Verificar** — `pnpm vitest run test/clients-audit.test.ts test/deals-audit.test.ts test/properties-activities-audit.test.ts test/clients-nurture.test.ts`
-- [ ] **Step 7: Commit** — `git commit -m "feat: eventos de auditoria do domínio guardam rótulo e contexto"`
+- [x] **Step 6: Verificar** — `pnpm vitest run test/clients-audit.test.ts test/deals-audit.test.ts test/properties-activities-audit.test.ts test/clients-nurture.test.ts`
+- [x] **Step 7: Commit** — `git commit -m "feat: eventos de auditoria do domínio guardam rótulo e contexto"`
 
 ---
 
@@ -748,16 +775,16 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 - Consumes: Tasks 1-2.
 - Produces: 7 funções com `actor` como último parâmetro e evento correspondente (matriz §4).
 
-- [ ] **Step 1: `actor` nas assinaturas** — `create`, `update`, `remove`, `addStage`, `updateStage`,
+- [x] **Step 1: `actor` nas assinaturas** — `create`, `update`, `remove`, `addStage`, `updateStage`,
       `removeStage`, `reorderStages`. `ensureDefaultPipeline` **não** recebe: roda no sign-up, e o evento
       dela é a criação da organização (Task 9).
-- [ ] **Step 2: `actorOf(request)` nas duas rotas.**
-- [ ] **Step 3: Eventos** — `STAGE` leva `context: { pipelineName }`; `reorderStages` grava
+- [x] **Step 2: `actorOf(request)` nas duas rotas.**
+- [x] **Step 3: Eventos** — `STAGE` leva `context: { pipelineName }`; `reorderStages` grava
       `changes: { order: { from: [...nomes], to: [...nomes] } }` (nomes, não ids — o evento tem que ser
       legível depois de o estágio ser apagado).
-- [ ] **Step 4: `removeStage`/`remove` leem rótulo antes do delete.**
-- [ ] **Step 5: Testes** — um por ação, mais o de isolamento por org.
-- [ ] **Step 6: Commit** — `git commit -m "feat: audita criação, alteração e remoção de funis e estágios"`
+- [x] **Step 4: `removeStage`/`remove` leem rótulo antes do delete.**
+- [x] **Step 5: Testes** — um por ação, mais o de isolamento por org.
+- [x] **Step 6: Commit** — `git commit -m "feat: audita criação, alteração e remoção de funis e estágios"`
 
 ---
 
@@ -776,18 +803,18 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 - Produces: eventos de comentário (CRUD), anexo (`UPLOADED`/`DOWNLOADED`/`DELETED`) e automação
   (`UPDATED` da configuração + `CREATED` com `source: AUTOMATION` no lead/negócio criado por ela).
 
-- [ ] **Step 1: comentários** — `entityLabel` é o alvo (`"lead Ana Paula"`), `context` guarda
+- [x] **Step 1: comentários** — `entityLabel` é o alvo (`"lead Ana Paula"`), `context` guarda
       `{ targetType, targetLabel }`; o corpo do comentário **não** entra no snapshot (é texto livre de
       pessoas, e o comentário em si já é o registro).
-- [ ] **Step 2: anexos** — `confirm` → `UPLOADED` com `snapshot: { filename, contentType, size }`;
+- [x] **Step 2: anexos** — `confirm` → `UPLOADED` com `snapshot: { filename, contentType, size }`;
       `downloadUrl` → `DOWNLOADED`; `remove` → `DELETED` (rótulo antes de apagar). `confirm` passa a
       receber `actor` e a rota passa `actorOf(request)`.
-- [ ] **Step 3: automação** — `lead-automation.update` grava `changes` da configuração;
+- [x] **Step 3: automação** — `lead-automation.update` grava `changes` da configuração;
       `apply.service.applyToConversation` passa `AUTOMATION_ACTOR` (que já usa) e o evento sai com
       `source: AUTOMATION`.
-- [ ] **Step 4: Testes** — incluindo um que confirma `source: "AUTOMATION"` no lead criado pela
+- [x] **Step 4: Testes** — incluindo um que confirma `source: "AUTOMATION"` no lead criado pela
       automação (é o que a tela usa para separar "ninguém clicou").
-- [ ] **Step 5: Commit** — `git commit -m "feat: audita comentários, anexos e automação de leads"`
+- [x] **Step 5: Commit** — `git commit -m "feat: audita comentários, anexos e automação de leads"`
 
 ---
 
@@ -806,15 +833,15 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 > `requireManager(orgId, actor)`), e as rotas já passam `actorOf(request)`. É só acrescentar o
 > `recordAudit`.
 
-- [ ] **Step 1:** um `recordAudit` por função de gestão, `entityLabel = instance.name`,
+- [x] **Step 1:** um `recordAudit` por função de gestão, `entityLabel = instance.name`,
       `context: { ownerJid: maskPhone(instance.ownerJid) }`.
-- [ ] **Step 2: `testSend`** grava o destino mascarado e o id da mensagem, **nunca o texto** — mesma
+- [x] **Step 2: `testSend`** grava o destino mascarado e o id da mensagem, **nunca o texto** — mesma
       regra que o `UazapiInstanceLog` já segue.
-- [ ] **Step 3: `remove`** lê o rótulo antes do delete; o evento sobrevive à instância (que leva o
+- [x] **Step 3: `remove`** lê o rótulo antes do delete; o evento sobrevive à instância (que leva o
       `UazapiInstanceLog` em cascade).
-- [ ] **Step 4: Testes** — as 9 ações, e um caso que apaga a instância e confere que os eventos
+- [x] **Step 4: Testes** — as 9 ações, e um caso que apaga a instância e confere que os eventos
       continuam lá.
-- [ ] **Step 5: Commit** — `git commit -m "feat: audita a gestão da conexão de WhatsApp"`
+- [x] **Step 5: Commit** — `git commit -m "feat: audita a gestão da conexão de WhatsApp"`
 
 ---
 
@@ -831,7 +858,7 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 - Produces: `MESSAGE_SENT`, `MESSAGE_DELETED`, `ARCHIVED`/`UNARCHIVED`, `LINKED`/`UNLINKED`, `DELETED`
   de conversa. **Nada** do que está na lista de exclusão (D7).
 
-- [ ] **Step 1: `actor` nas assinaturas** — diferente da Task 7, **nenhuma** destas recebe ator hoje:
+- [x] **Step 1: `actor` nas assinaturas** — diferente da Task 7, **nenhuma** destas recebe ator hoje:
       `conversations.archive(orgId, id, archived)`, `conversations.linkClient(orgId, id, clientId)`,
       `conversations.unlinkClient(orgId, id)`, `conversations.remove(orgId, id)` e
       `message-actions.remove(orgId, conversationId, messageId)`. Acrescentar `actor` como último
@@ -844,21 +871,21 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
       automação chama essas funções, então não há call site precisando de `WEBHOOK_ACTOR`/
       `AUTOMATION_ACTOR`. O eco de deleção do provedor passa por `status.service.applyDeletion`, que está
       na lista de exclusão da D7.
-- [ ] **Step 2: rótulo da conversa** — `entityLabel` = `client?.name ?? contactName ?? waName ??
+- [x] **Step 2: rótulo da conversa** — `entityLabel` = `client?.name ?? contactName ?? waName ??
       maskPhone(phone)`; a mesma precedência que o header da tela usa, para o log falar a língua do
       corretor.
-- [ ] **Step 3: `sendText`** grava `MESSAGE_SENT` depois do envio confirmado, com
+- [x] **Step 3: `sendText`** grava `MESSAGE_SENT` depois do envio confirmado, com
       `snapshot: { direction, type, sentAt }` e **sem** `text` (D9). Falha de envio não gera evento — o
       que houve foi tentativa, e a bolha `failed` já registra.
-- [ ] **Step 4: `remove` da conversa** grava `DELETED` **antes** do delete, com
+- [x] **Step 4: `remove` da conversa** grava `DELETED` **antes** do delete, com
       `snapshot: { messageCount, mediaCount, firstMessageAt, lastMessageAt }` — é o que resta como prova
       de que existiu um atendimento, e o motivo pelo qual a contagem é lida antes.
-- [ ] **Step 5: vínculo de lead** — `LINKED` guarda `context: { clientName }`; `UNLINKED` guarda o nome
+- [x] **Step 5: vínculo de lead** — `LINKED` guarda `context: { clientName }`; `UNLINKED` guarda o nome
       de quem foi desvinculado (senão o evento não diz de quem se soltou).
-- [ ] **Step 6: confirmar as exclusões** — teste que faz `markRead` + ingestão de mensagem recebida e
+- [x] **Step 6: confirmar as exclusões** — teste que faz `markRead` + ingestão de mensagem recebida e
       assere **zero** eventos novos. É o guarda contra alguém "completar a cobertura" depois e inundar a
       tabela.
-- [ ] **Step 7: Commit** — `git commit -m "feat: audita atendimento, envio e exclusão em conversas"`
+- [x] **Step 7: Commit** — `git commit -m "feat: audita atendimento, envio e exclusão em conversas"`
 
 ---
 
@@ -879,22 +906,22 @@ it("o evento de exclusão sobrevive ao lead e continua legível", async () => {
 `afterUpdateMemberRole`, `afterCreateInvitation` (a doc oficial lista todos), e `databaseHooks.session`
 já é usado neste projeto (`auth.ts:126-138`, que resolve a org ativa no `create.before`).
 
-- [ ] **Step 1: adaptador** — `identity.audit.ts` recebe os objetos do hook e monta o `recordAudit`, com
+- [x] **Step 1: adaptador** — `identity.audit.ts` recebe os objetos do hook e monta o `recordAudit`, com
       ator = o próprio usuário do hook (`{ id, name, email }`, `source: USER`). Hook não tem `request`,
       então `ip`/`userAgent` ficam nulos — registrar isso como limitação no comentário.
-- [ ] **Step 2: login/logout** — `databaseHooks.session.create.after` → `SIGNED_IN` na org ativa
+- [x] **Step 2: login/logout** — `databaseHooks.session.create.after` → `SIGNED_IN` na org ativa
       resolvida no `before`. **Sem org ativa não há evento** (`organizationId` é obrigatório): usuário
       sem organização nenhuma não gera linha, e isso é aceitável — não há tenant a que atribuir.
-- [ ] **Step 3: organização e membros** — os cinco hooks da matriz §4, com `entityLabel` = nome da org /
+- [x] **Step 3: organização e membros** — os cinco hooks da matriz §4, com `entityLabel` = nome da org /
       nome do membro e `context: { role }` / `{ from: papelAntigo, to: papelNovo }`.
-- [ ] **Step 4: hook não pode derrubar o login** — `afterX` que lança quebra a autenticação (a doc
+- [x] **Step 4: hook não pode derrubar o login** — `afterX` que lança quebra a autenticação (a doc
       documenta `unable_to_create_user` como efeito de erro em hook). **Exceção deliberada à D5**: neste
       arquivo o `recordAudit` vai dentro de `try/catch` com `request.log.error`, porque o custo de perder
       um evento de login é menor que o de trancar a porta. Comentar o porquê no código.
-- [ ] **Step 5: Testes** — `signUpWithOrg` gera `ORGANIZATION/CREATED` + `MEMBER/MEMBER_ADDED`;
+- [x] **Step 5: Testes** — `signUpWithOrg` gera `ORGANIZATION/CREATED` + `MEMBER/MEMBER_ADDED`;
       `signIn` gera `SIGNED_IN`; e um caso que confirma que uma falha simulada de auditoria **não**
       impede o login.
-- [ ] **Step 6: Commit** — `git commit -m "feat: audita acesso, organização, membros e convites"`
+- [x] **Step 6: Commit** — `git commit -m "feat: audita acesso, organização, membros e convites"`
 
 ---
 
@@ -908,14 +935,14 @@ já é usado neste projeto (`auth.ts:126-138`, que resolve a org ativa no `creat
 - Produces: teste que percorre a matriz da §4 exercitando cada rota mutante e assere que **algum** evento
   nasceu com o par `(entityType, action)` esperado.
 
-- [ ] **Step 1:** tabela em código espelhando a §4 — `{ label, run: async () => …, expect: { entityType, action } }`.
-- [ ] **Step 2:** `it.each` sobre a tabela; cada caso conta os eventos antes e depois. **Um único
+- [x] **Step 1:** tabela em código espelhando a §4 — `{ label, run: async () => …, expect: { entityType, action } }`.
+- [x] **Step 2:** `it.each` sobre a tabela; cada caso conta os eventos antes e depois. **Um único
       `beforeAll` com um `signUpWithOrg`** compartilhado por todos os casos: o bcrypt do sign-up custa
       segundos e um por caso estoura o `testTimeout` de 15s do `vitest.config.ts`.
-- [ ] **Step 3:** lista de exclusão da D7 no mesmo arquivo, como casos que esperam **zero** eventos.
-- [ ] **Step 4:** Rodar a suíte inteira (`pnpm test`) — este arquivo é o mais lento; se passar de ~30s,
+- [x] **Step 3:** lista de exclusão da D7 no mesmo arquivo, como casos que esperam **zero** eventos.
+- [x] **Step 4:** Rodar a suíte inteira (`pnpm test`) — este arquivo é o mais lento; se passar de ~30s,
       quebrar em dois por domínio.
-- [ ] **Step 5: Commit** — `git commit -m "test: matriz de cobertura da auditoria"`
+- [x] **Step 5: Commit** — `git commit -m "test: matriz de cobertura da auditoria"`
 
 > **Deliberadamente não é um scanner de código-fonte.** Grep por `recordAudit` em `*.service.ts` passa com
 > chamada em ramo morto e falha com indireção por helper — o que vale é o evento chegando no banco.
@@ -938,7 +965,7 @@ já é usado neste projeto (`auth.ts:126-138`, que resolve a org ativa no `creat
 - Produces: `AUDIT_RETENTION_DAYS`; `purgeOlderThan(cutoff, batchSize?) → { removed, byOrg }`;
   `runRetention() → total`; `pnpm audit:purge [--days N] [--dry-run]`.
 
-- [ ] **Step 1: env**
+- [x] **Step 1: env**
 
 ```ts
 // Quanto tempo o log de auditoria fica. A tabela cresce a cada ação e nada mais a poda: sem isto ela
@@ -949,7 +976,7 @@ AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
 Acrescentar em `.env.example` e `.env.test.example` (no de teste, `AUDIT_RETENTION_DAYS=365`; o teste
 passa o cutoff explicitamente e não depende do valor).
 
-- [ ] **Step 2: purga em lotes**
+- [x] **Step 2: purga em lotes**
 
 ```ts
 /**
@@ -978,18 +1005,18 @@ export const purgeOlderThan = async (cutoff: Date, batchSize = 5_000) => {
 };
 ```
 
-- [ ] **Step 3: `runRetention`** — calcula `cutoff = agora - AUDIT_RETENTION_DAYS`, chama
+- [x] **Step 3: `runRetention`** — calcula `cutoff = agora - AUDIT_RETENTION_DAYS`, chama
       `purgeOlderThan`, e para cada org afetada grava `ORGANIZATION/PURGED` com `SYSTEM_ACTOR` e
       `changes: { removed: { from: n, to: 0 } }`. Devolve o total.
-- [ ] **Step 4: script CLI** — `scripts/purge-audit.ts` com `--days` (sobrepõe a env), `--dry-run`
+- [x] **Step 4: script CLI** — `scripts/purge-audit.ts` com `--days` (sobrepõe a env), `--dry-run`
       (conta sem apagar) e `console.log` do resultado (permitido em `scripts/` pelo oxlint).
-- [ ] **Step 5: Testes** (sem Redis, como o resto da suíte):
+- [x] **Step 5: Testes** (sem Redis, como o resto da suíte):
   - insere 3 eventos antigos e 2 recentes → `purgeOlderThan` remove 3 e devolve `byOrg` correto;
   - `batchSize: 2` com 5 antigos → remove todos (prova o laço);
   - `runRetention` grava um `PURGED` por org;
   - evento de outra org não interfere na contagem.
-- [ ] **Step 6: Verificar** — `pnpm vitest run test/audit-retention.test.ts`
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Verificar** — `pnpm vitest run test/audit-retention.test.ts`
+- [x] **Step 7: Commit**
 
 ```bash
 git add eloscrm-api/src/env.ts eloscrm-api/src/modules/audit/retention.service.ts eloscrm-api/scripts/purge-audit.ts eloscrm-api/package.json eloscrm-api/.env.example eloscrm-api/.env.test.example eloscrm-api/test/audit-retention.test.ts .github/workflows/ci.yml
@@ -1011,7 +1038,7 @@ git commit -m "feat: purga de auditoria por retenção, em lotes"
 - Produces: `scheduleCron(name, id, pattern, tz)` em `lib/queue.ts`; fila `audit-retention` com job diário
   às 03:20 (America/Sao_Paulo); no-op sem `REDIS_URL`.
 
-- [ ] **Step 1: `scheduleCron` em `lib/queue.ts`**
+- [x] **Step 1: `scheduleCron` em `lib/queue.ts`**
 
 ```ts
 /**
@@ -1026,7 +1053,7 @@ export const scheduleCron = async (name: string, id: string, pattern: string, tz
 };
 ```
 
-- [ ] **Step 2: worker + agendamento** em `retention.service.ts`:
+- [x] **Step 2: worker + agendamento** em `retention.service.ts`:
 
 ```ts
 export const AUDIT_RETENTION_QUEUE = "audit-retention";
@@ -1035,7 +1062,7 @@ export const scheduleAuditRetention = () =>
   scheduleCron(AUDIT_RETENTION_QUEUE, "daily", "0 20 3 * * *", "America/Sao_Paulo");
 ```
 
-- [ ] **Step 3: chamar no boot** — em `src/server.ts` (**não** em `app.ts`): os testes usam `buildApp()`
+- [x] **Step 3: chamar no boot** — em `src/server.ts` (**não** em `app.ts`): os testes usam `buildApp()`
       e não devem falar com Redis nem agendar nada.
 
 ```ts
@@ -1046,11 +1073,11 @@ const start = async () => {
 };
 ```
 
-- [ ] **Step 4: Teste** — `queueEnabled()` é `false` no ambiente de teste, então o caso a cobrir é
+- [x] **Step 4: Teste** — `queueEnabled()` é `false` no ambiente de teste, então o caso a cobrir é
       `scheduleAuditRetention()` resolvendo `null` sem lançar. O processamento em si já é coberto pelos
       testes de `runRetention`.
-- [ ] **Step 5: Verificar** — `pnpm test` (suíte inteira, para garantir que nada passou a exigir Redis).
-- [ ] **Step 6: Commit** — `git commit -m "feat: agenda a purga de auditoria uma vez por dia"`
+- [x] **Step 5: Verificar** — `pnpm test` (suíte inteira, para garantir que nada passou a exigir Redis).
+- [x] **Step 6: Commit** — `git commit -m "feat: agenda a purga de auditoria uma vez por dia"`
 
 > **Operação:** em produção sem `REDIS_URL` a purga **não roda**. Nesse cenário, agendar
 > `pnpm -C eloscrm-api audit:purge` no cron do host — está na §9.
@@ -1072,7 +1099,7 @@ const start = async () => {
   `action[]`, `actorId`, `source`, `q`, `from`, `to`, `cursor`, `limit`; gate de gestor quando não há
   `entityId`.
 
-- [ ] **Step 1: schema de filtros**
+- [x] **Step 1: schema de filtros**
 
 ```ts
 export const listAuditQuerySchema = z.object({
@@ -1094,10 +1121,10 @@ export const listAuditQuerySchema = z.object({
 });
 ```
 
-- [ ] **Step 2: repo com cursor** — `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`, `take: limit`,
+- [x] **Step 2: repo com cursor** — `orderBy: [{ createdAt: "desc" }, { id: "desc" }]`, `take: limit`,
       `skip: 1` + `cursor: { id }` quando houver, `nextCursor` só quando o lote encheu. Mesmo padrão de
       `conversations.list`.
-- [ ] **Step 3: autorização no service** (D10)
+- [x] **Step 3: autorização no service** (D10)
 
 ```ts
 export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor) => {
@@ -1109,20 +1136,20 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 };
 ```
 
-- [ ] **Step 4: rota de atores** — `GET /v1/audit-events/actors` (gestor) com
+- [x] **Step 4: rota de atores** — `GET /v1/audit-events/actors` (gestor) com
       `groupBy(["actorId", "actorName"])` para alimentar o filtro; **antes** de qualquer rota curinga, pelo
       mesmo motivo do `/counts` em conversas.
-- [ ] **Step 5: Testes**
+- [x] **Step 5: Testes**
   - 401 sem sessão; 403 para `member` na busca global; 200 para `member` com `entityId`;
   - filtro por período, por ação, por tipo múltiplo, por ator, e `q` casando `entityLabel`;
   - paginação: 3 páginas de 2 em 6 eventos, sem repetir nem pular;
   - isolamento: evento de outra org nunca aparece.
-- [ ] **Step 6: Ajustar todos os consumidores da rota** ao envelope `{ items }` (breaking, D11). Não é só
+- [x] **Step 6: Ajustar todos os consumidores da rota** ao envelope `{ items }` (breaking, D11). Não é só
       `test/audit-events.test.ts`: `test/deals.test.ts:207,279` também consulta
       `GET /v1/audit-events?entityType=DEAL&entityId=…` e lê o array direto. Conferir com
       `grep -rn "audit-events" test/` antes de rodar a suíte.
-- [ ] **Step 7: Verificar** — `pnpm lint && pnpm typecheck && pnpm test`
-- [ ] **Step 8: Commit** — `git commit -m "feat: busca de auditoria com filtros, cursor e gate de gestor"`
+- [x] **Step 7: Verificar** — `pnpm lint && pnpm typecheck && pnpm test`
+- [x] **Step 8: Commit** — `git commit -m "feat: busca de auditoria com filtros, cursor e gate de gestor"`
 
 ---
 
@@ -1140,14 +1167,14 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 - Produces: `useAuditSearch(filters)` (`useInfiniteQuery`), `useAuditActors()`, `useAuditEvents` ajustado
   ao envelope; filtros na URL via `nuqs` (padrão já usado em `conversas`).
 
-- [ ] **Step 1: `useAuditEvents`** passa a ler `data.items` — o `AuditFeed` continua funcionando igual.
-- [ ] **Step 2: `useAuditSearch`** — `useInfiniteQuery` com `getNextPageParam: (last) => last.nextCursor`,
+- [x] **Step 1: `useAuditEvents`** passa a ler `data.items` — o `AuditFeed` continua funcionando igual.
+- [x] **Step 2: `useAuditSearch`** — `useInfiniteQuery` com `getNextPageParam: (last) => last.nextCursor`,
       `queryKey` com `org?.id` **e** os filtros, `enabled: !!org?.id`.
-- [ ] **Step 3: `use-audit-filters.ts`** — estado dos filtros em `useQueryStates` do nuqs (período,
+- [x] **Step 3: `use-audit-filters.ts`** — estado dos filtros em `useQueryStates` do nuqs (período,
       tipos, ações, ator, origem, busca com debounce de 300ms). URL compartilhável é o que faz um gestor
       mandar "olha esse filtro" para outro.
-- [ ] **Step 4: Verificar** — `pnpm typecheck` no web.
-- [ ] **Step 5: Commit** — `git commit -m "feat: hooks de busca da auditoria no web"`
+- [x] **Step 4: Verificar** — `pnpm typecheck` no web.
+- [x] **Step 5: Commit** — `git commit -m "feat: hooks de busca da auditoria no web"`
 
 ---
 
@@ -1164,26 +1191,26 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 - Consumes: Task 14.
 - Produces: `/auditoria` funcional com filtros, rolagem infinita e item de menu visível só para gestor.
 
-- [ ] **Step 1: gate de gestor no cliente** — `useMembers()` + `useSession()` para achar o papel, como
+- [x] **Step 1: gate de gestor no cliente** — `useMembers()` + `useSession()` para achar o papel, como
       `comment-feed.tsx:25` já faz. Não sendo gestor: `Empty` com "Acesso restrito — só gestores
       consultam a auditoria". O gate real é a API (Task 13); este é cortesia de UI.
-- [ ] **Step 2: item na sidebar** — `{ title: "Auditoria", href: "/auditoria", icon: ScrollText }`,
+- [x] **Step 2: item na sidebar** — `{ title: "Auditoria", href: "/auditoria", icon: ScrollText }`,
       renderizado condicionalmente ao papel. Ícone Lucide, nunca emoji.
-- [ ] **Step 3: filtros** (`audit-filters.tsx`) — presets de período (Hoje / 7 / 30 / 90 dias /
+- [x] **Step 3: filtros** (`audit-filters.tsx`) — presets de período (Hoje / 7 / 30 / 90 dias /
       Personalizado), multi-select de tipo e de ação (`Popover` + `Command`), select de ator (atores da
       API + "Automação"/"Sistema"), busca. Em tela estreita, os filtros viram um `Sheet` — a tabela
       compete por largura.
-- [ ] **Step 4: lista** — tabela no desktop (Quando / Quem / Ação / Item / Resumo) e cards no mobile.
+- [x] **Step 4: lista** — tabela no desktop (Quando / Quem / Ação / Item / Resumo) e cards no mobile.
       Linha inteira clicável abre o detalhe. Botão "Carregar mais" + `IntersectionObserver`.
-- [ ] **Step 5: frase do evento** — `audit-row.tsx` monta
+- [x] **Step 5: frase do evento** — `audit-row.tsx` monta
       `"{actorName} {AUDIT_ACTION_LABELS[action]} o {ENTITY_NOUNS[entityType]} {entityLabel}"`, com
       fallback `entityId` truncado quando `entityLabel` é nulo (eventos anteriores ao backfill).
       **Não** usa `useEntityNames`: a tela precisa funcionar para item apagado, que é o ponto.
-- [ ] **Step 6: estados** — skeleton no primeiro carregamento; `Empty` "Nenhuma ação no período" quando o
+- [x] **Step 6: estados** — skeleton no primeiro carregamento; `Empty` "Nenhuma ação no período" quando o
       filtro não acha nada; erro com botão de tentar de novo.
-- [ ] **Step 7: QA visual** — `pnpm dev` nos dois projetos e screenshot em mobile/desktop
+- [x] **Step 7: QA visual** — `pnpm dev` nos dois projetos e screenshot em mobile/desktop
       (plugin `visual-qa`), conferindo erros de console.
-- [ ] **Step 8: Commit** — `git commit -m "feat: tela de auditoria da imobiliária"`
+- [x] **Step 8: Commit** — `git commit -m "feat: tela de auditoria da imobiliária"`
 
 ---
 
@@ -1197,19 +1224,19 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 - Consumes: Task 15.
 - Produces: `Sheet` lateral com diff completo, contexto, snapshot, origem técnica e atalho para o item.
 
-- [ ] **Step 1: diff** — tabela `Campo | Antes | Depois` usando `FIELD_LABELS` e `formatAuditValue`
+- [x] **Step 1: diff** — tabela `Campo | Antes | Depois` usando `FIELD_LABELS` e `formatAuditValue`
       (que já traduz enum, moeda e data).
-- [ ] **Step 2: contexto e snapshot** — lista de pares chave/valor com rótulos; chave desconhecida
+- [x] **Step 2: contexto e snapshot** — lista de pares chave/valor com rótulos; chave desconhecida
       aparece como está (o log é de eventos antigos também, e engolir campo é pior que mostrar cru).
-- [ ] **Step 3: origem** — `AUDIT_SOURCE_LABELS[source]`, `actorEmail`, IP, navegador (parse simples do
+- [x] **Step 3: origem** — `AUDIT_SOURCE_LABELS[source]`, `actorEmail`, IP, navegador (parse simples do
       user agent) e `requestId` com botão de copiar.
-- [ ] **Step 4: "abrir item"** — link para `/clients/:id`, `/deals`, `/properties/:id` conforme o tipo,
+- [x] **Step 4: "abrir item"** — link para `/clients/:id`, `/deals`, `/properties/:id` conforme o tipo,
       **só** quando o item ainda existe. Item apagado mostra "Este registro foi excluído" — é o cenário
       que o pedido pede para não perder.
-- [ ] **Step 5: eventos irmãos** — quando há `requestId`, botão "ver as N ações desta mesma operação"
+- [x] **Step 5: eventos irmãos** — quando há `requestId`, botão "ver as N ações desta mesma operação"
       (filtra por `requestId`; exige aceitar `requestId` no schema da Task 13 — incluir lá).
-- [ ] **Step 6: Verificar** — `pnpm lint && pnpm typecheck` no web + screenshot do sheet.
-- [ ] **Step 7: Commit** — `git commit -m "feat: detalhe do evento de auditoria com diff e origem"`
+- [x] **Step 6: Verificar** — `pnpm lint && pnpm typecheck` no web + screenshot do sheet.
+- [x] **Step 7: Commit** — `git commit -m "feat: detalhe do evento de auditoria com diff e origem"`
 
 ---
 
@@ -1228,13 +1255,13 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 - Produces: `GET /v1/audit-events/export` (gestor) devolvendo `text/csv` com os mesmos filtros;
   evento `ORGANIZATION/EXPORTED` com `context: { filters, rows }`.
 
-- [ ] **Step 1: rota** com `reply.header("content-disposition", 'attachment; filename="auditoria.csv"')`,
+- [x] **Step 1: rota** com `reply.header("content-disposition", 'attachment; filename="auditoria.csv"')`,
       teto de **50.000 linhas** (acima disso, 409 pedindo filtro mais estreito — sem paginar CSV).
-- [ ] **Step 2: colunas** — data ISO, ator, e-mail, origem, tipo, item, id, ação, resumo do diff. Escape
+- [x] **Step 2: colunas** — data ISO, ator, e-mail, origem, tipo, item, id, ação, resumo do diff. Escape
       de `;` e `"` conferido em teste com valor que contém ambos.
-- [ ] **Step 3: auditar o export** — quem exporta a trilha da equipe entra na trilha.
-- [ ] **Step 4: botão no web** — download direto via `window.open` da URL com os filtros atuais.
-- [ ] **Step 5: Commit** — `git commit -m "feat: exporta a auditoria filtrada em CSV"`
+- [x] **Step 3: auditar o export** — quem exporta a trilha da equipe entra na trilha.
+- [x] **Step 4: botão no web** — download direto via `window.open` da URL com os filtros atuais.
+- [x] **Step 5: Commit** — `git commit -m "feat: exporta a auditoria filtrada em CSV"`
 
 ---
 
@@ -1248,13 +1275,13 @@ export const list = async (orgId: string, filters: ListAuditQuery, actor: Actor)
 - Consumes: Fase 0.
 - Produces: `pnpm audit:backfill-labels` preenchendo `entityLabel` onde a entidade **ainda existe**.
 
-- [ ] **Step 1:** varrer eventos com `entityLabel: null`, agrupar por `entityType`, resolver nome em lote
+- [x] **Step 1:** varrer eventos com `entityLabel: null`, agrupar por `entityType`, resolver nome em lote
       (`client.findMany({ where: { id: { in } } })`) e atualizar.
-- [ ] **Step 2:** o que não resolve fica nulo — a entidade já foi apagada e o nome não existe em lugar
+- [x] **Step 2:** o que não resolve fica nulo — a entidade já foi apagada e o nome não existe em lugar
       nenhum. A tela cai no `entityId` truncado (Task 15, Step 5). Registrar o total não resolvido no
       output.
-- [ ] **Step 3:** `--dry-run` e log de contagem por tipo.
-- [ ] **Step 4: Commit** — `git commit -m "chore: backfill de rótulo nos eventos de auditoria antigos"`
+- [x] **Step 3:** `--dry-run` e log de contagem por tipo.
+- [x] **Step 4: Commit** — `git commit -m "chore: backfill de rótulo nos eventos de auditoria antigos"`
 
 ---
 
@@ -1282,13 +1309,13 @@ task fecha o que ele não alcança: objetos no R2 e a instância remota na uazap
 e o web ainda não tem tela para ele (`grep -rn "organization.delete" eloscrm-web` → nada). A purga
 precisa existir **antes** de essa tela existir.
 
-- [ ] **Step 1: Extrair a exclusão remota da instância**
+- [x] **Step 1: Extrair a exclusão remota da instância**
 
 `whatsapp.service.remove` faz duas coisas: valida gestor e apaga na uazapi + no banco. Extrair o miolo
 para `deleteRemoteInstance(instance)` (sem `requireManager` — quem exclui a org é `owner` por definição
 do Better Auth) e chamar dos dois lugares. `isInstanceGone` continua sendo tratado como sucesso.
 
-- [ ] **Step 2: `purgeOrganizationAssets(orgId)`**
+- [x] **Step 2: `purgeOrganizationAssets(orgId)`**
 
 ```ts
 /**
@@ -1320,7 +1347,7 @@ export const purgeOrganizationAssets = async (orgId: string) => {
 };
 ```
 
-- [ ] **Step 3: Registrar o hook**
+- [x] **Step 3: Registrar o hook**
 
 ```ts
 organizationHooks: {
@@ -1331,7 +1358,7 @@ organizationHooks: {
 },
 ```
 
-- [ ] **Step 4: O que fazer quando a purga falha**
+- [x] **Step 4: O que fazer quando a purga falha**
 
 Falha do R2 **não** pode impedir a exclusão da imobiliária (o titular pediu para sair; travar isso é pior
 do que deixar objeto órfão), mas também não pode passar em silêncio: `try/catch` com
@@ -1339,13 +1366,13 @@ do que deixar objeto órfão), mas também não pode passar em silêncio: `try/c
 que é o que permite um expurgo manual depois. Exceção à D5 pelo mesmo motivo da Task 9, Step 4 — e o
 motivo vai comentado no código.
 
-- [ ] **Step 5: Rastro da exclusão**
+- [x] **Step 5: Rastro da exclusão**
 
 Não gravar `AuditEvent` da exclusão da própria org: ele seria apagado no mesmo cascade, segundos depois.
 O rastro é uma linha de `logger.warn` com `orgId`, nome, contagem de objetos apagados e o ator — e essa é
 a razão pela qual esta linha da matriz §4 fica vazia de propósito.
 
-- [ ] **Step 6: Testes**
+- [x] **Step 6: Testes**
 
 - cria org com anexo (`READY`, `key` real no SeaweedFS local) e mensagem com `mediaKey`, chama
   `purgeOrganizationAssets` e confere que `headFile` de cada chave passa a falhar;
@@ -1355,8 +1382,8 @@ a razão pela qual esta linha da matriz §4 fica vazia de propósito.
   `conversation`, `whatsappMessage`, `client`, `deal` da org → **zero em todas**. É o teste que prova a
   decisão da D2.
 
-- [ ] **Step 7: Verificar** — `pnpm vitest run test/organization-purge.test.ts && pnpm test`
-- [ ] **Step 8: Commit**
+- [x] **Step 7: Verificar** — `pnpm vitest run test/organization-purge.test.ts && pnpm test`
+- [x] **Step 8: Commit**
 
 ```bash
 git add eloscrm-api/src/modules/audit/organization-purge.service.ts eloscrm-api/src/lib/auth.ts eloscrm-api/src/modules/whatsapp/whatsapp.service.ts eloscrm-api/test/organization-purge.test.ts
@@ -1380,29 +1407,29 @@ git commit -m "feat: excluir a imobiliária apaga arquivos do R2 e a instância 
 - Consumes: todas.
 - Produces: as regras deste plano onde quem for mexer depois vai ler.
 
-- [ ] **Step 1: `eloscrm-api/CLAUDE.md`** — seção "Auditoria": `recordAudit` é o único ponto de escrita;
+- [x] **Step 1: `eloscrm-api/CLAUDE.md`** — seção "Auditoria": `recordAudit` é o único ponto de escrita;
       `DELETED` grava antes do delete; a lista de exclusão da D7 com o motivo (senão alguém "completa" a
       cobertura e infla a tabela); `AUDIT_RETENTION_DAYS` e o fato de a purga não rodar sem Redis;
       allowlist de `snapshot` e a nota de LGPD; gate de gestor no service, não na rota.
-- [ ] **Step 2: `eloscrm-web/CLAUDE.md`** — `AUDIT_ACTION_LABELS`/`ENTITY_NOUNS` são `Record` completos:
+- [x] **Step 2: `eloscrm-web/CLAUDE.md`** — `AUDIT_ACTION_LABELS`/`ENTITY_NOUNS` são `Record` completos:
       valor novo de enum na API **quebra o typecheck do web** até ganhar rótulo (é proteção, não
       obstáculo); a tela de auditoria não usa `useEntityNames` de propósito.
-- [ ] **Step 3: `CLAUDE.md` da raiz** — na seção de deploy, `AuditEvent` na lista do que exige
+- [x] **Step 3: `CLAUDE.md` da raiz** — na seção de deploy, `AuditEvent` na lista do que exige
       `prisma db push` manual.
-- [ ] **Step 4: débitos do WhatsApp** — anotar que a retenção **da auditoria** foi resolvida aqui e que a
+- [x] **Step 4: débitos do WhatsApp** — anotar que a retenção **da auditoria** foi resolvida aqui e que a
       das mensagens continua aberta.
-- [ ] **Step 5:** atualizar a linha de datas dos arquivos tocados (`TZ=America/Sao_Paulo date "+%Y-%m-%d %H:%M (-03)"`).
-- [ ] **Step 6: Commit** — `git commit -m "docs: registra as regras da auditoria e da retenção"`
+- [x] **Step 5:** atualizar a linha de datas dos arquivos tocados (`TZ=America/Sao_Paulo date "+%Y-%m-%d %H:%M (-03)"`).
+- [x] **Step 6: Commit** — `git commit -m "docs: registra as regras da auditoria e da retenção"`
 
 ---
 
 ### Task 21: Verificação final e deploy
 
-- [ ] **Step 1: API** — `cd eloscrm-api && pnpm lint && pnpm typecheck && pnpm test`
+- [x] **Step 1: API** — `cd eloscrm-api && pnpm lint && pnpm typecheck && pnpm test`
       Expected: 0 erro de lint, "No errors found" no tsc, **todos** os testes passando. Piso medido em
       2026-08-06, já com a exclusão de conversa: 49 arquivos / 397 testes. Este plano acrescenta ~60
       casos.
-- [ ] **Step 2: Web** — `cd eloscrm-web && pnpm lint && pnpm typecheck && pnpm build`
+- [x] **Step 2: Web** — `cd eloscrm-web && pnpm lint && pnpm typecheck && pnpm build`
 - [ ] **Step 3: Fumaça manual** — subir `./scripts/dev.sh`, criar/alterar/apagar um lead, apagar uma
       conversa, e conferir na tela `/auditoria`: os eventos aparecem, o do item apagado continua legível,
       o filtro por ator funciona e o CSV baixa.
@@ -1484,10 +1511,16 @@ cd eloscrm-api && pnpm lint && pnpm typecheck && pnpm test
 cd ../eloscrm-web && pnpm lint && pnpm typecheck && pnpm build
 ```
 
-Além dos comandos, três coisas só o teste manual mostra:
+Além dos comandos, três coisas só o teste manual mostra — **as três seguem pendentes**, e nenhuma
+delas bloqueia o merge (a primeira tem cobertura automatizada equivalente):
 
-- [ ] Apagar um lead e conferir na tela que o evento continua dizendo **nome, tipo e quem apagou**.
-- [ ] Filtrar por "Automação" e ver o lead criado pela automação do WhatsApp.
-- [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco.
+- [ ] Apagar um lead e conferir **na tela** que o evento continua dizendo nome, tipo e quem apagou.
+      Coberto por teste (`clients-audit.test.ts`, "o evento de exclusão sobrevive ao lead"); o que
+      falta é a confirmação visual, porque os eventos de exclusão no banco de dev são anteriores ao
+      rótulo e aparecem com id truncado.
+- [ ] Filtrar por "Automação" e ver o lead criado pela automação do WhatsApp — depende de webhook
+      chegando, que em dev exige túnel (`PUBLIC_API_URL`).
+- [ ] `audit:purge --dry-run` devolvendo contagem coerente com o volume do banco. Só o
+      `audit:backfill-labels --dry-run` foi executado.
 
-> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 12:40 (-03)
+> Criado em 2026-08-06 10:58 (-03) · Última modificação: 2026-08-06 16:00 (-03)

@@ -73,3 +73,30 @@ export const useAuditActors = () => {
     enabled: !!org?.id,
   });
 };
+
+/**
+ * URL do CSV com os filtros atuais.
+ *
+ * `window.open` em vez de fetch: o navegador cuida do download e o cookie de sessão viaja numa
+ * navegação de topo. Por isso a URL é montada aqui, e não pelo axios — o interceptor dele
+ * desembrulharia a resposta e não haveria arquivo.
+ */
+export const auditExportUrl = (filters: AuditSearchFilters) => {
+  const params = new URLSearchParams();
+  const juntar = (chave: string, valor?: string[] | string | number) => {
+    if (valor === undefined || valor === null || valor === "") return;
+    params.set(chave, Array.isArray(valor) ? valor.join(",") : String(valor));
+  };
+  juntar("entityType", filters.entityType);
+  juntar("action", filters.action);
+  juntar("entityId", filters.entityId);
+  juntar("actorId", filters.actorId);
+  juntar("source", filters.source);
+  juntar("requestId", filters.requestId);
+  juntar("q", filters.q);
+  juntar("from", filters.from);
+  juntar("to", filters.to);
+
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
+  return `${base}/v1/audit-events/export?${params.toString()}`;
+};

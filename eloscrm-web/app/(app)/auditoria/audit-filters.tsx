@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { endOfDay, format, startOfDay, subDays } from "date-fns";
-import { CalendarIcon, Filter, Search, X } from "lucide-react";
+import { CalendarIcon, Download, Filter, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AUDIT_ACTION_LABELS, AUDIT_ENTITY_LABELS, AUDIT_SOURCE_LABELS } from "@/lib/labels";
-import { useAuditActors } from "@/lib/queries/audit";
+import { auditExportUrl, useAuditActors } from "@/lib/queries/audit";
 import type { AuditAction, AuditEntity, AuditSource } from "@/lib/types";
 import type { useAuditFilters } from "./use-audit-filters";
 
@@ -233,6 +233,18 @@ const FilterControls = ({ state }: { state: FiltersState }) => {
             Limpar filtros
           </Button>
         )}
+
+        {/* navegação de topo, não fetch: o cookie de sessão viaja e o navegador salva o arquivo. O
+            servidor recusa acima de 50 mil linhas pedindo filtro mais estreito, e registra o export
+            na própria trilha. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.open(auditExportUrl(state.searchFilters), "_blank")}
+        >
+          <Download className="size-4" />
+          Exportar CSV
+        </Button>
       </div>
     </div>
   );
