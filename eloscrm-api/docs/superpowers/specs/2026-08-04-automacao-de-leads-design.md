@@ -49,7 +49,7 @@ mensagem chega
       └─ linkClientIfUnambiguous — já implementado
           └─ AUTOMAÇÃO (novo)
               ├─ 1. conversa sem lead        → cria lead?        (chave 1)
-              ├─ 2. lead sem negócio aberto  → cria negócio?     (chave 2)
+              ├─ 2. lead sem negócio algum   → cria negócio?     (chave 2)
               └─ 3. lead recém-criado        → escolhe dono?     (chave 3)
 ```
 
@@ -69,14 +69,27 @@ hoje, pedindo escolha na tela.
 Vale para lead recém-criado **e** para lead que já existia — é o caso de quem sumiu por meses e
 volta a falar. O funil e o estágio vêm da configuração; sem eles escolhidos, a chave não liga.
 
-**Não cria se o lead já tem negócio aberto em qualquer funil.** Sem essa regra, cada "bom dia" de um
-cliente em negociação vira um card novo, e em uma semana o funil está impossível de ler. "Aberto" =
-estágio que não é `isWon` nem `isLost`.
+**Não cria se o lead já tem negócio — em qualquer funil e em qualquer estágio.** Sem essa regra,
+cada "bom dia" de um cliente em negociação vira um card novo, e em uma semana o funil está
+impossível de ler.
 
-> A busca foi por negócio aberto **no funil configurado** até 2026-08-05, e isso era um bug relatado
-> em produção: assim que alguém movia o negócio para outro funil, a automação deixava de encontrá-lo
-> e a resposta seguinte do cliente criava um card novo em "Novo lead" — o atendimento parecia voltar
-> à estaca zero a cada mensagem. Quem já está em negociação em algum lugar não precisa de outro card.
+**A exceção é a nutrição**, e é ela que sustenta o "sumiu por meses e volta a falar" do parágrafo
+acima: lead com `status = NURTURING` ganha card novo ao escrever. Nutrir é ação humana deliberada
+(`POST /v1/clients/:id/nurture`, que exige decidir o que fazer com cada negócio aberto antes), então
+é um sinal declarado de que o lead esfriou — nenhum caminho automático o liga.
+
+> **Por que não "negócio aberto".** Até 2026-08-06 a regra olhava só para negócio aberto — estágio
+> que não é `isWon` nem `isLost` —, e as duas correções anteriores erraram o alvo por manter essa
+> premissa. Em produção a imobiliária marcou como ganho um estágio chamado "APROVADO" e como perdido
+> um chamado "FECHADO", ambos **etapas do meio do processo dela**. O negócio ficava invisível para a
+> guarda e cada mensagem do cliente criava outro card em "Novo lead": ela limpou o funil à mão e viu
+> tudo duplicar em minutos. O significado de `isWon`/`isLost` é escolha de cada imobiliária, e a
+> automação não pode depender dele para saber se alguém está em atendimento.
+>
+> A tentação seguinte é uma janela de tempo ("fechado há menos de N dias não recria"). Os dados de
+> produção a descartam: uma duplicata nasceu **22 horas** depois do card original, então qualquer N
+> plausível a pegaria — e nenhum N é explicável para o corretor que pergunta por que o card não
+> apareceu. Nutrição responde a mesma pergunta com um sinal que o próprio usuário deu.
 
 ### 2.3 Escolher o dono (chave 3)
 
@@ -198,7 +211,7 @@ uma mensagem já gravada. O erro é registrado e engolido; a mensagem, que é o 
 permanece.
 
 A automação roda **só na primeira mensagem** de uma conversa que ainda não tem lead, ou quando o
-lead existe e não tem negócio aberto. Toda mensagem seguinte cai nas mesmas condições e não faz
+lead existe e não tem negócio nenhum. Toda mensagem seguinte cai nas mesmas condições e não faz
 nada — mas a verificação é uma consulta por mensagem, então o caminho começa por uma leitura barata
 da configuração (uma linha por org, cacheável se um dia pesar).
 
@@ -246,8 +259,11 @@ Com Postgres real, como o resto do projeto:
 2. Chaves desligadas → nada acontece (o padrão é não automatizar).
 3. Lead já existente **com** dono → ganha negócio com o mesmo dono, e o lead não troca.
 3b. Lead já existente **sem** dono → roleta define, no lead e no negócio.
-4. Lead com negócio aberto em qualquer funil → não cria segundo negócio, mesmo que o negócio tenha
-   sido movido para fora do funil da automação.
+4. Lead com negócio em qualquer funil → não cria segundo negócio, mesmo que o negócio tenha sido
+   movido para fora do funil da automação, e mesmo que esteja num estágio marcado como ganho ou
+   perdido.
+4b. Lead em nutrição → ganha negócio novo ao voltar a falar; é o único caso em que um lead com
+   histórico recebe um segundo card sozinho.
 5. `phoneKey` ambígua → automação não cria lead nenhum.
 6. Roleta com todos em zero → distribui em rodízio, não empilha no primeiro.
 7. Roleta com cargas diferentes → vai para o de menor carga.
@@ -341,7 +357,7 @@ chave e não tem como conferir se a distribuição faz sentido.
 |---|---|
 | Roleta empilha no primeiro corretor | desempate por `lastAssignedAt` (§3.1) — o teste 6 existe por isso |
 | Duas mensagens simultâneas, mesmo corretor | transação com `FOR UPDATE` por organização (§3.2) |
-| Negócio duplicado a cada mensagem | só cria se o lead não tiver negócio aberto em funil nenhum (§2.2) |
+| Negócio duplicado a cada mensagem | só cria se o lead não tiver negócio nenhum, em estágio nenhum; nutrição é a exceção (§2.2) |
 | Automação transfere lead de corretor | lead existente nunca troca de dono (§2.3) |
 | Corretor que saiu continua recebendo | lista elegível derivada de `Member` a cada atribuição (§1) |
 | Falha da automação derruba a ingestão | catch, como no enqueue de mídia (§5) |
@@ -358,4 +374,4 @@ aberto — o enum existe para elas, o código não.
 
 ---
 
-> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-05 12:34 (-03)
+> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-06 10:12 (-03)

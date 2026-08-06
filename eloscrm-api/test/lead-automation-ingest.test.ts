@@ -234,6 +234,56 @@ describe("automação na entrada de mensagem", () => {
     expect(negocios[0]).toMatchObject({ id: negocio.id, pipelineId: outro.id });
   });
 
+  it("negócio em estágio de ganho não vira card novo quando o cliente responde", async () => {
+    await configurar();
+    await post(evento());
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+
+    // O caso que quebrou em produção: a imobiliária chamou de "APROVADO" um estágio do meio do
+    // processo dela e o marcou como ganho. O cliente segue em pleno atendimento — mas uma guarda
+    // que só enxerga negócio aberto o perde de vista.
+    const segunda = await prisma.pipeline.create({
+      data: {
+        organizationId: orgId,
+        name: `2a etapa ${stamp}`,
+        stages: {
+          create: [{ organizationId: orgId, name: "Aprovado", position: 0, isWon: true }],
+        },
+      },
+      include: { stages: true },
+    });
+    await prisma.deal.update({
+      where: { id: negocio.id },
+      data: { pipelineId: segunda.id, stageId: segunda.stages[0]!.id },
+    });
+
+    await post(evento());
+
+    const negocios = await prisma.deal.findMany({ where: { organizationId: orgId } });
+    expect(negocios).toHaveLength(1);
+    expect(negocios[0]).toMatchObject({ id: negocio.id, pipelineId: segunda.id });
+  });
+
+  it("lead em nutrição ganha card novo ao voltar a falar", async () => {
+    await configurar();
+    await post(evento());
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+    const lead = await leadDaConversa();
+
+    // nutrir exige fechar os negócios abertos antes; é o registro humano de "este lead esfriou",
+    // e é o que distingue "voltou depois de meses" de "está em atendimento agora"
+    const perdido = await prisma.stage.findFirstOrThrow({ where: { pipelineId, isLost: true } });
+    await prisma.deal.update({ where: { id: negocio.id }, data: { stageId: perdido.id } });
+    await prisma.client.update({
+      where: { id: lead!.id },
+      data: { status: "NURTURING", nurturedAt: new Date() },
+    });
+
+    await post(evento());
+
+    expect(await prisma.deal.count({ where: { organizationId: orgId } })).toBe(2);
+  });
+
   it("telefone ambíguo não cria lead — a escolha continua sendo humana", async () => {
     // fixo e celular do mesmo número colidem na phoneKey
     await prisma.client.createMany({

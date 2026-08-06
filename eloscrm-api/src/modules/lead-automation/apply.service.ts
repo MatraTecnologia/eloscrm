@@ -1,4 +1,4 @@
-import { ClientSource } from "../../generated/prisma/client.js";
+import { ClientSource, ClientStatus } from "../../generated/prisma/client.js";
 import { AUTOMATION_ACTOR } from "../../lib/actor.js";
 import { formatBrPhone } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
@@ -105,19 +105,26 @@ const createDeal = async (
   // Sem isto, cada "bom dia" de um cliente em negociação vira um card novo, e em uma semana o
   // funil fica ilegível.
   //
-  // A busca é por negócio aberto em **qualquer** funil, não só no configurado: presa ao funil da
-  // automação, ela deixava de encontrar o negócio assim que alguém o movia para outro — e a
-  // resposta seguinte do cliente criava um card novo em "Novo lead", como se o atendimento tivesse
-  // voltado à estaca zero. Quem já está em negociação em algum lugar não precisa de outro card.
-  const aberto = await prisma.deal.findFirst({
+  // A busca é por **qualquer** negócio, em qualquer funil e em qualquer estágio — não só pelos
+  // abertos. Filtrar por `isWon`/`isLost` falsos parecia equivalente a "ainda em atendimento", mas
+  // não é: em produção a imobiliária marcou "APROVADO" como ganho e "FECHADO" como perdido, que no
+  // processo dela são etapas do meio, não fim de relacionamento. O negócio ficava invisível para
+  // esta guarda e cada mensagem do cliente criava outro card em "Novo lead" — foi o que a fez
+  // limpar o funil à mão e ver tudo duplicar de novo em minutos. Como o significado das flags é
+  // escolha de cada imobiliária, nenhuma regra apoiada nelas se sustenta aqui.
+  //
+  // A exceção é a nutrição, e é ela que preserva o "sumiu por meses e voltou a falar" da §2.2:
+  // `NURTURING` é o registro explícito, feito por uma pessoa, de que o lead esfriou — nutrir exige
+  // fechar antes todos os negócios abertos. Sinal declarado vale mais que prazo arbitrário.
+  const existente = await prisma.deal.findFirst({
     where: {
       organizationId: orgId,
       clientId,
-      stage: { isWon: false, isLost: false },
+      client: { status: { not: ClientStatus.NURTURING } },
     },
     select: { id: true },
   });
-  if (aberto) return null;
+  if (existente) return null;
 
   const client = await prisma.client.findUniqueOrThrow({
     where: { id: clientId },
