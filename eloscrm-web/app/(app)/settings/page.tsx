@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DeleteOrgCard } from './delete-org-card'
 import {
   Select,
   SelectContent,
@@ -28,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { authClient, useActiveOrganization } from '@/lib/auth-client'
+import { authClient, useActiveOrganization, useSession } from '@/lib/auth-client'
 import { ChevronRight, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -132,6 +133,10 @@ const InviteMemberDialog = () => {
 
 export default function SettingsPage() {
   const { data: org, isPending } = useActiveOrganization()
+  const { data: session } = useSession()
+  // excluir a imobiliária é do dono, não de gestor: o admin administra, o owner encerra
+  const isOwner =
+    org?.members.some(member => member.userId === session?.user.id && member.role === 'owner') ?? false
 
   return (
     <div className="space-y-6">
@@ -267,6 +272,13 @@ export default function SettingsPage() {
                   </TableBody>
                 </Table>
               </div>
+            </div>
+          )}
+
+          {isOwner && (
+            <div className="space-y-2">
+              <h2 className="text-lg font-medium">Encerrar</h2>
+              <DeleteOrgCard slug={org.slug} name={org.name} />
             </div>
           )}
         </>

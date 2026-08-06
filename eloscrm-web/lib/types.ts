@@ -200,6 +200,34 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+/**
+ * GET /v1/organization/deletion-preview — o que a exclusão da imobiliária vai levar.
+ *
+ * `storage` e `whatsapp` são o que o cascade do banco **não** alcança: objetos no R2 e a conexão no
+ * provedor. Estão separados por isso, e porque são a parte que o dono não tem como recuperar.
+ */
+export type OrgDeletionPreview = {
+  organization: { id: string; name: string; slug: string };
+  counts: {
+    clients: number;
+    deals: number;
+    activities: number;
+    properties: number;
+    pipelines: number;
+    stages: number;
+    comments: number;
+    attachments: number;
+    conversations: number;
+    whatsappMessages: number;
+    members: number;
+    invitations: number;
+    auditEvents: number;
+    leadAutomation: number;
+  };
+  storage: { objects: number; bytes: number };
+  whatsapp: { name: string; status: string; connected: boolean } | null;
+};
+
 export type Member = {
   userId: string;
   name: string;

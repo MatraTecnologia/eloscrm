@@ -111,6 +111,14 @@ export const auth = betterAuth({
         });
         void sendEmail({ to: email, ...mail });
       },
+      /**
+       * Excluir imobiliária **não** passa por aqui.
+       *
+       * `DELETE /v1/organization` faz isso, porque o endpoint do plugin não tem como exigir a
+       * confirmação digitada nem garantir a purga do R2 e da uazapi no mesmo caminho. Deixar os dois
+       * abertos seria uma porta lateral que apaga tudo sem confirmação nenhuma.
+       */
+      disableOrganizationDeletion: true,
       // Só os `after`: a auditoria registra o que aconteceu, não decide se pode acontecer. Cada
       // adaptador engole a própria falha (ver `safeRecord`), senão um erro de escrita aqui trancaria
       // criação de organização e convite.
@@ -118,6 +126,9 @@ export const auth = betterAuth({
         // O cascade do Postgres apaga as 13 tabelas da imobiliária, mas não sabe do bucket nem da
         // uazapi: sem isto, excluir a organização deixaria arquivo pago no R2 e o número ainda
         // conectado no provedor. Antes do delete porque depois não há mais chave nem token.
+        //
+        // Com `disableOrganizationDeletion` acima, este hook não roda hoje — fica de propósito, como
+        // rede de proteção para quem religar a exclusão do plugin ou chamar `auth.api` no servidor.
         beforeDeleteOrganization: async ({ organization }) =>
           void (await purgeOrganizationAssetsSafely(organization.id)),
         afterCreateOrganization: async ({ organization, user }) =>
