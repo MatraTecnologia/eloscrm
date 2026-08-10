@@ -20,6 +20,7 @@ import type { WhatsappMessage } from "@/lib/types";
 import { MessageActions } from "./message-actions";
 import { QuotedPreview } from "./quoted-preview";
 import { ReactionPicker } from "./reaction-picker";
+import { VoicePlayer } from "./voice-player";
 
 /** ✓ enviado · ✓✓ entregue · ✓✓ azul lido — só faz sentido no que sai daqui. */
 const StatusIcon = ({ message }: { message: WhatsappMessage }) => {
@@ -50,7 +51,13 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
         </span>
       );
     }
-    return <audio controls src={message.mediaUrl} className="h-9 max-w-64" />;
+    return (
+      <VoicePlayer
+        src={message.mediaUrl}
+        duration={message.mediaDuration}
+        waveform={message.mediaWaveform}
+      />
+    );
   }
 
   if (message.type === "image" || message.type === "sticker") {
