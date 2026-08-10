@@ -258,3 +258,103 @@ describe("vínculo com o lead", () => {
     expect(conversa.clientId).toBeNull();
   });
 });
+
+/**
+ * Contato compartilhado — os dois formatos, copiados do tráfego real de 2026-08-10.
+ *
+ * O provedor manda `mediaType: vcard` para um contato e `contact_array` para vários, e nos dois
+ * casos `type: "media"`. Sem tratar, a mensagem caía em `unsupported`, ia para a fila de download e
+ * voltava com "Message does not contain downloadable media" escrito na bolha do corretor.
+ */
+describe("contato compartilhado", () => {
+  const VCARD_RYAN =
+    "BEGIN:VCARD\nVERSION:3.0\nN:Varela;Ryan;;;\nFN:Ryan Varela\nX-WA-BIZ-NAME:Ryan\nTEL;waid=554399854972:+55 43 99985-4972\nEND:VCARD";
+  const VCARD_JEREMIAS =
+    "BEGIN:VCARD\nVERSION:3.0\nN:;Jeremias;;;\nFN:Jeremias\nX-WA-BIZ-NAME:Jeremias Matra\nX-WA-BIZ-DESCRIPTION:🚀 Atendimento Matra Tecnologia\n🔧 Sistemas | 📈 Tráfego Pago\nTEL;waid=554384778544:+55 43 98477-8544\nEND:VCARD";
+
+  const mensagemSalva = () =>
+    prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId } });
+
+  it("um contato vira type contact, com nome e telefone", async () => {
+    await post(
+      evento({
+        messageid: "CONTATO1",
+        type: "media",
+        mediaType: "vcard",
+        messageType: "ContactMessage",
+        text: "Ryan Varela\nX-Wa-Biz-Name: Ryan\nPhone: +55 43 99985-4972",
+        content: { displayName: "Ryan Varela", vcard: VCARD_RYAN },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    expect(salva.type).toBe("contact");
+    expect(salva.contacts).toEqual([
+      { name: "Ryan Varela", phones: ["554399854972"], business: "Ryan" },
+    ]);
+  });
+
+  it("não entra na fila de download — não há arquivo para baixar", async () => {
+    await post(
+      evento({
+        messageid: "CONTATO2",
+        type: "media",
+        mediaType: "vcard",
+        messageType: "ContactMessage",
+        content: { displayName: "Ryan Varela", vcard: VCARD_RYAN },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    // era isto que produzia "Mídia indisponível" na bolha
+    expect(salva.mediaStatus).toBe("none");
+    expect(salva.mediaError).toBeNull();
+  });
+
+  it("vários contatos vêm todos, na ordem em que foram compartilhados", async () => {
+    await post(
+      evento({
+        messageid: "CONTATO3",
+        type: "media",
+        mediaType: "contact_array",
+        messageType: "ContactsArrayMessage",
+        content: {
+          displayName: "2 contatos",
+          contacts: [
+            { displayName: "Ryan Varela", vcard: VCARD_RYAN },
+            { displayName: "Jeremias", vcard: VCARD_JEREMIAS },
+          ],
+        },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    expect(salva.type).toBe("contact");
+    expect(salva.contacts).toEqual([
+      { name: "Ryan Varela", phones: ["554399854972"], business: "Ryan" },
+      { name: "Jeremias", phones: ["554384778544"], business: "Jeremias Matra" },
+    ]);
+  });
+
+  it("a descrição comercial não entra no banco", async () => {
+    await post(
+      evento({
+        messageid: "CONTATO4",
+        type: "media",
+        mediaType: "contact_array",
+        messageType: "ContactsArrayMessage",
+        content: { contacts: [{ displayName: "Jeremias", vcard: VCARD_JEREMIAS }] },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    // texto de propaganda, com emoji e quebras de linha, não cabe numa bolha nem ajuda a decidir
+    expect(JSON.stringify(salva.contacts)).not.toContain("Tráfego Pago");
+  });
+
+  it("mensagem comum continua sem contatos", async () => {
+    await post(evento({ messageid: "TEXTO1", type: "text", text: "oi", content: "oi" }));
+
+    expect((await mensagemSalva()).contacts).toBeNull();
+  });
+});

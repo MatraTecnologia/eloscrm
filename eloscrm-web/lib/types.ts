@@ -497,6 +497,7 @@ export type ConversationPreview = {
   text: string | null;
   mediaFilename: string | null;
   mediaDuration: number | null;
+  contacts: SharedContact[] | null;
   deletedAt: string | null;
 };
 
@@ -511,6 +512,15 @@ export type WhatsappQuoted = {
   mediaThumb: string | null;
   // apagada no WhatsApp: a API não manda o conteúdo, só o marcador
   deletedAt: string | null;
+};
+
+/** Um contato que o cliente compartilhou na conversa. */
+export type SharedContact = {
+  name: string;
+  /** telefones em dígitos, como vieram no vCard */
+  phones: string[];
+  /** nome comercial, quando o contato é uma conta business */
+  business: string | null;
 };
 
 // Reação a uma mensagem. `authorLid` é chave interna e não sai da API — o que a bolha precisa é o
@@ -557,6 +567,8 @@ export type WhatsappMessage = {
   mediaThumb: string | null;
   mediaWaveform: string | null;
   mediaError: string | null;
+  // contato compartilhado, já traduzido do vCard pela ingestão
+  contacts: SharedContact[] | null;
   // já resolvida pela API (R2 presigned ou URL temporária do provedor); null se indisponível
   mediaUrl: string | null;
   mediaSource: "r2" | "provider" | null;

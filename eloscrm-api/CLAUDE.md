@@ -65,6 +65,7 @@ pnpm db:seed                              # tsx prisma/seed.ts
 pnpm audit:purge [--days N] [--dry-run]   # purga da auditoria por retenção (sem Redis, é a rotina)
 pnpm audit:backfill-labels [--dry-run]    # rótulo nos eventos gravados antes da coluna existir
 pnpm backfill:lead-names [--apply]        # leads e cards que ficaram chamados pelo telefone
+pnpm backfill:shared-contacts [--apply]   # contatos compartilhados ingeridos antes do parser
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
@@ -218,6 +219,20 @@ precedência da sugestão vivem em `src/lib/lead-name.ts`, compartilhados pelos 
 renomeiam (ingestão, tela e backfill) — se cada um decidisse por conta, o mesmo lead seria corrigível
 num lugar e intocável no outro.
 
+**`mediaType` preenchido não quer dizer arquivo baixável.** Contato compartilhado chega com
+`mediaType: vcard` (um) ou `contact_array` (vários) e `type: "media"` — sem tratar, virava
+`unsupported`, entrava na fila de download e voltava com *"Mídia indisponível: Message does not
+contain downloadable media"* escrito na bolha do corretor, com o vCard resumido logo abaixo. Por isso
+`DOWNLOADABLE` em `message-envelope.ts` é **allowlist**: tipo novo do provedor passa a não baixar por
+padrão, porque o erro de não tentar é invisível e o de tentar aparece na tela de quem atende.
+
+O vCard é lido na **ingestão** (`parseContacts`) e guardado já traduzido na coluna `contacts`
+(`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
+`X-WA-BIZ-DESCRIPTION` — texto de propaganda com emoji e quebras de linha que ninguém exibe. Para o
+que já entrou errado: `pnpm backfill:shared-contacts` reconstrói a partir do `text` (é o `rawType`
+que identifica as linhas) e limpa o `mediaError`; o telefone sai com o nono dígito, diferente do
+`waid` que a ingestão nova grava — os dois discam para a mesma pessoa.
+
 **Envio de mídia: a chave vem do cliente, e é por isso que ela é conferida.** O arquivo sobe direto
 do navegador para o R2 (`POST /:id/media/upload-url` → PUT → `POST /:id/messages/media`), então
 entre um passo e outro a chave passa pelo cliente. `sendMedia` recusa qualquer uma que não comece com
@@ -302,4 +317,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 18:00 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 20:45 (-03)

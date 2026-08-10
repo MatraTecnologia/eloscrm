@@ -55,6 +55,7 @@ const lastMessageSelect = {
   text: true,
   mediaFilename: true,
   mediaDuration: true,
+  contacts: true,
   deletedAt: true,
 } satisfies Prisma.WhatsappMessageSelect;
 
@@ -98,7 +99,7 @@ const withPreview = <T extends { messages: LastMessage[] }>(conversation: T) => 
     ...rest,
     lastMessage: last
       ? last.deletedAt
-        ? { ...last, text: null, mediaFilename: null }
+        ? { ...last, text: null, mediaFilename: null, contacts: null }
         : last
       : null,
   };
@@ -201,7 +202,7 @@ type QuotedPreview = Prisma.WhatsappMessageGetPayload<{ select: typeof quotedSel
  */
 const hideDeleted = <T extends { deletedAt: Date | null }>(message: T) =>
   message.deletedAt
-    ? { ...message, text: null, mediaThumb: null, mediaFilename: null, mediaWaveform: null }
+    ? { ...message, text: null, mediaThumb: null, mediaFilename: null, mediaWaveform: null, contacts: null }
     : message;
 
 /**

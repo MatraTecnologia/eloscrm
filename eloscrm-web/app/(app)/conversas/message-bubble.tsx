@@ -21,6 +21,7 @@ import { fetchMediaUrl } from "@/lib/queries/conversations";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageActions } from "./message-actions";
+import { ContactCard } from "./contact-card";
 import { QuotedPreview } from "./quoted-preview";
 import { ReactionPicker } from "./reaction-picker";
 import { VoicePlayer } from "./voice-player";
@@ -237,7 +238,10 @@ export const MessageBubble = ({
 }) => {
   const mine = message.direction === "outbound";
   const apagada = !!message.deletedAt;
-  const temMidia = !apagada && message.type !== "text" && message.type !== "unsupported";
+  const contatos = !apagada && message.type === "contact" ? message.contacts : null;
+  // contato não passa pelo MediaContent: ele chega com `mediaType` (vcard) mas não tem arquivo
+  const temMidia =
+    !apagada && !contatos && message.type !== "text" && message.type !== "unsupported";
   const citada = message.quoted;
   const fixada = !!message.pinnedUntil && new Date(message.pinnedUntil) > new Date();
 
@@ -306,13 +310,19 @@ export const MessageBubble = ({
               </span>
             )}
 
+            {contatos && <ContactCard contacts={contatos} mine={mine} />}
+
             {temMidia && <MediaContent message={message} onOpen={onOpenMedia} />}
 
             {message.mediaError && (
               <span className="text-xs opacity-70">Mídia indisponível: {message.mediaError}</span>
             )}
 
-            {message.text && <span className="break-words whitespace-pre-wrap">{message.text}</span>}
+            {/* com o cartão na tela, o `text` é o mesmo vCard resumido pelo provedor — repeti-lo
+                traria de volta o "X-Wa-Biz-Name:" que o cartão existe para esconder */}
+            {message.text && !contatos && (
+              <span className="break-words whitespace-pre-wrap">{message.text}</span>
+            )}
 
             {message.type === "unsupported" && !message.text && (
               <span className="text-xs italic opacity-70">Mensagem não suportada</span>

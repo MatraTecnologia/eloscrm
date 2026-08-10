@@ -67,6 +67,12 @@ const resumo = (message: Preview) => {
     }
     case "document":
       return message.mediaFilename?.trim() || rotulo;
+    case "contact": {
+      // quem foi indicado importa mais que o rótulo: é por esse nome que o corretor lembra da conversa
+      const [primeiro, ...resto] = message.contacts ?? [];
+      if (!primeiro) return rotulo;
+      return resto.length > 0 ? `${primeiro.name} e mais ${resto.length}` : primeiro.name;
+    }
     default:
       return rotulo;
   }

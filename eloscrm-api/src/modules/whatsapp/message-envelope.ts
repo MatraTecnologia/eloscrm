@@ -33,7 +33,21 @@ const TYPE_BY_MEDIA: Record<string, WhatsappMessageType> = {
   ptt: WhatsappMessageType.ptt,
   document: WhatsappMessageType.document,
   sticker: WhatsappMessageType.sticker,
+  // contato compartilhado também chega com `mediaType` (observado em 2026-08-10:
+  // `vcard` para um, `contact_array` para vários), mas não é arquivo — ver `DOWNLOADABLE` abaixo
+  vcard: WhatsappMessageType.contact,
+  contact_array: WhatsappMessageType.contact,
 };
+
+/**
+ * Só estes `mediaType` têm arquivo do outro lado.
+ *
+ * **Allowlist, não blocklist**: `mediaType` preenchido não significa mídia baixável, e foi assim que
+ * o contato compartilhado entrou na fila de download e voltou com "Message does not contain
+ * downloadable media" escrito na bolha. Tipo novo do provedor passa a não baixar por padrão — o
+ * erro de não tentar é invisível; o de tentar aparece para o corretor.
+ */
+const DOWNLOADABLE = new Set(["image", "video", "gif", "audio", "ptt", "document", "sticker"]);
 
 const TYPE_BY_KIND: Record<string, WhatsappMessageType> = {
   text: WhatsappMessageType.text,
@@ -49,6 +63,70 @@ export const messageTypeOf = (message: Record<string, unknown>): WhatsappMessage
   const kind = str(message.type);
   if (kind && TYPE_BY_KIND[kind]) return TYPE_BY_KIND[kind];
   return WhatsappMessageType.unsupported;
+};
+
+/** Um contato compartilhado, já traduzido do vCard para o que o cartão da bolha mostra. */
+export type ParsedContact = {
+  name: string;
+  /** telefones em dígitos, como vieram no `TEL` do cartão */
+  phones: string[];
+  /** nome comercial (`X-WA-BIZ-NAME`), quando o contato é uma conta business */
+  business: string | null;
+};
+
+/**
+ * Lê o vCard.
+ *
+ * Só os quatro campos que o cartão mostra: nome, nome comercial e telefones. O `X-WA-BIZ-DESCRIPTION`
+ * fica de fora de propósito — vem com quebras de linha, emoji e o texto de propaganda inteiro da
+ * empresa, que não cabe numa bolha e não ajuda ninguém a decidir se liga para o contato.
+ */
+const parseVcard = (vcard: string, fallbackName: string | null): ParsedContact | null => {
+  const linhas = vcard.split(/\r?\n/);
+  const valorDe = (prefixo: string) =>
+    linhas.find((linha) => linha.toUpperCase().startsWith(prefixo))?.split(":").slice(1).join(":").trim() ?? null;
+
+  const phones = linhas
+    .filter((linha) => linha.toUpperCase().startsWith("TEL"))
+    .map((linha) => {
+      // `TEL;waid=554399854972:+55 43 99985-4972` — o waid é o número sem máscara, e é o melhor
+      // dos dois; o valor depois dos dois-pontos vem formatado para leitura humana
+      const waid = /waid=(\d+)/i.exec(linha)?.[1];
+      return waid ?? linha.split(":").slice(1).join(":").replace(/\D/g, "");
+    })
+    .filter((phone) => phone.length > 0);
+
+  const name = valorDe("FN") ?? fallbackName;
+  if (!name) return null;
+
+  return { name, phones: [...new Set(phones)], business: valorDe("X-WA-BIZ-NAME") };
+};
+
+/**
+ * Os contatos de uma mensagem de contato compartilhado.
+ *
+ * O provedor manda um vCard solto em `content.vcard` quando é um só, e `content.contacts[]` quando
+ * são vários (`ContactMessage` × `ContactsArrayMessage`, capturados em 2026-08-10). Devolve `null`
+ * para qualquer outro tipo, e é isso que a coluna guarda.
+ */
+export const parseContacts = (message: Record<string, unknown>): ParsedContact[] | null => {
+  const content = asRecord(message.content);
+  const lista = Array.isArray(content.contacts) ? content.contacts : null;
+
+  const brutos = lista
+    ? lista.map((item) => asRecord(item))
+    : str(content.vcard)
+      ? [content]
+      : [];
+
+  const contatos = brutos.flatMap((bruto) => {
+    const vcard = str(bruto.vcard);
+    if (!vcard) return [];
+    const parsed = parseVcard(vcard, str(bruto.displayName));
+    return parsed ? [parsed] : [];
+  });
+
+  return contatos.length > 0 ? contatos : null;
 };
 
 export type ParsedConversation = {
@@ -77,6 +155,7 @@ export type ParsedMessage = {
   senderName: string | null;
   sentAt: Date;
   hasMedia: boolean;
+  contacts: ParsedContact[] | null;
   mediaMime: string | null;
   mediaSize: number | null;
   mediaFilename: string | null;
@@ -140,7 +219,8 @@ export const parseMessage = (body: Record<string, unknown>): ParsedMessage | nul
     senderName: str(message.senderName),
     // messageTimestamp vem em MILISSEGUNDOS aqui (o de messages_update vem em segundos)
     sentAt: new Date(int(message.messageTimestamp) ?? Date.now()),
-    hasMedia: Boolean(mediaType),
+    hasMedia: mediaType !== null && DOWNLOADABLE.has(mediaType),
+    contacts: parseContacts(message),
     mediaMime: str(content.mimetype),
     mediaSize: int(content.fileLength),
     mediaFilename: str(content.fileName),
