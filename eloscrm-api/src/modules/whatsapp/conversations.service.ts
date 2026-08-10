@@ -27,6 +27,23 @@ import type {
   SendMessageInput,
 } from "./conversations.schema.js";
 
+/**
+ * O que a lista precisa saber sobre a última mensagem para escrever a prévia.
+ *
+ * `lastMessageText` sozinho não dá conta: mídia chega sem texto e a linha virava um travessão. O
+ * tipo é o que permite escrever "Mensagem de voz", e a duração e o nome do arquivo são o resto do
+ * que o WhatsApp mostra ali.
+ */
+const lastMessageSelect = {
+  id: true,
+  direction: true,
+  type: true,
+  text: true,
+  mediaFilename: true,
+  mediaDuration: true,
+  deletedAt: true,
+} satisfies Prisma.WhatsappMessageSelect;
+
 const conversationSelect = {
   id: true,
   chatid: true,
@@ -42,7 +59,36 @@ const conversationSelect = {
   archivedAt: true,
   createdAt: true,
   client: { select: { id: true, name: true, phone: true, status: true, temperature: true } },
+  // `take` aninhado: o Prisma resolve por window function no próprio banco, então uma conversa de
+  // oitenta mensagens não traz oitenta linhas para escolher uma. O desempate por `id` existe porque
+  // reentrega do webhook repete o `sentAt` ao milissegundo.
+  messages: {
+    where: { type: { not: WhatsappMessageType.reaction } },
+    orderBy: [{ sentAt: "desc" as const }, { id: "desc" as const }],
+    take: 1,
+    select: lastMessageSelect,
+  },
 } satisfies Prisma.ConversationSelect;
+
+type LastMessage = Prisma.WhatsappMessageGetPayload<{ select: typeof lastMessageSelect }>;
+
+/**
+ * Troca a lista de uma mensagem só por `lastMessage`, aplicando à prévia a mesma regra da thread:
+ * de mensagem apagada não sai conteúdo — nem texto, nem nome de arquivo. O front mostra "Esta
+ * mensagem foi apagada" a partir do `deletedAt`, sem nunca ter recebido o que foi escrito.
+ */
+const withPreview = <T extends { messages: LastMessage[] }>(conversation: T) => {
+  const { messages, ...rest } = conversation;
+  const last = messages[0];
+  return {
+    ...rest,
+    lastMessage: last
+      ? last.deletedAt
+        ? { ...last, text: null, mediaFilename: null }
+        : last
+      : null,
+  };
+};
 
 type ConversationLabelSource = {
   contactName?: string | null;
@@ -83,7 +129,10 @@ export const list = async (orgId: string, query: ListConversationsQuery) => {
     ...(query.cursor ? { skip: 1, cursor: { id: query.cursor } } : {}),
   });
 
-  return { items, nextCursor: items.length === query.limit ? items.at(-1)?.id : undefined };
+  return {
+    items: items.map(withPreview),
+    nextCursor: items.length === query.limit ? items.at(-1)?.id : undefined,
+  };
 };
 
 /**
@@ -109,7 +158,7 @@ export const getById = async (orgId: string, id: string) => {
     select: conversationSelect,
   });
   if (!conversation) throw notFound("Conversa não encontrada");
-  return conversation;
+  return withPreview(conversation);
 };
 
 /**

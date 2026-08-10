@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConversationCounts } from "@/lib/queries/conversations";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/types";
+import { ConversationPreview } from "./conversation-preview";
 
 type Props = {
   conversations: Conversation[] | undefined;
@@ -82,7 +83,10 @@ export const ConversationList = ({
         </Tabs>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1 scroll-fade">
+      {/* O `Content` do Base UI é dimensionado pelo conteúdo — é assim que ele mede se há overflow
+          horizontal —, então sem forçar a largura os itens ficavam do tamanho do nome mais longo e
+          o horário saía pela borda da coluna de 320px, em vez de o texto truncar. */}
+      <ScrollArea className="min-h-0 flex-1 scroll-fade [&_[data-slot=scroll-area-content]]:!min-w-0 [&_[data-slot=scroll-area-content]]:w-full">
         {isLoading && (
           <div className="flex flex-col gap-2 p-3">
             <Skeleton className="h-14 w-full" />
@@ -128,9 +132,7 @@ export const ConversationList = ({
                 )}
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground truncate text-xs">
-                  {c.lastMessageText ?? "—"}
-                </span>
+                <ConversationPreview message={c.lastMessage} />
                 {c.unreadCount > 0 && (
                   <Badge className="h-5 min-w-5 shrink-0 justify-center px-1.5">
                     {c.unreadCount}

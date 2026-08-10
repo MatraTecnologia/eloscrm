@@ -482,9 +482,22 @@ export type Conversation = {
   client: ConversationClient | null;
   lastMessageAt: string | null;
   lastMessageText: string | null;
+  lastMessage: ConversationPreview | null;
   unreadCount: number;
   archivedAt: string | null;
   createdAt: string;
+};
+
+// Última mensagem da conversa, resumida para a linha da lista. De mensagem apagada a API não manda
+// texto nem nome de arquivo — só o `deletedAt`, que é o que a prévia precisa saber.
+export type ConversationPreview = {
+  id: string;
+  direction: "inbound" | "outbound";
+  type: WhatsappMessageType;
+  text: string | null;
+  mediaFilename: string | null;
+  mediaDuration: number | null;
+  deletedAt: string | null;
 };
 
 // Prévia da mensagem citada num reply — vem resolvida pela API, sem URL de mídia assinada.

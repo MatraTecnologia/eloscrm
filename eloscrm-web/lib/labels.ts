@@ -74,6 +74,13 @@ export const whatsappMessageTypeLabels: Record<WhatsappMessageType, string> = {
   unsupported: "Mensagem",
 };
 
+/** `16` → `0:16`. Duração de áudio e vídeo, na bolha e na prévia da lista. */
+export const formatMediaDuration = (segundos: number | null | undefined) => {
+  if (!segundos) return null;
+  const minutos = Math.floor(segundos / 60);
+  return `${minutos}:${String(segundos % 60).padStart(2, "0")}`;
+};
+
 // Telefone é persistido em E.164 (+5543998414904) e só formatado na exibição/digitação.
 // O DDI só é removido quando o total bate 55 + DDD + número — senão um DDD 55 (Santa Maria/RS)
 // seria confundido com o código do país.

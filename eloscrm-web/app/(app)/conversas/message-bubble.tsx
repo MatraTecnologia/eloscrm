@@ -14,19 +14,12 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatFileSize } from "@/lib/labels";
+import { formatFileSize, formatMediaDuration } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageActions } from "./message-actions";
 import { QuotedPreview } from "./quoted-preview";
 import { ReactionPicker } from "./reaction-picker";
-
-const duracao = (segundos: number | null) => {
-  if (!segundos) return null;
-  const m = Math.floor(segundos / 60);
-  const s = segundos % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-};
 
 /** ✓ enviado · ✓✓ entregue · ✓✓ azul lido — só faz sentido no que sai daqui. */
 const StatusIcon = ({ message }: { message: WhatsappMessage }) => {
@@ -53,7 +46,7 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
         <span className="flex items-center gap-1.5 text-xs opacity-70">
           <Mic className="size-3.5" />
           {message.type === "ptt" ? "Mensagem de voz" : "Áudio"}
-          {duracao(message.mediaDuration) ? ` · ${duracao(message.mediaDuration)}` : ""}
+          {formatMediaDuration(message.mediaDuration) ? ` · ${formatMediaDuration(message.mediaDuration)}` : ""}
         </span>
       );
     }

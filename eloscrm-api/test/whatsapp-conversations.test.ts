@@ -111,6 +111,59 @@ describe("GET /v1/whatsapp/conversations", () => {
     expect(items[0].unreadCount).toBe(2);
   });
 
+  it("a prévia traz o tipo da última mensagem, não só o texto", async () => {
+    await criarMensagem({ text: "oi", sentAt: new Date(Date.now() - 60_000) });
+    await criarMensagem({
+      type: "ptt",
+      text: null,
+      mediaDuration: 16,
+      sentAt: new Date(),
+    });
+
+    const { items } = (await get("/v1/whatsapp/conversations")).json();
+
+    expect(items[0].lastMessage).toMatchObject({ type: "ptt", mediaDuration: 16, text: null });
+  });
+
+  it("documento leva o nome do arquivo para a prévia", async () => {
+    await criarMensagem({ type: "document", text: null, mediaFilename: "contrato.pdf" });
+
+    const { items } = (await get("/v1/whatsapp/conversations")).json();
+
+    expect(items[0].lastMessage.mediaFilename).toBe("contrato.pdf");
+  });
+
+  it("reação não vira prévia — ela não é uma linha da conversa", async () => {
+    await criarMensagem({ text: "combinado", sentAt: new Date(Date.now() - 60_000) });
+    await criarMensagem({ type: "reaction", text: "👍", sentAt: new Date() });
+
+    const { items } = (await get("/v1/whatsapp/conversations")).json();
+
+    expect(items[0].lastMessage.text).toBe("combinado");
+  });
+
+  it("prévia de mensagem apagada não carrega o conteúdo no JSON", async () => {
+    await criarMensagem({
+      type: "document",
+      text: "segredo",
+      mediaFilename: "contrato.pdf",
+      deletedAt: new Date(),
+    });
+
+    const { items } = (await get("/v1/whatsapp/conversations")).json();
+
+    expect(items[0].lastMessage.deletedAt).not.toBeNull();
+    expect(items[0].lastMessage.text).toBeNull();
+    expect(items[0].lastMessage.mediaFilename).toBeNull();
+    expect(JSON.stringify(items)).not.toContain("segredo");
+  });
+
+  it("conversa sem mensagem nenhuma devolve prévia nula, não estoura", async () => {
+    const { items } = (await get("/v1/whatsapp/conversations")).json();
+
+    expect(items[0].lastMessage).toBeNull();
+  });
+
   it("filtra por não lidas e por busca", async () => {
     await prisma.conversation.create({
       data: { organizationId: orgId, instanceId, chatid: `lida-${stamp}@s.whatsapp.net`, waName: "Beltrano", unreadCount: 0 },
