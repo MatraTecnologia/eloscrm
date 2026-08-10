@@ -71,11 +71,17 @@ export default function CorrigirNomesPage() {
 
     if (payload.length === 0) return;
 
+    const enviados = new Set(payload.map((item) => item.clientId));
+
     try {
       const { applied, results } = await apply.mutateAsync(payload);
       const pulados = results.filter((result) => result.status === "skipped").length;
-      setSelected(new Set());
-      setEdits({});
+      // só o que foi enviado sai do rascunho: limpar tudo apagaria os nomes já digitados nas outras
+      // linhas, e salvar uma linha não pode custar o trabalho feito nas demais
+      setSelected((atual) => new Set([...atual].filter((id) => !enviados.has(id))));
+      setEdits((atual) =>
+        Object.fromEntries(Object.entries(atual).filter(([id]) => !enviados.has(id))),
+      );
       toast.success(
         applied === 1 ? "1 nome corrigido" : `${applied} nomes corrigidos`,
         pulados > 0
