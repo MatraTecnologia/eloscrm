@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -15,20 +16,40 @@ export type ConversationFilters = {
 
 export const useConversations = (filters: ConversationFilters = {}) => {
   const { data: org } = useActiveOrganization();
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: [...key(org?.id), filters],
-    queryFn: async () => {
+    queryFn: async ({ pageParam }: { pageParam?: string }) => {
       const { data } = await api.get<{ items: Conversation[]; nextCursor?: string }>(
         "/whatsapp/conversations",
-        { params: filters },
+        { params: { ...filters, ...(pageParam ? { cursor: pageParam } : {}) } },
       );
       return data;
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor,
     enabled: !!org?.id,
-    // não há realtime no projeto: a lista se atualiza sozinha em intervalo curto o bastante para
-    // atendimento humano, sem virar polling agressivo
-    refetchInterval: 10_000,
+    // Não há realtime no projeto, então a lista se atualiza sozinha. O intervalo cresce com o
+    // número de páginas abertas porque **o refetch de uma infinite query refaz todas elas**: em
+    // dez páginas, dez requests a cada dez segundos. Quem está no topo — o caso do atendimento,
+    // que é onde a mensagem nova chega — continua com a atualização rápida.
+    refetchInterval: (query) => ((query.state.data?.pages.length ?? 1) > 1 ? 30_000 : 10_000),
   });
+
+  // Uma conversa que recebe mensagem entre duas buscas sobe de posição e pode voltar numa página
+  // que já foi lida: duas linhas com a mesma key quebram a lista no React. Deduplicar aqui é mais
+  // barato do que abrir mão da ordem por mensagem mais recente, que é a ordem certa da tela.
+  const conversations = useMemo(() => {
+    const vistos = new Set<string>();
+    return (query.data?.pages ?? []).flatMap((page) =>
+      page.items.filter((conversa) => {
+        if (vistos.has(conversa.id)) return false;
+        vistos.add(conversa.id);
+        return true;
+      }),
+    );
+  }, [query.data]);
+
+  return { ...query, conversations };
 };
 
 /** Contagem por aba. A listagem é paginada, então o tamanho da página nunca responde "quantas". */

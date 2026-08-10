@@ -1,13 +1,16 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { formatDistanceToNowStrict, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConversationCounts } from "@/lib/queries/conversations";
 import { cn } from "@/lib/utils";
@@ -23,6 +26,9 @@ type Props = {
   onBusca: (value: string) => void;
   filtro: string;
   onFiltro: (value: string) => void;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
 };
 
 const titulo = (c: Conversation) =>
@@ -50,8 +56,29 @@ export const ConversationList = ({
   onBusca,
   filtro,
   onFiltro,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
 }: Props) => {
   const { data: counts } = useConversationCounts();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Rolagem infinita, mesmo padrão da auditoria: o botão continua como alvo de clique e de
+  // teclado, e o IntersectionObserver dispara a mesma ação quando a sentinela entra na viewport.
+  // A margem antecipa a busca em meia tela, para a próxima página já estar chegando quando o
+  // corretor alcançar o fim da lista.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasNextPage || !onLoadMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, onLoadMore]);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-r">
@@ -95,7 +122,9 @@ export const ConversationList = ({
           </div>
         )}
 
-        {conversations?.length === 0 && (
+        {/* `!isLoading` porque a lista agora nasce como array vazio, não `undefined`: sem isso o
+            "nenhuma conversa" apareceria embaixo do skeleton no primeiro carregamento */}
+        {!isLoading && conversations?.length === 0 && (
           <p className="text-muted-foreground p-4 text-sm">
             Nenhuma conversa por aqui.
           </p>
@@ -148,6 +177,27 @@ export const ConversationList = ({
             </div>
           </button>
         ))}
+
+        {/* fora do `map` para o observer ter um alvo estável entre páginas */}
+        <div ref={sentinelRef} className="flex justify-center px-3 py-2">
+          {hasNextPage && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground w-full"
+              disabled={isFetchingNextPage}
+              onClick={() => onLoadMore?.()}
+            >
+              {isFetchingNextPage ? (
+                <>
+                  <Spinner className="size-3.5" /> Carregando…
+                </>
+              ) : (
+                "Carregar mais"
+              )}
+            </Button>
+          )}
+        </div>
       </ScrollArea>
     </div>
   );

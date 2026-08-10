@@ -32,11 +32,12 @@ const Inbox = () => {
   const [citacao, setCitacao] = useState<{ conversationId: string; message: WhatsappMessage } | null>(null);
   const respondendo = citacao && citacao.conversationId === selecionada ? citacao.message : null;
 
-  const { data, isLoading } = useConversations({
-    q: busca.trim() || undefined,
-    unread: filtro === "nao-lidas" || undefined,
-    archived: filtro === "arquivadas" || undefined,
-  });
+  const { conversations, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useConversations({
+      q: busca.trim() || undefined,
+      unread: filtro === "nao-lidas" || undefined,
+      archived: filtro === "arquivadas" || undefined,
+    });
   const { data: conversa, isError } = useConversation(selecionada);
   const { mutate: markRead } = useMarkRead();
 
@@ -71,8 +72,11 @@ const Inbox = () => {
             deixariam a conversa abaixo da dobra e a lista sem altura para rolar. */}
         <div className={cn("min-h-0", selecionada && "hidden md:block")}>
           <ConversationList
-            conversations={data?.items}
+            conversations={conversations}
             isLoading={isLoading && !!org}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={fetchNextPage}
             selectedId={selecionada}
             onSelect={setSelecionada}
             busca={busca}

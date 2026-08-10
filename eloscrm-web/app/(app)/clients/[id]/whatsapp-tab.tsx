@@ -18,9 +18,9 @@ import { conversaHref } from "@/app/(app)/conversas/params";
  * thread e o composer do inbox: mesma bolha, mesmo envio, mesmo tratamento de bloqueio.
  */
 export const WhatsappTab = ({ clientId }: { clientId: string }) => {
-  const { data, isLoading } = useConversations({ clientId });
+  const { conversations, isLoading } = useConversations({ clientId });
   const [respondendo, setRespondendo] = useState<WhatsappMessage | null>(null);
-  const conversa = data?.items[0];
+  const conversa = conversations[0];
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
 
