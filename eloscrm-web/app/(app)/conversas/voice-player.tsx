@@ -53,6 +53,13 @@ export const VoicePlayer = ({
   const [total, setTotal] = useState(duration ?? 0);
   const [velocidade, setVelocidade] = useState<number>(1);
 
+  // A URL da mídia é assinada e a thread se refaz sozinha em segundos. Trocar o `src` no meio da
+  // reprodução faz o navegador recarregar o arquivo e voltar ao começo — o servidor já assina de
+  // forma estável dentro de uma janela, e travar a fonte enquanto alguém está ouvindo fecha
+  // também a virada de janela. Solta quando o áudio termina, para a próxima escuta pegar uma
+  // assinatura fresca.
+  const [fonteTravada, setFonteTravada] = useState<string | null>(null);
+
   const barras = useState(() => decodeWaveform(waveform))[0];
   const progresso = total > 0 ? Math.min(1, atual / total) : 0;
 
@@ -86,11 +93,12 @@ export const VoicePlayer = ({
     <div className="flex w-56 items-center gap-2 sm:w-64">
       <audio
         ref={audioRef}
-        src={src}
+        src={fonteTravada ?? src}
         preload="metadata"
         data-voice-player
         onPlay={() => {
           setTocando(true);
+          setFonteTravada((travada) => travada ?? src);
           // um áudio por vez, como no WhatsApp: dois tocando juntos não é uso, é acidente
           document.querySelectorAll<HTMLAudioElement>("audio[data-voice-player]").forEach((outro) => {
             if (outro !== audioRef.current) outro.pause();
@@ -101,6 +109,7 @@ export const VoicePlayer = ({
         onEnded={() => {
           setTocando(false);
           setAtual(0);
+          setFonteTravada(null);
         }}
         onLoadedMetadata={(event) => {
           // o ogg/opus do WhatsApp costuma reportar `Infinity` até tocar até o fim; a duração do

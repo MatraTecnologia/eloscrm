@@ -238,6 +238,38 @@ describe("resolvedor de URL", () => {
     expect(resolvido?.url).toContain("X-Amz-Signature");
   });
 
+  /**
+   * A thread se refaz a cada cinco segundos e reassina a mídia junto. Enquanto a assinatura nascia
+   * do relógio cru, cada volta devolvia um `src` diferente para o mesmo arquivo: o navegador
+   * recarregava, e a nota de voz voltava para o começo em loop. Este teste é o que impede a volta —
+   * o sintoma aparece só depois de alguns segundos de reprodução, que nenhum clique de revisão dá.
+   */
+  it("duas leituras do mesmo arquivo devolvem a mesma URL", async () => {
+    const alvo = {
+      mediaStatus: "ready" as const,
+      mediaMime: null,
+      mediaKey: "org/a/b/c.ogg",
+      mediaFilename: null,
+      mediaTempUrl: null,
+      mediaTempExpiresAt: null,
+    };
+
+    // Só `Date` é falso: o presign é cálculo puro, mas mockar os timers inteiros penduraria
+    // qualquer await do SDK. Os dois instantes caem na mesma janela de assinatura — com o relógio
+    // cru, o `X-Amz-Date` de cada um seria diferente e o navegador veria dois arquivos.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-08-10T15:00:01Z"));
+      const primeira = await resolveMediaUrl(alvo);
+      vi.setSystemTime(new Date("2026-08-10T15:00:31Z"));
+      const segunda = await resolveMediaUrl(alvo);
+
+      expect(segunda?.url).toBe(primeira?.url);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("na fila com temporária válida → URL do provedor", async () => {
     const resolvido = await resolveMediaUrl({
       mediaStatus: "pending",

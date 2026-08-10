@@ -37,6 +37,28 @@ export const r2 = () => {
 
 export const R2_PRIVATE_BUCKET = env.R2_PRIVATE_BUCKET_NAME;
 
+/**
+ * Relógio arredondado para assinar sempre igual dentro da janela.
+ *
+ * Sem isto, duas chamadas seguidas devolvem URLs diferentes para o mesmo objeto — e a thread de
+ * conversa, que se refaz a cada cinco segundos, entregava ao `<audio>` um `src` novo em cada volta:
+ * o navegador recarregava o arquivo e a nota de voz voltava para o começo, em loop. Estável, o
+ * mesmo objeto rende a mesma URL, o que de quebra deixa o navegador reaproveitar a imagem e o
+ * vídeo já baixados em vez de buscá-los de novo a cada refetch.
+ *
+ * A janela nunca passa da **metade** do `expiresIn`, e é por isso que ela é calculada aqui em vez
+ * de ser uma constante: a assinatura nasce no início da janela, então um link de um minuto assinado
+ * com o relógio de cinco minutos atrás já nasceria vencido — foi o que o teste de anexos pegou.
+ * Com o teto, toda URL vale pelo menos metade do prazo pedido, e continua estável tempo suficiente
+ * para atravessar os refetches de cinco segundos da conversa.
+ */
+const SIGNING_WINDOW_MS = 5 * 60 * 1000;
+
+const stableSigningDate = (expiresIn: number) => {
+  const janela = Math.max(1, Math.min(SIGNING_WINDOW_MS, (expiresIn * 1000) / 2));
+  return new Date(Math.floor(Date.now() / janela) * janela);
+};
+
 export const getDownloadUrl = (
   bucket: string,
   key: string,
@@ -51,7 +73,7 @@ export const getDownloadUrl = (
       // sem isto o navegador abre o arquivo inline: `download` no anchor é ignorado em URL cross-origin
       ...(filename && { ResponseContentDisposition: `attachment; filename="${filename}"` }),
     }),
-    { expiresIn },
+    { expiresIn, signingDate: stableSigningDate(expiresIn) },
   );
 
 export const getUploadUrl = (
