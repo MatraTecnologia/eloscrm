@@ -8,7 +8,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
 import { R2_PRIVATE_BUCKET, headFile, uploadStream } from "../src/lib/storage.js";
 
-const remote = { send: { text: vi.fn() } };
+const remote = { send: { text: vi.fn(), media: vi.fn() } };
 vi.mock("../src/lib/uazapi/index.js", () => ({ createUazapiClient: () => remote }));
 
 let app: FastifyInstance;
@@ -392,6 +392,17 @@ describe("POST /v1/whatsapp/conversations/:id/messages", () => {
     expect(conversa.lastMessageText).toBe("prévia nova");
   });
 
+  it("erro que estoura no envio de texto também marca a bolha como falha", async () => {
+    await conectar();
+    remote.send.text.mockRejectedValue(new Error("rede caiu"));
+
+    const res = await enviar({ text: "Bom dia" });
+
+    expect(res.statusCode).toBe(500);
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({ where: { conversationId } });
+    expect(salva.status).toBe("failed");
+  });
+
   it("falha do provedor deixa a mensagem na thread, marcada como failed", async () => {
     await conectar();
     remote.send.text.mockResolvedValue({ success: false, error: { status: 500, error: "boom" } });
@@ -721,5 +732,233 @@ describe("ações da conversa", () => {
 
     const depois = await prisma.auditEvent.count({ where: { organizationId: orgId } });
     expect(depois).toBe(antes);
+  });
+});
+
+/**
+ * O envio de mídia não roda de ponta a ponta em desenvolvimento — a uazapi não alcança o storage
+ * local, igual ao webhook. O que dá para provar aqui é o contrato: o que sai para o provedor, o que
+ * fica no banco e, principalmente, que a chave que o cliente manda não abre porta para arquivo de
+ * outra conversa.
+ */
+describe("POST /v1/whatsapp/conversations/:id/messages/media", () => {
+  const conectar = () =>
+    prisma.uazapiInstance.update({ where: { id: instanceId }, data: { status: "connected" } });
+
+  const pedirUpload = (payload: Record<string, unknown>) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/whatsapp/conversations/${conversationId}/media/upload-url`,
+      headers: { cookie },
+      payload,
+    });
+
+  const enviar = (payload: Record<string, unknown>) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/whatsapp/conversations/${conversationId}/messages/media`,
+      headers: { cookie },
+      payload,
+    });
+
+  /** Sobe de verdade no bucket de teste: o envio faz HEAD e recusa o que não chegou. */
+  const subir = async (key: string, contentType: string, conteudo = "arquivo") => {
+    await uploadStream(R2_PRIVATE_BUCKET, key, Readable.from([Buffer.from(conteudo)]), contentType);
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    remote.send.media.mockResolvedValue({
+      success: true,
+      data: { id: "554391834229:MIDIA1", messageid: "MIDIA1", status: "Pending" },
+    });
+    await conectar();
+  });
+
+  it("a chave do upload nasce no escopo desta conversa", async () => {
+    const res = await pedirUpload({
+      filename: "Planta do Apê.pdf",
+      contentType: "application/pdf",
+      size: 1024,
+    });
+
+    expect(res.statusCode).toBe(201);
+    const { key, uploadUrl } = res.json();
+    expect(key.startsWith(`org/${orgId}/whatsapp/${conversationId}/`)).toBe(true);
+    // acento e espaço não vão crus para a chave
+    expect(key).toContain("planta-do-ape.pdf");
+    expect(uploadUrl).toContain("X-Amz-Signature");
+  });
+
+  it("recusa arquivo maior do que o WhatsApp aceita, antes de subir", async () => {
+    const res = await pedirUpload({
+      filename: "video.mp4",
+      contentType: "video/mp4",
+      size: 20 * 1024 * 1024,
+    });
+
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("documento vai com docName e mimetype, e a mensagem já nasce pronta", async () => {
+    const { key } = (
+      await pedirUpload({ filename: "contrato.pdf", contentType: "application/pdf", size: 8 })
+    ).json();
+    await subir(key, "application/pdf");
+
+    const res = await enviar({ key, filename: "contrato.pdf", contentType: "application/pdf" });
+
+    expect(res.statusCode).toBe(201);
+    expect(remote.send.media).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "document",
+        docName: "contrato.pdf",
+        mimetype: "application/pdf",
+        number: "554399990000",
+      }),
+    );
+    // é URL do nosso storage, não base64
+    expect(remote.send.media.mock.calls[0][0].file).toContain("X-Amz-Signature");
+
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({ where: { conversationId } });
+    expect(salva.type).toBe("document");
+    expect(salva.status).toBe("sent");
+    expect(salva.providerMessageId).toBe("MIDIA1");
+    // nasce no nosso bucket, então não passa pela fila de download
+    expect(salva.mediaStatus).toBe("ready");
+    expect(salva.mediaKey).toBe(key);
+  });
+
+  it("foto com legenda vira bolha de imagem com texto", async () => {
+    const { key } = (
+      await pedirUpload({ filename: "fachada.jpg", contentType: "image/jpeg", size: 8 })
+    ).json();
+    await subir(key, "image/jpeg");
+
+    await enviar({
+      key,
+      filename: "fachada.jpg",
+      contentType: "image/jpeg",
+      caption: "A fachada do prédio",
+    });
+
+    expect(remote.send.media).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "image", text: "A fachada do prédio" }),
+    );
+    // docName só existe para documento: nos outros o WhatsApp o mostraria como legenda
+    expect(remote.send.media.mock.calls[0][0].docName).toBeUndefined();
+
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({ where: { conversationId } });
+    expect(salva.type).toBe("image");
+    expect(salva.text).toBe("A fachada do prédio");
+  });
+
+  it("chave de outra conversa é recusada, mesmo dentro da imobiliária", async () => {
+    const outra = await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId, chatid: `outra-${stamp}@s.whatsapp.net` },
+    });
+    const chaveAlheia = `org/${orgId}/whatsapp/${outra.id}/x-foto.jpg`;
+    await subir(chaveAlheia, "image/jpeg");
+
+    const res = await enviar({
+      key: chaveAlheia,
+      filename: "foto.jpg",
+      contentType: "image/jpeg",
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(remote.send.media).not.toHaveBeenCalled();
+  });
+
+  it("chave de outra imobiliária é recusada", async () => {
+    const res = await enviar({
+      key: "org/outra-org/whatsapp/qualquer/x-foto.jpg",
+      filename: "foto.jpg",
+      contentType: "image/jpeg",
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(remote.send.media).not.toHaveBeenCalled();
+  });
+
+  it("arquivo que nunca chegou ao storage não vira mensagem", async () => {
+    const { key } = (
+      await pedirUpload({ filename: "sumiu.jpg", contentType: "image/jpeg", size: 8 })
+    ).json();
+
+    const res = await enviar({ key, filename: "sumiu.jpg", contentType: "image/jpeg" });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("UPLOAD_NOT_FOUND");
+    expect(await prisma.whatsappMessage.count({ where: { conversationId } })).toBe(0);
+  });
+
+  it("o que subiu tem de ser do tipo declarado", async () => {
+    const { key } = (
+      await pedirUpload({ filename: "fachada.jpg", contentType: "image/jpeg", size: 8 })
+    ).json();
+    // a URL assinada não carrega o content-type: o cliente pode subir outra coisa nela
+    await subir(key, "application/pdf");
+
+    const res = await enviar({ key, filename: "fachada.jpg", contentType: "image/jpeg" });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("UPLOAD_TYPE_MISMATCH");
+  });
+
+  it("falha do provedor deixa a bolha como falha, com o arquivo preservado", async () => {
+    remote.send.media.mockResolvedValue({
+      success: false,
+      error: { kind: "http", status: 400, message: "recusado" },
+    });
+    const { key } = (
+      await pedirUpload({ filename: "fachada.jpg", contentType: "image/jpeg", size: 8 })
+    ).json();
+    await subir(key, "image/jpeg");
+
+    const res = await enviar({ key, filename: "fachada.jpg", contentType: "image/jpeg" });
+
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({ where: { conversationId } });
+    expect(salva.status).toBe("failed");
+    // o arquivo continua lá: a bolha de erro mostra o que o corretor escolheu
+    expect(await existeNoBucket(key)).toBe(true);
+  });
+
+  it("erro que estoura, e não retorna falha, também marca a bolha", async () => {
+    // token que não descriptografa, DNS que não resolve, rede que caiu: a chamada lança em vez de
+    // devolver `success: false`, e sem tratar a mensagem ficaria "pendente" para sempre
+    // `mockImplementation` que lança, não `mockRejectedValue`: quem estoura de verdade é o
+    // `instanceClient` ao descriptografar o token, **antes** de existir promise — e é justamente
+    // esse caso que um `.catch()` encadeado deixaria passar
+    remote.send.media.mockImplementation(() => {
+      throw new Error("token corrompido");
+    });
+    const { key } = (
+      await pedirUpload({ filename: "fachada.jpg", contentType: "image/jpeg", size: 8 })
+    ).json();
+    await subir(key, "image/jpeg");
+
+    const res = await enviar({ key, filename: "fachada.jpg", contentType: "image/jpeg" });
+
+    expect(res.statusCode).toBe(500);
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({ where: { conversationId } });
+    expect(salva.status).toBe("failed");
+  });
+
+  it("WhatsApp desconectado nem chega a assinar upload", async () => {
+    await prisma.uazapiInstance.update({
+      where: { id: instanceId },
+      data: { status: "disconnected" },
+    });
+
+    const res = await pedirUpload({
+      filename: "fachada.jpg",
+      contentType: "image/jpeg",
+      size: 8,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("INSTANCE_NOT_CONNECTED");
   });
 });

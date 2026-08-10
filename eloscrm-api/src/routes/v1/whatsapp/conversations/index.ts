@@ -6,8 +6,10 @@ import {
   listConversationsQuerySchema,
   favoriteSchema,
   listMessagesQuerySchema,
+  mediaUploadUrlSchema,
   pinSchema,
   reactSchema,
+  sendMediaSchema,
   sendMessageSchema,
 } from "../../../../modules/whatsapp/conversations.schema.js";
 import * as service from "../../../../modules/whatsapp/conversations.service.js";
@@ -48,6 +50,22 @@ const conversationsRoutes = async (app: FastifyInstance) => {
     const { id } = request.params as { id: string };
     const data = sendMessageSchema.parse(request.body);
     const message = await service.sendText(request.orgId!, id, data, actorOf(request));
+    return reply.status(201).send(message);
+  });
+
+  // O arquivo sobe direto do navegador para o R2, como nos anexos: o corpo da API não carrega
+  // vídeo nenhum, e o envio recebe só a chave — conferida contra o prefixo desta conversa.
+  app.post("/:id/media/upload-url", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const data = mediaUploadUrlSchema.parse(request.body);
+    const result = await service.createMediaUploadUrl(request.orgId!, id, data);
+    return reply.status(201).send(result);
+  });
+
+  app.post("/:id/messages/media", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const data = sendMediaSchema.parse(request.body);
+    const message = await service.sendMedia(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(message);
   });
 

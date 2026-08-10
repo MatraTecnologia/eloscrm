@@ -5,6 +5,7 @@ import {
   ClientSource,
   UazapiInstanceStatus,
   WhatsappDirection,
+  WhatsappMediaStatus,
   WhatsappMessageStatus,
   WhatsappMessageType,
   type Prisma,
@@ -14,17 +15,30 @@ import {
 import type { Actor } from "../../lib/actor.js";
 import { recordAudit } from "../../lib/audit.js";
 import { maskPhone, snapshotOf } from "../../lib/audit-snapshot.js";
-import { conflict, notFound } from "../../lib/http-error.js";
+import { conflict, httpError, notFound } from "../../lib/http-error.js";
 import { formatBrPhone, phoneKey } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
-import { R2_PRIVATE_BUCKET, deleteFiles } from "../../lib/storage.js";
+import {
+  R2_PRIVATE_BUCKET,
+  deleteFiles,
+  getDownloadUrl,
+  getUploadUrl,
+  headFile,
+  slugifyFilename,
+} from "../../lib/storage.js";
 import * as clients from "../clients/clients.service.js";
 import { resolveMediaUrl } from "./media.service.js";
+import type { Result } from "../../lib/uazapi/types.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
-import type {
-  ListConversationsQuery,
-  ListMessagesQuery,
-  SendMessageInput,
+import {
+  WHATSAPP_MEDIA_TYPES,
+  maxBytesFor,
+  type ListConversationsQuery,
+  type ListMessagesQuery,
+  type MediaUploadUrlInput,
+  type SendMediaInput,
+  type SendMessageInput,
+  type WhatsappMediaContentType,
 } from "./conversations.schema.js";
 
 /**
@@ -310,12 +324,8 @@ export const mediaUrl = async (orgId: string, messageId: string, download = fals
  * `wasSentByApi` no exclude do webhook, o envio não volta como evento — então não há duplicata a
  * conciliar, e o `providerId` definitivo vem da própria resposta do envio.
  */
-export const sendText = async (
-  orgId: string,
-  conversationId: string,
-  data: SendMessageInput,
-  actor: Actor,
-) => {
+/** A conversa existe, é desta imobiliária e o número está de pé — o que todo envio exige. */
+const conversationForSending = async (orgId: string, conversationId: string) => {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId: orgId },
     include: { instance: true, client: { select: { name: true } } },
@@ -327,22 +337,77 @@ export const sendText = async (
   if (conversation.instance.status !== UazapiInstanceStatus.connected) {
     throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar mensagens");
   }
+  return conversation;
+};
 
-  // a citada precisa ser da mesma conversa: para a uazapi o `replyid` é só uma string, então sem
-  // esse escopo um id chutado responderia mensagem de outro chat
-  let replyid: string | undefined;
-  if (data.replyToId) {
-    const alvo = await prisma.whatsappMessage.findFirst({
-      where: { id: data.replyToId, conversationId },
-      select: { providerMessageId: true },
-    });
-    if (!alvo) throw notFound("Mensagem citada não encontrada");
-    // mensagem ainda em `pending` (ou falha de envio) não tem id no provedor e não dá para citar
-    if (!alvo.providerMessageId) {
-      throw conflict("MESSAGE_NOT_REPLIABLE", "Esta mensagem ainda não pode ser respondida");
-    }
-    replyid = alvo.providerMessageId;
+/**
+ * A citada precisa ser da mesma conversa: para a uazapi o `replyid` é só uma string, então sem esse
+ * escopo um id chutado responderia mensagem de outro chat.
+ */
+const resolveReplyId = async (conversationId: string, replyToId?: string) => {
+  if (!replyToId) return undefined;
+
+  const alvo = await prisma.whatsappMessage.findFirst({
+    where: { id: replyToId, conversationId },
+    select: { providerMessageId: true },
+  });
+  if (!alvo) throw notFound("Mensagem citada não encontrada");
+  // mensagem ainda em `pending` (ou falha de envio) não tem id no provedor e não dá para citar
+  if (!alvo.providerMessageId) {
+    throw conflict("MESSAGE_NOT_REPLIABLE", "Esta mensagem ainda não pode ser respondida");
   }
+  return alvo.providerMessageId;
+};
+
+/**
+ * Envia e garante que a bolha não fique pendurada em `pending`.
+ *
+ * A falha do provedor vem em dois formatos e só um deles estava tratado: `result.success: false` é o
+ * erro previsto, mas a chamada também **lança** — token que não descriptografa, rede que caiu, DNS
+ * que não resolve. Sem este `catch` a mensagem ficava `pending` para sempre, e a tela mostra
+ * pendente como "ainda indo", não como "não foi". Apareceu com o token corrompido de propósito num
+ * ambiente de teste; em produção, o dia em que a chave de cifra mudar.
+ */
+const sendOrMarkFailed = async <T>(
+  messageId: string,
+  enviar: () => Promise<Result<T>>,
+): Promise<T> => {
+  const falhar = () =>
+    prisma.whatsappMessage.update({
+      where: { id: messageId },
+      data: { status: WhatsappMessageStatus.failed },
+    });
+
+  // try/catch, e não `.catch()`: quem lança primeiro é o `instanceClient`, ao descriptografar o
+  // token — **antes** de devolver promise nenhuma. Um `.catch()` encadeado não veria essa exceção,
+  // e foi exatamente assim que a bolha continuou "pendente" no primeiro teste desta correção.
+  let result: Result<T>;
+  try {
+    result = await enviar();
+  } catch (err) {
+    await falhar();
+    throw err;
+  }
+
+  if (!result.success) {
+    await falhar();
+    throw uazapiError(result.error);
+  }
+  return result.data;
+};
+
+/** Grupo é endereçado pelo chatid (@g.us); conversa individual, pelo número em dígitos. */
+const destinationOf = (conversation: { isGroup: boolean; chatid: string; phone: string | null }) =>
+  conversation.isGroup ? conversation.chatid : (conversation.phone ?? conversation.chatid);
+
+export const sendText = async (
+  orgId: string,
+  conversationId: string,
+  data: SendMessageInput,
+  actor: Actor,
+) => {
+  const conversation = await conversationForSending(orgId, conversationId);
+  const replyid = await resolveReplyId(conversationId, data.replyToId);
 
   const local = await prisma.whatsappMessage.create({
     data: {
@@ -363,29 +428,21 @@ export const sendText = async (
   });
 
   const config = requireIntegration();
-  // grupo é endereçado pelo chatid (@g.us); conversa individual, pelo número em dígitos
-  const destino = conversation.isGroup ? conversation.chatid : (conversation.phone ?? conversation.chatid);
-  const result = await instanceClient(config, conversation.instance.tokenEnc).send.text({
-    number: destino,
-    text: data.text,
-    ...(replyid ? { replyid } : {}),
-  });
-
-  if (!result.success) {
-    // `quotedId` fica: a bolha marcada como falha já mostra o texto que o corretor escreveu, e a
-    // citação é parte da mesma tentativa. Limpar deixaria a bolha de erro respondendo ao nada.
-    await prisma.whatsappMessage.update({
-      where: { id: local.id },
-      data: { status: WhatsappMessageStatus.failed },
-    });
-    throw uazapiError(result.error);
-  }
+  // `quotedId` fica mesmo na falha: a bolha marcada como erro já mostra o texto que o corretor
+  // escreveu, e a citação é parte da mesma tentativa — limpá-la deixaria a bolha respondendo ao nada
+  const enviada = await sendOrMarkFailed(local.id, () =>
+    instanceClient(config, conversation.instance.tokenEnc).send.text({
+      number: destinationOf(conversation),
+      text: data.text,
+      ...(replyid ? { replyid } : {}),
+    }),
+  );
 
   const updated = await prisma.whatsappMessage.update({
     where: { id: local.id },
     data: {
-      providerId: result.data.id ?? local.providerId,
-      providerMessageId: result.data.messageid ?? null,
+      providerId: enviada.id ?? local.providerId,
+      providerMessageId: enviada.messageid ?? null,
       status: WhatsappMessageStatus.sent,
     },
   });
@@ -397,6 +454,158 @@ export const sendText = async (
 
   // grava só depois do envio confirmado: uma tentativa que falhou já fica registrada na bolha
   // `failed`, e não gera evento — sem `text` no snapshot, porque conteúdo de conversa não é auditoria
+  await recordAudit({
+    orgId,
+    entityType: AuditEntity.WHATSAPP_MESSAGE,
+    entityId: updated.id,
+    entityLabel: conversationLabel(conversation),
+    action: AuditAction.MESSAGE_SENT,
+    actor,
+    context: { conversationId },
+    snapshot: snapshotOf(AuditEntity.WHATSAPP_MESSAGE, updated),
+  });
+
+  return serializeMessage(updated, await loadQuoted(conversationId, [updated]));
+};
+
+/**
+ * Prefixo da chave no R2 — e a fronteira de segurança do envio de mídia.
+ *
+ * A chave viaja pelo cliente entre o `upload-url` e o envio, então ela não é confiável: sem conferir
+ * o prefixo, um envio poderia apontar para o anexo privado de outro lead — ou de outra imobiliária —
+ * e a uazapi entregaria esse arquivo no WhatsApp de quem pediu.
+ */
+const mediaKeyPrefix = (orgId: string, conversationId: string) =>
+  `org/${orgId}/whatsapp/${conversationId}/`;
+
+const UPLOAD_EXPIRES_IN = 300;
+
+/**
+ * TTL próprio, e maior que o das URLs que vão para o navegador: quem baixa aqui é o **servidor da
+ * uazapi**, depois de a mensagem sair daqui, e um vídeo de dezenas de megabytes não se transfere no
+ * minuto que basta para um clique de download. A janela de assinatura estável ainda come metade
+ * desse prazo (ver `stableSigningDate`).
+ */
+const SEND_MEDIA_EXPIRES_IN = 30 * 60;
+
+export const createMediaUploadUrl = async (
+  orgId: string,
+  conversationId: string,
+  data: MediaUploadUrlInput,
+) => {
+  // a conexão é conferida já aqui: subir o arquivo para só então descobrir que o WhatsApp está
+  // desconectado desperdiça o upload inteiro do corretor
+  await conversationForSending(orgId, conversationId);
+
+  const key = `${mediaKeyPrefix(orgId, conversationId)}${randomUUID()}-${slugifyFilename(data.filename)}`;
+  const uploadUrl = await getUploadUrl(R2_PRIVATE_BUCKET, key, {
+    contentLength: data.size,
+    contentType: data.contentType,
+    expiresIn: UPLOAD_EXPIRES_IN,
+  });
+
+  return { uploadUrl, key, expiresIn: UPLOAD_EXPIRES_IN };
+};
+
+/** O tipo do nosso enum que corresponde ao que a uazapi vai mandar. */
+const LOCAL_TYPE: Record<(typeof WHATSAPP_MEDIA_TYPES)[WhatsappMediaContentType], WhatsappMessageType> = {
+  image: WhatsappMessageType.image,
+  video: WhatsappMessageType.video,
+  audio: WhatsappMessageType.audio,
+  document: WhatsappMessageType.document,
+};
+
+/**
+ * Manda o arquivo que já está no nosso R2.
+ *
+ * O provedor aceita URL ou base64 e aqui é sempre URL: base64 infla o corpo em um terço e
+ * carregaria um vídeo inteiro na memória do processo — o mesmo problema que o download de entrada
+ * resolveu com stream. Como o arquivo **nasce** no nosso storage, a mensagem já sai
+ * `mediaStatus: ready` e não passa pela fila de download, ao contrário de tudo que chega.
+ *
+ * Em desenvolvimento isto não completa: o SeaweedFS local não é alcançável pela uazapi, igual ao
+ * webhook. Sem túnel, o envio de mídia só se prova em produção.
+ */
+export const sendMedia = async (
+  orgId: string,
+  conversationId: string,
+  data: SendMediaInput,
+  actor: Actor,
+) => {
+  const conversation = await conversationForSending(orgId, conversationId);
+
+  if (!data.key.startsWith(mediaKeyPrefix(orgId, conversationId))) {
+    throw notFound("Arquivo não encontrado");
+  }
+
+  // HEAD de verdade, como no `confirm` dos anexos: um PUT que falhou deixaria a uazapi baixando uma
+  // URL morta, e o content-type não entra na assinatura do presign — a allowlist só vale aqui,
+  // depois de saber o que de fato chegou ao bucket.
+  const head = await headFile(R2_PRIVATE_BUCKET, data.key).catch(() => null);
+  if (!head) throw httpError(422, "UPLOAD_NOT_FOUND", "O arquivo não chegou ao storage");
+  if (head.contentLength > maxBytesFor(data.contentType)) {
+    throw httpError(422, "UPLOAD_TOO_LARGE", "O arquivo enviado passa do tamanho permitido");
+  }
+  if (!head.contentType || head.contentType !== data.contentType) {
+    throw httpError(422, "UPLOAD_TYPE_MISMATCH", "O arquivo enviado não é do tipo informado");
+  }
+
+  const replyid = await resolveReplyId(conversationId, data.replyToId);
+  const tipoRemoto = WHATSAPP_MEDIA_TYPES[data.contentType];
+
+  const local = await prisma.whatsappMessage.create({
+    data: {
+      organizationId: orgId,
+      conversationId,
+      providerId: `local:${randomUUID()}`,
+      direction: WhatsappDirection.outbound,
+      type: LOCAL_TYPE[tipoRemoto],
+      status: WhatsappMessageStatus.pending,
+      // legenda é o texto da bolha, como na mídia que chega com caption
+      text: data.caption ?? null,
+      quotedId: replyid ?? null,
+      sentByApi: true,
+      sentById: actor.id,
+      sentAt: new Date(),
+      mediaStatus: WhatsappMediaStatus.ready,
+      mediaKey: data.key,
+      mediaMime: data.contentType,
+      mediaFilename: data.filename,
+      mediaSize: head.contentLength,
+    },
+  });
+
+  const config = requireIntegration();
+  const file = await getDownloadUrl(R2_PRIVATE_BUCKET, data.key, SEND_MEDIA_EXPIRES_IN);
+  // o objeto fica no bucket mesmo se o envio falhar: a bolha de erro mostra o arquivo que o corretor
+  // escolheu, e apagá-lo deixaria a mensagem apontando para o nada. A purga da organização o alcança.
+  const enviada = await sendOrMarkFailed(local.id, () =>
+    instanceClient(config, conversation.instance.tokenEnc).send.media({
+      number: destinationOf(conversation),
+      type: tipoRemoto,
+      file,
+      ...(data.caption ? { text: data.caption } : {}),
+      // só documento mostra nome no WhatsApp; nos outros o campo vira legenda indesejada
+      ...(tipoRemoto === "document" ? { docName: data.filename } : {}),
+      mimetype: data.contentType,
+      ...(replyid ? { replyid } : {}),
+    }),
+  );
+
+  const updated = await prisma.whatsappMessage.update({
+    where: { id: local.id },
+    data: {
+      providerId: enviada.id ?? local.providerId,
+      providerMessageId: enviada.messageid ?? null,
+      status: WhatsappMessageStatus.sent,
+    },
+  });
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: updated.sentAt, lastMessageText: updated.text },
+  });
+
   await recordAudit({
     orgId,
     entityType: AuditEntity.WHATSAPP_MESSAGE,

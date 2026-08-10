@@ -218,6 +218,22 @@ precedência da sugestão vivem em `src/lib/lead-name.ts`, compartilhados pelos 
 renomeiam (ingestão, tela e backfill) — se cada um decidisse por conta, o mesmo lead seria corrigível
 num lugar e intocável no outro.
 
+**Envio de mídia: a chave vem do cliente, e é por isso que ela é conferida.** O arquivo sobe direto
+do navegador para o R2 (`POST /:id/media/upload-url` → PUT → `POST /:id/messages/media`), então
+entre um passo e outro a chave passa pelo cliente. `sendMedia` recusa qualquer uma que não comece com
+`org/<orgId>/whatsapp/<conversationId>/` — sem isso um envio apontaria para o anexo de outro lead, ou
+de outra imobiliária, e a uazapi entregaria esse arquivo no WhatsApp de quem pediu. O `HEAD` no
+bucket repete tamanho e content-type porque **o tipo não entra na assinatura do presign** (mesma
+razão do `confirm` dos anexos), e o `docName` só acompanha documento — nos outros tipos o WhatsApp o
+exibe como legenda. A mensagem nasce `mediaStatus: ready`: o arquivo já é nosso e não passa pela fila
+de download. Em dev o ciclo não fecha, igual ao webhook — a uazapi não alcança o SeaweedFS local.
+
+**Falha de envio tem dois formatos, e só um é `result.success: false`.** A chamada ao provedor
+também **lança** — token que não descriptografa, DNS que não resolve. `sendOrMarkFailed` cobre os
+dois com `try/catch`, e o `try` é obrigatório: quem estoura primeiro é o `instanceClient`, ao
+descriptografar o token, **antes** de existir promise — um `.catch()` encadeado não veria a exceção e
+a bolha ficava `pending` para sempre, que na tela se lê como "ainda indo" em vez de "não foi".
+
 **Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
 a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
 
@@ -281,8 +297,9 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   `messages_update`, reply e deleção). Não confie em memória sobre esses formatos: releia antes de
   mexer em ingestão.
 - Automação de leads: `docs/superpowers/specs/2026-08-04-automacao-de-leads-design.md`
-- **Débitos em aberto do WhatsApp: `../docs/2026-08-04-debitos-whatsapp.md`** — envio de mídia,
-  retenção/LGPD, rate limit no webhook. São decisões adiadas com o motivo registrado, não bugs;
-  leia antes de propor qualquer um deles como "melhoria óbvia".
+- **Débitos em aberto do WhatsApp: `../docs/2026-08-04-debitos-whatsapp.md`** — retenção/LGPD, rate
+  limit no webhook, rotação do `webhookSecret`. São decisões adiadas com o motivo registrado, não
+  bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
+  em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 16:16 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 18:00 (-03)

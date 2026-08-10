@@ -76,6 +76,16 @@ export const getDownloadUrl = (
     { expiresIn, signingDate: stableSigningDate(expiresIn) },
   );
 
+// nome do arquivo não vai cru para a chave: acento, espaço e barra viram problema de URL e de path
+export const slugifyFilename = (filename: string) =>
+  filename
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase()
+    .slice(0, 100);
+
 export const getUploadUrl = (
   bucket: string,
   key: string,

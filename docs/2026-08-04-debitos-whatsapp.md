@@ -14,7 +14,23 @@ automação de leads no ar. Specs de referência:
 
 ## 1. Envio de mídia pelo CRM
 
-**O que dói.** O corretor **recebe** foto, áudio, documento, gif, figurinha e vídeo — e só consegue
+> **Resolvido em 2026-08-10.** O compositor tem o clipe, e o caminho escolhido foi o **presigned do
+> R2**: a API assina, o navegador sobe direto para o storage e só então a mensagem é criada
+> (`POST /:id/media/upload-url` → PUT → `POST /:id/messages/media`, em
+> `conversations.service.ts`). O arquivo não passa pelo corpo da API em momento nenhum, e a mensagem
+> nasce `mediaStatus: ready` — não entra na fila de download, ao contrário de tudo que chega.
+>
+> Três coisas que a implementação fixou e valem lembrança: a **chave é conferida contra o prefixo da
+> conversa** antes de qualquer envio (ela viaja pelo cliente, e sem isso apontaria para o arquivo de
+> outro lead ou de outra imobiliária); o **HEAD no bucket** repete tamanho e content-type porque o
+> tipo não entra na assinatura do presign; e o **`docName` só vai em documento**, senão o WhatsApp o
+> mostra como legenda. O que continua fora é **gravar** nota de voz pelo navegador — anexar áudio
+> pronto funciona, gravar não.
+>
+> Em desenvolvimento o ciclo não fecha, pelo motivo previsto abaixo: a uazapi não alcança o storage
+> local. O contrato está coberto por teste com o provedor mockado.
+
+**O que doía.** O corretor **recebe** foto, áudio, documento, gif, figurinha e vídeo — e só consegue
 **responder texto**. `conversations.service.sendText` é a única saída. Na prática ele pega o celular
 para mandar a planta do apartamento, e o atendimento se parte em duas ferramentas.
 
@@ -107,4 +123,4 @@ débito de código; é disciplina operacional que se perde com o tempo.
 
 ---
 
-> Criado em 2026-08-04 12:36 (-03) · Última modificação: 2026-08-06 12:35 (-03)
+> Criado em 2026-08-04 12:36 (-03) · Última modificação: 2026-08-10 18:00 (-03)

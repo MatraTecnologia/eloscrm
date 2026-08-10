@@ -181,6 +181,70 @@ export const useSendMessage = () => {
   });
 };
 
+/** Tipos que a API aceita mandar pelo WhatsApp — espelha `WHATSAPP_MEDIA_TYPES` do back. */
+export const WHATSAPP_MEDIA_ACCEPT = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/mp4",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+] as const;
+
+export const MAX_SEND_MEDIA_BYTES = 16 * 1024 * 1024;
+export const MAX_SEND_DOCUMENT_BYTES = 64 * 1024 * 1024;
+
+export const maxSendBytesFor = (contentType: string) =>
+  contentType.startsWith("image/") || contentType.startsWith("video/") || contentType.startsWith("audio/")
+    ? MAX_SEND_MEDIA_BYTES
+    : MAX_SEND_DOCUMENT_BYTES;
+
+/**
+ * Três passos, como nos anexos: a API assina, o navegador sobe direto para o storage e só então a
+ * mensagem é criada. O arquivo não passa pelo corpo da API em momento nenhum — é o que permite
+ * mandar um vídeo sem carregar dezenas de megabytes na memória do servidor.
+ */
+export const useSendMedia = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      file,
+      caption,
+      replyToId,
+    }: {
+      conversationId: string;
+      file: File;
+      caption?: string;
+      replyToId?: string;
+    }) => {
+      const { data: assinatura } = await api.post<{ uploadUrl: string; key: string }>(
+        `/whatsapp/conversations/${conversationId}/media/upload-url`,
+        { filename: file.name, contentType: file.type, size: file.size },
+      );
+
+      // fetch puro, sem o axios: a URL assinada vai direto ao storage e não leva o cookie da sessão
+      const upload = await fetch(assinatura.uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "content-type": file.type },
+      });
+      if (!upload.ok) throw new Error("Falha ao subir o arquivo");
+
+      const { data } = await api.post<WhatsappMessage>(
+        `/whatsapp/conversations/${conversationId}/messages/media`,
+        { key: assinatura.key, filename: file.name, contentType: file.type, caption, replyToId },
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+};
+
 /**
  * Reage a uma mensagem. Emoji vazio remove — é assim que a uazapi modela o "desreagir".
  *
