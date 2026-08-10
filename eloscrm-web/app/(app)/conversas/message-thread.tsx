@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMessages, useReactToMessage } from "@/lib/queries/conversations";
 import type { ApiError } from "@/lib/api";
 import type { WhatsappMessage } from "@/lib/types";
+import { MediaViewer } from "./media-viewer";
 import { MessageBubble } from "./message-bubble";
 import { PinnedBar } from "./pinned-bar";
 
@@ -46,6 +47,7 @@ export const MessageThread = ({
   const fimRef = useRef<HTMLDivElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
   const [destacada, setDestacada] = useState<string | null>(null);
+  const [visualizando, setVisualizando] = useState<string | null>(null);
 
   // páginas anteriores vêm depois na lista do infinite query, mas são mais antigas na conversa.
   // O separador de dia é derivado aqui, comparando com o item anterior — não dá para acumular
@@ -58,6 +60,17 @@ export const MessageThread = ({
       return { message, dia, mostrarDia: dia !== anterior };
     });
   }, [data]);
+
+  // O visualizador navega por estas, e só por estas: a thread é paginada para trás, então "todas as
+  // mídias da conversa" seria uma promessa que exigiria carregar página por página com a tela aberta.
+  const midias = useMemo(
+    () =>
+      mensagens
+        .map(({ message }) => message)
+        .filter((m) => !m.deletedAt && (m.type === "image" || m.type === "video") && m.mediaUrl),
+    [mensagens],
+  );
+  const indiceVisualizado = midias.findIndex((m) => m.id === visualizando);
 
   const ultimaId = mensagens.at(-1)?.message.id;
   useEffect(() => {
@@ -157,6 +170,7 @@ export const MessageThread = ({
                 },
               )
             }
+            onOpenMedia={() => setVisualizando(message.id)}
             highlight={destacada === message.id}
           />
         </div>
@@ -168,6 +182,15 @@ export const MessageThread = ({
 
       <div ref={fimRef} />
       </div>
+
+      {indiceVisualizado >= 0 && (
+        <MediaViewer
+          items={midias}
+          index={indiceVisualizado}
+          onIndex={(proximo) => setVisualizando(midias[proximo]?.id ?? null)}
+          onClose={() => setVisualizando(null)}
+        />
+      )}
     </div>
   );
 };

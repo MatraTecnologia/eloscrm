@@ -314,6 +314,20 @@ export const useDeleteMessage = () =>
     await api.delete(`/whatsapp/conversations/${conversationId}/messages/${messageId}`);
   });
 
+/**
+ * Renova a URL de exibição da mídia.
+ *
+ * A presigned vive minutos; uma conversa aberta há mais tempo que isso tem, na thread, links já
+ * vencidos. Em vez de recarregar tudo, a bolha pede uma nova quando o `<img>`/`<video>` falha — é
+ * para isso que a rota existe.
+ */
+export const fetchMediaUrl = async (messageId: string) => {
+  const { data } = await api.get<{ url: string }>(
+    `/whatsapp/conversations/messages/${messageId}/media`,
+  );
+  return data.url;
+};
+
 /** URL de download com `Content-Disposition: attachment` — a da bolha abre no navegador. */
 export const fetchDownloadUrl = async (messageId: string) => {
   const { data } = await api.get<{ url: string }>(

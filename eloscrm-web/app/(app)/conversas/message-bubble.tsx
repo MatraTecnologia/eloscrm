@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
   Ban,
@@ -10,11 +11,13 @@ import {
   FileText,
   Mic,
   Pin,
+  Play,
   Star,
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatFileSize, formatMediaDuration } from "@/lib/labels";
+import { fetchMediaUrl } from "@/lib/queries/conversations";
 import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageActions } from "./message-actions";
@@ -36,8 +39,28 @@ const StatusIcon = ({ message }: { message: WhatsappMessage }) => {
  * Enquanto o arquivo não chega, a bolha mostra o `mediaThumb` — o JPEGThumbnail que veio embutido
  * no webhook. `ptt` e `sticker` não têm thumb (ver §2.5 do spec), então caem no fallback próprio.
  */
-const MediaContent = ({ message }: { message: WhatsappMessage }) => {
+const MediaContent = ({
+  message,
+  onOpen,
+}: {
+  message: WhatsappMessage;
+  onOpen?: () => void;
+}) => {
   const thumb = message.mediaThumb ? `data:image/jpeg;base64,${message.mediaThumb}` : null;
+  // a presigned vive minutos: numa conversa aberta há mais tempo que isso, a URL da thread já
+  // venceu. Em vez de recarregar tudo, a bolha troca por uma nova quando a imagem falha — uma vez,
+  // porque se a segunda também falhar o problema não é o prazo
+  const [renovada, setRenovada] = useState<string | null>(null);
+  const imagem = renovada ?? message.mediaUrl;
+  const onMediaError = () => {
+    if (renovada) return;
+    fetchMediaUrl(message.id).then(setRenovada).catch(() => undefined);
+  };
+
+  const proporcao =
+    message.mediaWidth && message.mediaHeight
+      ? { aspectRatio: `${message.mediaWidth} / ${message.mediaHeight}` }
+      : undefined;
 
   if (message.type === "ptt" || message.type === "audio") {
     // ptt não traz thumbnail (§2.5): enquanto o arquivo não chega, o que dá para mostrar é a
@@ -61,44 +84,101 @@ const MediaContent = ({ message }: { message: WhatsappMessage }) => {
   }
 
   if (message.type === "image" || message.type === "sticker") {
-    const src = message.mediaUrl ?? thumb;
+    const src = imagem ?? thumb;
     if (!src) {
       return <span className="text-xs opacity-70">{message.type === "sticker" ? "Figurinha" : "Imagem"}</span>;
     }
-    return (
+
+    const foto = (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={message.text ?? "Mídia recebida"}
+        // as dimensões vêm no webhook: com elas o espaço já nasce reservado e a thread não pula
+        // enquanto as fotos carregam — quem está lendo perderia a posição da rolagem a cada uma
+        style={proporcao}
         className={cn(
-          "rounded-md object-cover",
-          message.type === "sticker" ? "size-32" : "max-h-72 max-w-full",
+          "rounded-md",
+          // `contain`, não `cover`: recortar uma planta ou um comprovante corta justamente o que
+          // o corretor precisa ler
+          // teto de largura além do de altura: sem ele uma foto deitada ocupa a bolha inteira e empurra
+          // a conversa para fora da tela — o WhatsApp também segura a mídia em torno deste tamanho
+          message.type === "sticker" ? "size-32 object-contain" : "max-h-72 w-full max-w-80 object-contain",
           // sem URL final, o que está na tela é a miniatura: o desfoque evita passar por definitiva
-          !message.mediaUrl && "blur-[1px]",
+          !imagem && "blur-[1px]",
         )}
+        onError={onMediaError}
       />
+    );
+
+    // figurinha não abre em tela cheia: ela já é pequena por natureza e não há o que ampliar
+    if (message.type === "sticker" || !onOpen) return foto;
+    return (
+      <button type="button" aria-label="Abrir foto" className="block" onClick={onOpen}>
+        {foto}
+      </button>
     );
   }
 
-  if (message.type === "video" || message.type === "gif") {
-    if (!message.mediaUrl) {
-      const alt = message.type === "gif" ? "GIF" : "Vídeo";
+  // gif é vídeo mudo em laço, e é assim que o WhatsApp o mostra: toca sozinho na própria bolha
+  if (message.type === "gif") {
+    if (!imagem) {
       return thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumb} alt={alt} className="max-h-72 max-w-full rounded-md blur-[1px]" />
+        <img src={thumb} alt="GIF" className="max-h-72 max-w-80 rounded-md blur-[1px]" />
       ) : (
-        <span className="text-xs opacity-70">{alt}</span>
+        <span className="text-xs opacity-70">GIF</span>
       );
     }
     return (
       <video
-        src={message.mediaUrl}
-        className="max-h-72 max-w-full rounded-md"
-        // gif no WhatsApp é vídeo mudo em laço, sem controles — ver §2.5
-        {...(message.type === "gif"
-          ? { autoPlay: true, loop: true, muted: true, playsInline: true }
-          : { controls: true })}
+        src={imagem}
+        className="max-h-72 max-w-80 rounded-md"
+        autoPlay
+        loop
+        muted
+        playsInline
+        onError={onMediaError}
       />
+    );
+  }
+
+  /**
+   * Vídeo não vira player na thread.
+   *
+   * Uma conversa com cinco vídeos viraria cinco players nativos, cada um buscando os próprios
+   * metadados — e nenhum deles se assiste ali, em 288 pixels. A bolha mostra a cena (o thumbnail que
+   * já veio no webhook) com o play por cima, e o vídeo abre em tela cheia. Nada é baixado até lá.
+   */
+  if (message.type === "video") {
+    return (
+      <button
+        type="button"
+        aria-label="Abrir vídeo"
+        // largura fixa, não `w-full`: o thumbnail do webhook é pequeno e deixaria o cartão do vídeo
+        // menor que as fotos da mesma conversa, sem motivo aparente para quem olha
+        className="relative block w-80 max-w-full overflow-hidden rounded-md"
+        style={proporcao}
+        disabled={!onOpen}
+        onClick={onOpen}
+      >
+        {thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumb} alt="" className="max-h-72 w-full object-cover" />
+        ) : (
+          <span className="bg-background/40 flex h-40 w-64 items-center justify-center" />
+        )}
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-black/55 text-white">
+            <Play className="size-6 translate-x-px fill-current" />
+          </span>
+        </span>
+        {formatMediaDuration(message.mediaDuration) && (
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white tabular-nums">
+            {formatMediaDuration(message.mediaDuration)}
+          </span>
+        )}
+      </button>
     );
   }
 
@@ -127,6 +207,7 @@ export const MessageBubble = ({
   onReply,
   onJumpTo,
   onReact,
+  onOpenMedia,
   highlight,
 }: {
   message: WhatsappMessage;
@@ -135,6 +216,8 @@ export const MessageBubble = ({
   /** leva a thread até a mensagem citada, como o clique na citação do WhatsApp */
   onJumpTo?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
+  /** abre foto e vídeo em tela cheia; ausente, a bolha só exibe */
+  onOpenMedia?: () => void;
   highlight?: boolean;
 }) => {
   const mine = message.direction === "outbound";
@@ -208,7 +291,7 @@ export const MessageBubble = ({
               </span>
             )}
 
-            {temMidia && <MediaContent message={message} />}
+            {temMidia && <MediaContent message={message} onOpen={onOpenMedia} />}
 
             {message.mediaError && (
               <span className="text-xs opacity-70">Mídia indisponível: {message.mediaError}</span>
