@@ -156,17 +156,32 @@ const MediaContent = ({
         type="button"
         aria-label="Abrir vídeo"
         // largura fixa, não `w-full`: o thumbnail do webhook é pequeno e deixaria o cartão do vídeo
-        // menor que as fotos da mesma conversa, sem motivo aparente para quem olha
-        className="relative block w-80 max-w-full overflow-hidden rounded-md"
+        // menor que as fotos da mesma conversa, sem motivo aparente para quem olha.
+        // `aspect-video` cobre o que sai daqui: o envio não conhece as dimensões do arquivo, e sem
+        // proporção nenhuma o cartão colapsava num retângulo torto.
+        className={cn(
+          "relative block w-80 max-w-full overflow-hidden rounded-md bg-black/20",
+          !proporcao && "aspect-video",
+        )}
         style={proporcao}
         disabled={!onOpen}
         onClick={onOpen}
       >
         {thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb} alt="" className="max-h-72 w-full object-cover" />
+          <img src={thumb} alt="" className="pointer-events-none size-full object-cover" />
         ) : (
-          <span className="bg-background/40 flex h-40 w-64 items-center justify-center" />
+          // Sem miniatura — o caso de todo vídeo que sai daqui, porque `mediaThumb` só vem no
+          // webhook. O próprio arquivo serve de capa: `preload="metadata"` traz o primeiro quadro e
+          // pára aí, sem baixar o vídeo inteiro para mostrar uma imagem parada.
+          <video
+            src={imagem ?? undefined}
+            preload="metadata"
+            muted
+            playsInline
+            className="pointer-events-none size-full object-cover"
+            onError={onMediaError}
+          />
         )}
         <span className="absolute inset-0 flex items-center justify-center">
           <span className="flex size-12 items-center justify-center rounded-full bg-black/55 text-white">
