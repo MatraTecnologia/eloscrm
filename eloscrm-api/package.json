@@ -20,6 +20,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "audit:purge": "tsx scripts/purge-audit.ts",
     "audit:backfill-labels": "tsx scripts/backfill-audit-labels.ts",
+    "backfill:lead-names": "tsx scripts/backfill-lead-names.ts",
     "auth:generate": "pnpm dlx @better-auth/cli@1.4.21 generate --output prisma/schema.prisma -y"
   },
   "dependencies": {

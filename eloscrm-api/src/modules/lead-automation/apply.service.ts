@@ -1,5 +1,6 @@
 import { ClientSource, ClientStatus } from "../../generated/prisma/client.js";
 import { AUTOMATION_ACTOR } from "../../lib/actor.js";
+import { autoDealTitle } from "../../lib/deal-title.js";
 import { formatBrPhone } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
 import * as clients from "../clients/clients.service.js";
@@ -14,6 +15,7 @@ export type AutomationInput = {
   clientId: string | null;
   /** a `phoneKey` casou com mais de um lead — ver §2.1 */
   ambiguous: boolean;
+  isGroup: boolean;
   suggestedName: string | null;
   phone: string | null;
 };
@@ -31,10 +33,18 @@ export const applyToConversation = async (input: AutomationInput) => {
   });
   if (!config) return { skipped: "sem configuração" as const };
 
+  // Grupo não é lead. O `chat.phone` de um grupo não é o telefone de ninguém — em produção veio o
+  // número da própria instância —, e o nome é o do grupo: "Sonho do apartamento" e o grupo de
+  // alertas da própria empresa viraram card no funil, dois deles apontando para a corretora.
+  // Conversa de grupo é registrada e fica visível na tela de conversas; virar lead, não.
+  if (input.isGroup) return { skipped: "conversa em grupo" as const };
+
   // A ingestão recusa vincular quando a chave casa com mais de um lead — fixo e celular colidem
   // nela. Criar um lead aqui produziria o terceiro registro do mesmo cliente: a automação não
   // resolve o que foi deliberadamente deixado para uma pessoa.
   if (input.ambiguous) return { skipped: "telefone ambíguo" as const };
+
+  if (input.clientId) await renameIfAutoNamed(input.orgId, input.clientId, input.suggestedName);
 
   const { clientId, ownerId } = input.clientId
     ? await ownerOfExisting(input.orgId, input.clientId)
@@ -63,6 +73,37 @@ const ownerOfExisting = async (orgId: string, clientId: string) => {
     await prisma.client.update({ where: { id: clientId }, data: { ownerId } });
   }
   return { clientId, ownerId };
+};
+
+/**
+ * Corrige o lead que a automação batizou com o próprio telefone.
+ *
+ * Quem escreve primeiro é quem dá o nome. Se a conversa partiu da corretora, o chat ainda não existe
+ * do lado do provedor e o envelope não traz nome nenhum — o telefone é o melhor que há, e foi o que
+ * aconteceu em 28 dos 29 leads sem nome que a produção mostrou em 2026-08-10. O nome só chega quando
+ * o cliente responde, e sem isto ele ficava parado na conversa enquanto a ficha e o card do funil
+ * continuavam chamando a pessoa de "(43) 9841-4904".
+ *
+ * A guarda é o próprio telefone: renomeia só enquanto o nome for exatamente o que a automação
+ * escreveu. Nome digitado por gente nunca é sobrescrito, e a condição deixa de valer no primeiro
+ * acerto — não há update a cada mensagem.
+ *
+ * **Nunca use o `senderName` da mensagem como fonte.** Em mensagem da própria corretora ele é o
+ * perfil da instância, não o do contato: os 2431 envios da instância observados em produção traziam
+ * um único valor, o nome da imobiliária. Cair nele batizaria todo lead de primeiro contato com o
+ * nome da própria empresa.
+ */
+const renameIfAutoNamed = async (orgId: string, clientId: string, suggested: string | null) => {
+  const name = suggested?.trim();
+  if (!name) return;
+
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, organizationId: orgId },
+    select: { name: true, phone: true },
+  });
+  if (!client || client.name === name || client.name !== formatBrPhone(client.phone)) return;
+
+  await clients.update(orgId, clientId, { name }, AUTOMATION_ACTOR);
 };
 
 const createClient = async (input: AutomationInput, enabled: boolean) => {
@@ -136,7 +177,7 @@ const createDeal = async (
     {
       // mesmo texto do AddToPipelineDialog: duas convenções deixariam o funil com cards de duas
       // caras conforme a origem
-      title: `Atendimento — ${client.name}`,
+      title: autoDealTitle(client.name),
       clientId,
       pipelineId: config.pipelineId,
       stageId: config.stageId,

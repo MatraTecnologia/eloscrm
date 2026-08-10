@@ -12,6 +12,7 @@ let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 let orgId = "";
 let userId = "";
+let cookie = "";
 let instanceId = "";
 let pipelineId = "";
 let stageId = "";
@@ -23,6 +24,7 @@ beforeAll(async () => {
   app = await makeApp();
   const dono = await signUpWithOrg(app, `autoing-${stamp}@eloscrm.test`, `autoing-${stamp}`);
   orgId = dono.orgId;
+  cookie = dono.cookie;
   userId = (await prisma.member.findFirstOrThrow({ where: { organizationId: orgId } })).userId;
 
   // o funil padrão nasce sob demanda, na primeira listagem
@@ -79,7 +81,7 @@ const configurar = (data: Record<string, unknown> = {}) =>
   });
 
 let seq = 0;
-const evento = (chat: Record<string, unknown> = {}) => {
+const evento = (chat: Record<string, unknown> = {}, message: Record<string, unknown> = {}) => {
   const id = `AUTO${seq++}`;
   return {
     EventType: "messages",
@@ -105,9 +107,17 @@ const evento = (chat: Record<string, unknown> = {}) => {
       text: "olá",
       content: "olá",
       messageTimestamp: 1785817572632,
+      ...message,
     },
   };
 };
+
+/** Primeiro contato partindo da corretora: o chat ainda não existe do lado do provedor. */
+const eventoDaCorretora = (chat: Record<string, unknown> = {}) =>
+  evento(
+    { wa_name: null, wa_contactName: null, lead_name: null, ...chat },
+    { fromMe: true, senderName: "Cleya Corretora" },
+  );
 
 const post = (body: Record<string, unknown>) =>
   app.inject({ method: "POST", url: `/webhooks/uazapi/${instanceId}/${SECRET}`, payload: body });
@@ -338,6 +348,7 @@ describe("automação na entrada de mensagem", () => {
         conversationId: conversa.id,
         clientId: null,
         ambiguous: false,
+        isGroup: false,
         suggestedName: "Direto",
         phone: "554398414905",
       }),
@@ -361,5 +372,92 @@ describe("automação na entrada de mensagem", () => {
     await post(evento({ wa_name: null, wa_contactName: null, lead_name: null }));
 
     expect((await leadDaConversa())?.name).toBe("(43) 9841-4904");
+  });
+});
+
+/**
+ * O caso que a produção mostrou em 2026-08-10: 28 dos 29 leads batizados com o próprio telefone
+ * nasceram de uma mensagem da corretora, não do cliente. Quando quem escreve primeiro é a
+ * imobiliária o chat ainda não existe do lado do provedor, e o único nome no envelope é o perfil da
+ * própria instância.
+ */
+describe("conversa iniciada pela corretora", () => {
+  it("não batiza o lead com o nome do perfil da instância", async () => {
+    await configurar();
+
+    await post(eventoDaCorretora());
+
+    expect((await leadDaConversa())?.name).toBe("(43) 9841-4904");
+  });
+
+  it("o nome que chega depois corrige o lead e o título do negócio", async () => {
+    await configurar();
+    await post(eventoDaCorretora());
+    expect((await leadDaConversa())?.name).toBe("(43) 9841-4904");
+
+    await post(evento());
+
+    const lead = await leadDaConversa();
+    expect(lead?.name).toBe("Fulano da Silva");
+    // renomear escreve só o nome: mexer na chave do telefone faria o lead parar de casar com a
+    // própria conversa, e a mensagem seguinte criaria um segundo card para a mesma pessoa
+    expect(lead?.phoneKey).toBe("4398414904");
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+    expect(negocio.title).toBe("Atendimento — Fulano da Silva");
+  });
+
+  it("nome escolhido por gente não é sobrescrito pelo WhatsApp", async () => {
+    await configurar();
+    await post(eventoDaCorretora());
+    const lead = await leadDaConversa();
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/clients/${lead?.id}`,
+      headers: { cookie },
+      payload: { name: "Dona Maria" },
+    });
+    await post(evento());
+
+    expect((await leadDaConversa())?.name).toBe("Dona Maria");
+    const negocio = await prisma.deal.findFirstOrThrow({ where: { organizationId: orgId } });
+    expect(negocio.title).toBe("Atendimento — Dona Maria");
+  });
+});
+
+describe("grupo não é lead", () => {
+  const GRUPO = "120363000000000001@g.us";
+  const eventoDeGrupo = () =>
+    evento(
+      { wa_chatid: GRUPO, wa_isGroup: true, wa_name: "Sonho do apartamento" },
+      { chatid: GRUPO, isGroup: true },
+    );
+
+  it("mensagem de grupo não cria lead nem card", async () => {
+    await configurar();
+
+    await post(eventoDeGrupo());
+
+    const conversa = await prisma.conversation.findFirstOrThrow({ where: { organizationId: orgId } });
+    expect(conversa.isGroup).toBe(true);
+    expect(conversa.clientId).toBeNull();
+    expect(await prisma.client.count({ where: { organizationId: orgId } })).toBe(0);
+    expect(await prisma.deal.count({ where: { organizationId: orgId } })).toBe(0);
+  });
+
+  it("o nome do grupo não renomeia um lead já vinculado à conversa", async () => {
+    await configurar();
+    const lead = await prisma.client.create({
+      data: { organizationId: orgId, name: "(43) 9841-4904", phone: "(43) 9841-4904", phoneKey: "4398414904" },
+    });
+
+    await post(eventoDeGrupo());
+    const conversa = await prisma.conversation.findFirstOrThrow({ where: { organizationId: orgId } });
+    await prisma.conversation.update({ where: { id: conversa.id }, data: { clientId: lead.id } });
+    await post(eventoDeGrupo());
+
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: lead.id } })).name).toBe(
+      "(43) 9841-4904",
+    );
   });
 });

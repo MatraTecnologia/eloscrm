@@ -83,6 +83,7 @@ export const processMessageEvent = async (job: MessageJob) => {
     conversationId: conversation.id,
     clientId: vinculo.clientId,
     ambiguous: vinculo.ambiguous,
+    isGroup: parsedChat.isGroup,
     suggestedName: parsedChat.suggestedName,
     phone: parsedChat.phone,
   }).catch(() => undefined);

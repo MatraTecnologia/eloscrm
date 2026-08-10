@@ -64,6 +64,7 @@ pnpm db:generate                          # prisma generate (client em src/gener
 pnpm db:seed                              # tsx prisma/seed.ts
 pnpm audit:purge [--days N] [--dry-run]   # purga da auditoria por retenção (sem Redis, é a rotina)
 pnpm audit:backfill-labels [--dry-run]    # rótulo nos eventos gravados antes da coluna existir
+pnpm backfill:lead-names [--apply]        # leads e cards que ficaram chamados pelo telefone
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
@@ -186,6 +187,26 @@ de diagnóstico e precisa de fila e limite.
 **Perder a `UAZAPI_TOKEN_ENCRYPTION_KEY` inutiliza todos os tokens salvos** (AES-256-GCM em
 `src/lib/crypto.ts`). Ela pertence ao cofre de produção, junto com `BETTER_AUTH_SECRET`.
 
+**Automação de leads: grupo fica de fora, e o nome do lead tem uma janela.** Conversa em grupo é
+ingerida e aparece na tela de conversas, mas `applyToConversation` sai antes de criar qualquer coisa:
+o `chat.phone` de um grupo não é o telefone de ninguém (em produção veio o número da própria
+instância, o que gerou dois leads apontando para a corretora) e o `wa_name` é o nome do grupo. Sem
+esse guard, seis grupos viraram lead — cinco com card no funil, incluindo o de alertas da empresa.
+
+Quando quem escreve primeiro é a corretora, o chat ainda não existe do lado do provedor e o envelope
+vem sem nome: o lead nasce chamado pelo próprio telefone — 28 dos 29 casos apurados em produção em
+2026-08-10. O nome só chega quando o cliente responde, e `renameIfAutoNamed` o aplica **enquanto o
+nome ainda for exatamente o telefone formatado**; nome digitado por gente nunca é sobrescrito.
+⚠️ **Nunca use `message.senderName` como sugestão de nome**: em mensagem `fromMe` ele é o perfil da
+instância, e os 2431 envios observados traziam um único valor — o nome da imobiliária. Cair nele
+batizaria todo lead de primeiro contato com o nome da própria empresa.
+
+Renomear o lead também renomeia os cards cujo título ainda é o `autoDealTitle` do nome antigo
+(`clients.service.ts`, um evento de auditoria por card). O kanban mostra o **título** em destaque e o
+nome do lead só na linha de baixo — sem isso, salvar o nome não mudava nada na tela, que foi
+exatamente a queixa que abriu essa investigação. Para o que já está gravado:
+`pnpm backfill:lead-names` (dry-run por padrão; também lista os leads-grupo, sem apagar nenhum).
+
 **Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
 a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
 
@@ -253,4 +274,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   retenção/LGPD, rate limit no webhook. São decisões adiadas com o motivo registrado, não bugs;
   leia antes de propor qualquer um deles como "melhoria óbvia".
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-06 12:35 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 15:39 (-03)

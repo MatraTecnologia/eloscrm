@@ -73,6 +73,9 @@ export const useUpdateClient = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // renomear o lead renomeia junto os cards de título automático: sem isto o funil serviria o
+      // título velho do cache por até 30s, e salvar o nome continuaria parecendo não ter efeito
+      qc.invalidateQueries({ queryKey: ["deals"] });
       qc.invalidateQueries({ queryKey: ["audit-events"] });
       qc.invalidateQueries({ queryKey: ["timeline"] });
       qc.invalidateQueries({ queryKey: ["agenda"] });
