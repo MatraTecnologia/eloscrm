@@ -1,6 +1,7 @@
 import { ClientSource, ClientStatus } from "../../generated/prisma/client.js";
 import { AUTOMATION_ACTOR } from "../../lib/actor.js";
 import { autoDealTitle } from "../../lib/deal-title.js";
+import { isAutoNamed } from "../../lib/lead-name.js";
 import { formatBrPhone } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
 import * as clients from "../clients/clients.service.js";
@@ -101,7 +102,7 @@ const renameIfAutoNamed = async (orgId: string, clientId: string, suggested: str
     where: { id: clientId, organizationId: orgId },
     select: { name: true, phone: true },
   });
-  if (!client || client.name === name || client.name !== formatBrPhone(client.phone)) return;
+  if (!client || client.name === name || !isAutoNamed(client)) return;
 
   await clients.update(orgId, clientId, { name }, AUTOMATION_ACTOR);
 };

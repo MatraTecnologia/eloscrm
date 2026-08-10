@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Search, Snowflake, Sun, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Snowflake, Sun, Trash2, UserRoundPen } from "lucide-react";
 import { toast } from "sonner";
-import { useClients, useDeleteClient } from "@/lib/queries/clients";
+import { useClients, useDeleteClient, useNameFixes } from "@/lib/queries/clients";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { formatPhone } from "@/lib/labels";
 import { useOrgDeals } from "@/lib/queries/deals";
@@ -52,6 +52,8 @@ export default function ClientsPage() {
   const { deals, isLoading: loadingDeals } = useOrgDeals();
   const { data: org, isPending: loadingOrg } = useActiveOrganization();
   const remove = useDeleteClient();
+  const { data: nameFixesData } = useNameFixes();
+  const nameFixes = nameFixesData ?? [];
   const hasOrg = !!org;
 
   const statsByClient = useMemo(() => {
@@ -81,13 +83,21 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-semibold">Clientes</h1>
           <p className="text-muted-foreground">Leads e contatos da imobiliária.</p>
         </div>
-        <ClientDialog
-          trigger={
-            <Button disabled={!hasOrg}>
-              <Plus className="size-4" /> Novo cliente
+        <div className="flex items-center gap-2">
+          {/* só aparece quando há o que corrigir: atalho para um mutirão, não item fixo de menu */}
+          {nameFixes.length > 0 && (
+            <Button variant="outline" nativeButton={false} render={<Link href="/clients/nomes" />}>
+              <UserRoundPen className="size-4" /> Corrigir nomes ({nameFixes.length})
             </Button>
-          }
-        />
+          )}
+          <ClientDialog
+            trigger={
+              <Button disabled={!hasOrg}>
+                <Plus className="size-4" /> Novo cliente
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       {!loadingOrg && !hasOrg && (

@@ -4,11 +4,13 @@ import { authGuard } from "../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../plugins/org-guard.js";
 import { actorOf } from "../../../lib/actor.js";
 import {
+  applyNameFixesSchema,
   createClientSchema,
   listClientsQuerySchema,
   updateClientSchema,
 } from "../../../modules/clients/clients.schema.js";
 import * as service from "../../../modules/clients/clients.service.js";
+import * as nameFix from "../../../modules/clients/name-fix.service.js";
 import { nurtureSchema, reactivateSchema } from "../../../modules/clients/nurture.schema.js";
 import * as nurtureService from "../../../modules/clients/nurture.service.js";
 import { timelineQuerySchema } from "../../../modules/timeline/timeline.schema.js";
@@ -27,6 +29,15 @@ const clientsRoutes = async (app: FastifyInstance) => {
     const data = createClientSchema.parse(request.body);
     const client = await service.create(request.orgId!, data, actorOf(request));
     return reply.status(201).send(client);
+  });
+
+  // antes de `/:id` por leitura, não por necessidade: o roteador do Fastify prefere o segmento
+  // estático de qualquer jeito, mas quem lê o arquivo não deveria ter de saber disso
+  app.get("/name-fixes", async (request) => nameFix.listAutoNamed(request.orgId!));
+
+  app.post("/name-fixes", async (request) => {
+    const { items } = applyNameFixesSchema.parse(request.body);
+    return nameFix.applyFixes(request.orgId!, items, actorOf(request));
   });
 
   app.get("/:id", async (request) => {

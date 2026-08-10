@@ -207,6 +207,17 @@ nome do lead só na linha de baixo — sem isso, salvar o nome não mudava nada 
 exatamente a queixa que abriu essa investigação. Para o que já está gravado:
 `pnpm backfill:lead-names` (dry-run por padrão; também lista os leads-grupo, sem apagar nenhum).
 
+**A imobiliária resolve sozinha pela tela `/clients/nomes`** (`GET`/`POST /v1/clients/name-fixes`, no
+mesmo arquivo de rota dos clientes, para herdar os guards). `listAutoNamed` devolve **todos** os
+leads chamados pelo telefone, não só os que têm sugestão: metade dos casos é de conversa em que
+ninguém respondeu, e essas precisam de alguém digitando. `applyFixes` passa por `clients.update` um a
+um, de propósito — é o que grava a auditoria com quem clicou (`USER`, não `AUTOMATION`) e leva o nome
+para os cards; e confere o dono de **todos** os ids antes da primeira escrita, senão um id de outra
+imobiliária no meio do lote aplicaria metade antes de estourar. O predicado do lead auto-nomeado e a
+precedência da sugestão vivem em `src/lib/lead-name.ts`, compartilhados pelos três caminhos que
+renomeiam (ingestão, tela e backfill) — se cada um decidisse por conta, o mesmo lead seria corrigível
+num lugar e intocável no outro.
+
 **Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
 a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
 
@@ -274,4 +285,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   retenção/LGPD, rate limit no webhook. São decisões adiadas com o motivo registrado, não bugs;
   leia antes de propor qualquer um deles como "melhoria óbvia".
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 15:39 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 16:16 (-03)

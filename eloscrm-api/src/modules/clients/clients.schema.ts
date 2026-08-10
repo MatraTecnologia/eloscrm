@@ -46,6 +46,19 @@ export const listClientsQuerySchema = z.object({
     .transform((value) => value === "true"),
 });
 
+/**
+ * O teto de 200 é o que uma tela de correção manda de uma vez com folga — a maior lista observada
+ * tinha 29 itens. Serve para que um cliente com defeito não abra um laço de milhares de updates
+ * auditados numa request só.
+ */
+export const applyNameFixesSchema = z.object({
+  items: z
+    .array(z.object({ clientId: z.string().min(1), name: z.string().trim().min(1) }))
+    .min(1)
+    .max(200),
+});
+
 export type CreateClientInput = z.infer<typeof createClientSchema>;
+export type ApplyNameFixesInput = z.infer<typeof applyNameFixesSchema>;
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type ListClientsQuery = z.infer<typeof listClientsQuerySchema>;

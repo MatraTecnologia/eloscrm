@@ -41,6 +41,58 @@ export const useClients = (filters?: ClientFilters) => {
   });
 };
 
+/** Um lead que ficou chamado pelo próprio telefone, com o nome que o WhatsApp sabe. */
+export type ClientNameFix = {
+  clientId: string;
+  currentName: string;
+  phone: string | null;
+  suggestion: string | null;
+  /** CONTACT = contato salvo na agenda; PROFILE = nome do perfil do WhatsApp */
+  source: "CONTACT" | "PROFILE" | null;
+  deals: number;
+  lastMessageAt: string | null;
+};
+
+export type NameFixResult = {
+  clientId: string;
+  status: "applied" | "skipped";
+  name: string;
+  reason?: string;
+};
+
+export const useNameFixes = () => {
+  const { data: org } = useActiveOrganization();
+  return useQuery({
+    queryKey: ["name-fixes", org?.id],
+    queryFn: async () => {
+      const { data } = await api.get<ClientNameFix[]>("/clients/name-fixes");
+      return data;
+    },
+    enabled: !!org?.id,
+  });
+};
+
+export const useApplyNameFixes = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: { clientId: string; name: string }[]) => {
+      const { data } = await api.post<{ applied: number; results: NameFixResult[] }>(
+        "/clients/name-fixes",
+        { items },
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["name-fixes"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      // renomear o lead renomeia junto os cards de título automático
+      qc.invalidateQueries({ queryKey: ["deals"] });
+      qc.invalidateQueries({ queryKey: ["audit-events"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+  });
+};
+
 export const useClient = (id: string) => {
   const { data: org } = useActiveOrganization();
   return useQuery({

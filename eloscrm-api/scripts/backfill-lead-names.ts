@@ -27,6 +27,7 @@
  */
 import "dotenv/config";
 import { autoDealTitle } from "../src/lib/deal-title.js";
+import { isAutoNamed, suggestedNameOf } from "../src/lib/lead-name.js";
 import { formatBrPhone } from "../src/lib/phone.js";
 import { prisma } from "../src/lib/prisma.js";
 
@@ -43,13 +44,10 @@ const renomearLeads = async () => {
   });
 
   const pendentes = conversas
-    .map((conversa) => ({
-      client: conversa.client!,
-      nome: (conversa.contactName ?? conversa.waName ?? "").trim(),
-    }))
+    .map((conversa) => ({ client: conversa.client!, nome: suggestedNameOf(conversa) }))
     .filter(
-      ({ client, nome }) =>
-        nome.length > 0 && client.name !== nome && client.name === formatBrPhone(client.phone),
+      (item): item is { client: (typeof item)["client"]; nome: string } =>
+        item.nome !== null && item.client.name !== item.nome && isAutoNamed(item.client),
     );
 
   console.log(`\nnomes: ${pendentes.length} lead(s) chamados pelo telefone com nome disponível`);
