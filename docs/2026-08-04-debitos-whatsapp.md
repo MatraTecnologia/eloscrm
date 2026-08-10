@@ -28,7 +28,10 @@ automação de leads no ar. Specs de referência:
 > pronto funciona, gravar não.
 >
 > Em desenvolvimento o ciclo não fecha, pelo motivo previsto abaixo: a uazapi não alcança o storage
-> local. O contrato está coberto por teste com o provedor mockado.
+> local, então o contrato local é coberto por teste com o provedor mockado. **O round-trip real foi
+> validado em produção em 2026-08-10**: a mídia enviada pela tela chegou no WhatsApp de destino, o
+> que confirma que o presigned do Cloudflare R2 é alcançável pelos servidores da uazapi — a premissa
+> de que todo este caminho depende.
 
 **O que doía.** O corretor **recebe** foto, áudio, documento, gif, figurinha e vídeo — e só consegue
 **responder texto**. `conversations.service.sendText` é a única saída. Na prática ele pega o celular
