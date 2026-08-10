@@ -21,6 +21,15 @@ const Inbox = () => {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
 
+  // O texto da busca entra na query key, e cada tecla abriria uma consulta nova — mais a lista nova
+  // que o observer da rolagem infinita passaria a paginar. Com a espera, uma palavra digitada vira
+  // uma consulta só; o campo continua respondendo na hora porque quem o controla é `busca`.
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setBuscaAplicada(busca.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [busca]);
+
   // `history: "push"` porque o botão voltar do celular precisa devolver para a lista, como em
   // qualquer mensageiro; com o `replace` padrão do nuqs ele sairia da tela de conversas inteira.
   const [selecionada, setSelecionada] = useQueryState(CONVERSA_PARAM, { history: "push" });
@@ -34,7 +43,7 @@ const Inbox = () => {
 
   const { conversations, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useConversations({
-      q: busca.trim() || undefined,
+      q: buscaAplicada || undefined,
       unread: filtro === "nao-lidas" || undefined,
       archived: filtro === "arquivadas" || undefined,
     });
