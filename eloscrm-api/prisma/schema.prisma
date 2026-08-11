@@ -668,6 +668,9 @@ model WhatsappMessage {
   mediaWidth    Int?
   mediaHeight   Int?
   // JPEGThumbnail em base64, direto do webhook: preview instantâneo, sem chamada externa
+  // Enquete: `{ name, options[], multiple }`. Os votos chegam em evento separado e não são
+  // ingeridos — o cartão mostra a pergunta e as opções, sem contagem.
+  poll          Json?
   // Localização compartilhada: `{ lat, lng, name?, address?, url? }`. O mapa estático que vem no
   // mesmo envelope é lido como `mediaThumb`, junto com o de foto e vídeo.
   location      Json?

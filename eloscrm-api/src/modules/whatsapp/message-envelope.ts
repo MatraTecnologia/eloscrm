@@ -165,6 +165,45 @@ export const parseLocation = (message: Record<string, unknown>): ParsedLocation 
   };
 };
 
+/** Enquete criada na conversa. Os votos vêm em evento próprio e não entram aqui. */
+export type ParsedPoll = {
+  name: string;
+  options: string[];
+  /** `selectableOptionsCount` 0 é o "pode marcar várias" do WhatsApp; 1 é escolha única */
+  multiple: boolean;
+};
+
+/**
+ * Lê a enquete de `content`.
+ *
+ * O conteúdo vem sob `pollCreationMessageV3` — e o sufixo é versão do protocolo, então a busca é por
+ * prefixo: uma `V4` amanhã continuaria funcionando, e é barato prevenir isso agora. Como reserva
+ * fica o `convertOptions`, que o provedor manda com as opções separadas por `|` e existe em todas as
+ * versões observadas.
+ */
+export const parsePoll = (message: Record<string, unknown>): ParsedPoll | null => {
+  const content = asRecord(message.content);
+  const chave = Object.keys(content).find((nome) => nome.startsWith("pollCreationMessage"));
+  const poll = chave ? asRecord(content[chave]) : {};
+
+  const doProvedor = Array.isArray(poll.options)
+    ? poll.options.flatMap((item) => {
+        const nome = str(asRecord(item).optionName);
+        return nome ? [nome] : [];
+      })
+    : [];
+
+  const options =
+    doProvedor.length > 0
+      ? doProvedor
+      : (str(message.convertOptions)?.split("|").map((opcao) => opcao.trim()) ?? []).filter(Boolean);
+
+  const name = str(poll.name) ?? str(message.text);
+  if (!name || options.length === 0) return null;
+
+  return { name, options, multiple: int(poll.selectableOptionsCount) !== 1 };
+};
+
 export type ParsedConversation = {
   chatid: string;
   phone: string | null;
@@ -193,6 +232,7 @@ export type ParsedMessage = {
   hasMedia: boolean;
   contacts: ParsedContact[] | null;
   location: ParsedLocation | null;
+  poll: ParsedPoll | null;
   mediaMime: string | null;
   mediaSize: number | null;
   mediaFilename: string | null;
@@ -259,6 +299,7 @@ export const parseMessage = (body: Record<string, unknown>): ParsedMessage | nul
     hasMedia: mediaType !== null && DOWNLOADABLE.has(mediaType),
     contacts: parseContacts(message),
     location: parseLocation(message),
+    poll: parsePoll(message),
     mediaMime: str(content.mimetype),
     mediaSize: int(content.fileLength),
     mediaFilename: str(content.fileName),

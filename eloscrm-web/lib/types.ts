@@ -499,6 +499,7 @@ export type ConversationPreview = {
   mediaDuration: number | null;
   contacts: SharedContact[] | null;
   location: SharedLocation | null;
+  poll: SharedPoll | null;
   deletedAt: string | null;
 };
 
@@ -513,6 +514,14 @@ export type WhatsappQuoted = {
   mediaThumb: string | null;
   // apagada no WhatsApp: a API não manda o conteúdo, só o marcador
   deletedAt: string | null;
+};
+
+/** Enquete criada na conversa. Os votos vêm em evento próprio e a ingestão não os consome. */
+export type SharedPoll = {
+  name: string;
+  options: string[];
+  /** true quando dá para marcar mais de uma */
+  multiple: boolean;
 };
 
 /** Localização compartilhada. `name`/`address` só vêm quando é um lugar, não um ponto no mapa. */
@@ -580,6 +589,7 @@ export type WhatsappMessage = {
   // contato compartilhado, já traduzido do vCard pela ingestão
   contacts: SharedContact[] | null;
   location: SharedLocation | null;
+  poll: SharedPoll | null;
   // já resolvida pela API (R2 presigned ou URL temporária do provedor); null se indisponível
   mediaUrl: string | null;
   mediaSource: "r2" | "provider" | null;

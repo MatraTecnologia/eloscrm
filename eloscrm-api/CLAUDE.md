@@ -232,6 +232,13 @@ coluna `location`. Coordenada `(0, 0)` é descartada — é o que sobra quando o
 no meio do Atlântico. O backfill dessas só recupera o **tipo**: as coordenadas nunca foram gravadas,
 e o `text` vem vazio, então a bolha antiga mostra o mapa sem virar link.
 
+Enquete é o terceiro caso do mesmo formato: o tipo já era reconhecido (`type: "poll"`), mas as
+opções se perdiam e a bolha mostrava só a pergunta. `parsePoll` busca o bloco por **prefixo**
+(`pollCreationMessage…`) porque o sufixo é versão de protocolo — uma `V4` amanhã continua
+funcionando —, com `convertOptions` (opções separadas por `|`) como reserva. `selectableOptionsCount`
+1 é escolha única; 0 é "pode marcar várias". **Voto não é ingerido**: chega em evento próprio, então
+o cartão mostra as opções sem contagem em vez de afirmar "0 votos".
+
 O vCard é lido na **ingestão** (`parseContacts`) e guardado já traduzido na coluna `contacts`
 (`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
 `X-WA-BIZ-DESCRIPTION` — texto de propaganda com emoji e quebras de linha que ninguém exibe. Para o
@@ -323,4 +330,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 20:45 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 21:38 (-03)

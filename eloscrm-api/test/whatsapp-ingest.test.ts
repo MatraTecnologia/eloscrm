@@ -461,3 +461,85 @@ describe("localização compartilhada", () => {
     expect((await mensagemSalva()).location).toBeNull();
   });
 });
+
+/**
+ * Enquete — os dois formatos do tráfego real de 2026-08-10.
+ *
+ * O tipo já era reconhecido (`type: "poll"` no envelope), mas as opções se perdiam: a bolha mostrava
+ * só o `text`, que é a pergunta. `selectableOptionsCount` 1 é escolha única; 0 é o "pode marcar
+ * várias" do WhatsApp.
+ */
+describe("enquete", () => {
+  const mensagemSalva = () =>
+    prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId } });
+
+  const enquete = (
+    nome: string,
+    opcoes: string[],
+    selectableOptionsCount: number,
+    messageid: string,
+  ) =>
+    evento({
+      messageid,
+      type: "poll",
+      mediaType: "",
+      messageType: "PollCreationMessageV3",
+      text: nome,
+      convertOptions: opcoes.join("|"),
+      content: {
+        messageContextInfo: { deviceListMetadataVersion: 2 },
+        pollCreationMessageV3: {
+          name: nome,
+          options: opcoes.map((optionName) => ({ optionName })),
+          selectableOptionsCount,
+        },
+      },
+    });
+
+  it("escolha única guarda pergunta e opções na ordem", async () => {
+    await post(enquete("Teste", ["Opção 1", "Opção 2"], 1, "POLL1"));
+
+    const salva = await mensagemSalva();
+    expect(salva.type).toBe("poll");
+    expect(salva.poll).toEqual({
+      name: "Teste",
+      options: ["Opção 1", "Opção 2"],
+      multiple: false,
+    });
+  });
+
+  it("selectableOptionsCount 0 é múltipla escolha", async () => {
+    await post(enquete("Teste 2", ["Opção 2", "Opção 1", "Opção 3"], 0, "POLL2"));
+
+    const salva = await mensagemSalva();
+    expect(salva.poll).toMatchObject({ options: ["Opção 2", "Opção 1", "Opção 3"], multiple: true });
+  });
+
+  it("sem o bloco da enquete, as opções saem do convertOptions", async () => {
+    // o sufixo de `pollCreationMessageV3` é versão do protocolo; se mudar, o campo em texto sustenta
+    await post(
+      evento({
+        messageid: "POLL3",
+        type: "poll",
+        messageType: "PollCreationMessageV9",
+        text: "Qual horário?",
+        convertOptions: "Manhã|Tarde",
+        content: { messageContextInfo: {} },
+      }),
+    );
+
+    expect((await mensagemSalva()).poll).toEqual({
+      name: "Qual horário?",
+      options: ["Manhã", "Tarde"],
+      multiple: true,
+    });
+  });
+
+  it("enquete sem opção nenhuma não vira cartão vazio", async () => {
+    await post(
+      evento({ messageid: "POLL4", type: "poll", text: "Sem opções", content: {} }),
+    );
+
+    expect((await mensagemSalva()).poll).toBeNull();
+  });
+});

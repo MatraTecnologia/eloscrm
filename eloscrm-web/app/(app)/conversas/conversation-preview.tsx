@@ -67,6 +67,9 @@ const resumo = (message: Preview) => {
     }
     case "document":
       return message.mediaFilename?.trim() || rotulo;
+    // a pergunta identifica a enquete melhor que a palavra "Enquete"
+    case "poll":
+      return message.poll?.name?.trim() || message.text?.trim() || rotulo;
     // o nome do lugar diz mais que "Localização"; ponto solto no mapa não tem nome e fica no rótulo
     case "location":
       return message.location?.name?.trim() || rotulo;
