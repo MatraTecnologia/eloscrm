@@ -241,10 +241,22 @@ funcionando —, com `convertOptions` (opções separadas por `|`) como reserva.
 **O voto (`PollUpdateMessage`) atualiza a enquete, como a reação atualiza a bolha** — não vira linha
 na conversa. Ingerido como mensagem ele produzia uma bolha órfã por voto e, sem texto nem mídia,
 ainda caía no cartão genérico de "Arquivo". `applyVote` (`votes.service.ts`) acha a enquete pelo
-`content.pollCreationMessageKey.ID` (ou pelo `quoted`) e substitui o voto **da mesma pessoa** —
-trocar de opção emite outro evento. O voto vem decifrado em `message.vote`; o `content.vote` é o
-payload cifrado e não precisa ser aberto. ⚠️ `pollCreationMessageKey` começa com o mesmo prefixo do
-bloco de criação: `parsePoll` a exclui explicitamente, senão um voto passaria por enquete nova.
+`content.pollCreationMessageKey.ID` (ou pelo `quoted`) e **substitui** o voto da mesma pessoa.
+Substituir é o certo porque cada mudança manda o estado completo: marcar a segunda opção de uma
+enquete múltipla chega como `"Opção 1, Opção 2"`, não só a nova. Desmarcar tudo chega como
+`vote: ""` e **remove** o voto, como o emoji vazio desfaz uma reação.
+
+Três armadilhas, todas confirmadas no tráfego de 2026-08-10:
+
+- **O gatilho é a `pollCreationMessageKey`, não o texto do voto.** Exigir texto fazia o "desmarcar"
+  (`vote: ""`) cair no fluxo normal e virar bolha na conversa. E não pode ser o `quoted` sozinho:
+  resposta de texto citando a enquete também o traz, e viraria voto.
+- **`pollCreationMessageKey` começa com o mesmo prefixo do bloco de criação** —
+  `parsePoll` a exclui explicitamente, senão um voto passaria por enquete nova.
+- **As opções vêm juntas, separadas por vírgula, e nome de opção também pode ter vírgula.**
+  `resolveChoices` desempata pela lista da própria enquete: tenta o texto inteiro como uma opção,
+  depois divide e fica com o que casa. O voto vem decifrado em `message.vote`; o `content.vote` é o
+  payload cifrado e não precisa ser aberto.
 
 O vCard é lido na **ingestão** (`parseContacts`) e guardado já traduzido na coluna `contacts`
 (`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
@@ -337,4 +349,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 21:55 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 22:05 (-03)

@@ -6,7 +6,8 @@ import type { ParsedMessage } from "./message-envelope.js";
 export type PollVote = {
   voter: string;
   voterName: string | null;
-  choice: string;
+  /** uma opção na enquete de escolha única; todas as marcadas na de múltipla */
+  choices: string[];
   votedAt: string;
 };
 
@@ -25,17 +26,39 @@ const voterOf = (fromMe: boolean, senderLid: string | null) =>
   fromMe ? "me" : (senderLid ?? "them");
 
 /**
+ * Separa as opções votadas.
+ *
+ * O provedor junta tudo com vírgula, e nome de opção também pode ter vírgula — então a lista da
+ * própria enquete é que desempata: primeiro tenta o texto inteiro como uma opção só (o caso de
+ * `"Sim, quero"` votado sozinho), depois divide e fica com os pedaços que são opções conhecidas.
+ * Se nada casar, guarda como veio: um voto estranho registrado é melhor que um voto perdido.
+ *
+ * O limite conhecido é a combinação das duas coisas — duas opções marcadas, uma delas com vírgula no
+ * nome. Aí não há como separar sem ambiguidade, e nenhum formato do provedor resolve isso.
+ */
+const resolveChoices = (texto: string, options: string[]): string[] => {
+  if (options.includes(texto)) return [texto];
+
+  const partes = texto
+    .split(",")
+    .map((parte) => parte.trim())
+    .filter(Boolean);
+  const conhecidas = partes.filter((parte) => options.includes(parte));
+
+  return conhecidas.length > 0 ? conhecidas : partes;
+};
+
+/**
  * Aplica o voto que chegou pelo webhook.
  *
  * **Voto não é mensagem.** O WhatsApp mostra o resultado dentro da própria enquete, e ingerir o
  * `PollUpdateMessage` como linha da conversa produzia uma bolha órfã por voto — que, sem texto nem
  * mídia, ainda caía no cartão genérico de arquivo. É o mesmo tratamento que a reação já recebia.
  *
- * O voto substitui o anterior **da mesma pessoa**: trocar de opção no WhatsApp emite outro
- * `PollUpdateMessage`, e sem substituir a enquete acumularia os dois. Enquete de múltipla escolha
- * manda um evento por opção marcada e, por ora, o mesmo votante fica com a última — não observamos
- * tráfego suficiente para saber se o provedor reenvia a lista inteira a cada mudança, e inventar a
- * regra errada aqui daria uma contagem que ninguém consegue explicar.
+ * O voto substitui o anterior **da mesma pessoa**: cada mudança emite outro `PollUpdateMessage` com
+ * o estado completo — em enquete de múltipla escolha, marcar a segunda opção manda
+ * `"Opção 1, Opção 2"`, não só a nova (confirmado no tráfego de 2026-08-10). Substituir é, portanto,
+ * o comportamento certo; acumular duplicaria a primeira.
  *
  * Enquete fora da nossa base (anterior à integração) é ignorada em silêncio, como o alvo
  * desconhecido de uma reação: não há onde pendurar o voto, e recusar só encheria `/webhook/errors`.
@@ -51,16 +74,26 @@ export const applyVote = async (orgId: string, conversationId: string, parsed: P
 
   const poll = enquete.poll as StoredPoll;
   const voter = voterOf(parsed.direction === WhatsappDirection.outbound, parsed.senderLid);
+  const semVoto = (poll.votes ?? []).filter((voto) => voto.voter !== voter);
 
-  const votes: PollVote[] = [
-    ...(poll.votes ?? []).filter((voto) => voto.voter !== voter),
-    {
-      voter,
-      voterName: parsed.senderName,
-      choice: parsed.vote.choice,
-      votedAt: parsed.sentAt.toISOString(),
-    },
-  ];
+  // Desmarcar tudo chega como `vote: ""` — o voto sai da enquete, exatamente como a reação some
+  // quando a pessoa desfaz o emoji.
+  const choices = parsed.vote.choicesText
+    ? resolveChoices(parsed.vote.choicesText, poll.options ?? [])
+    : [];
+
+  const votes: PollVote[] =
+    choices.length > 0
+      ? [
+          ...semVoto,
+          {
+            voter,
+            voterName: parsed.senderName,
+            choices,
+            votedAt: parsed.sentAt.toISOString(),
+          },
+        ]
+      : semVoto;
 
   await prisma.whatsappMessage.update({
     where: { id: enquete.id },

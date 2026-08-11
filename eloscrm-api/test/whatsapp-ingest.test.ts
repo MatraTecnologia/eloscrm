@@ -610,7 +610,7 @@ describe("voto em enquete", () => {
 
     expect((await enquete()).poll).toMatchObject({
       name: "Enquete 1",
-      votes: [{ choice: "Opção 1", voterName: "Bruno Zielinski" }],
+      votes: [{ choices: ["Opção 1"], voterName: "Bruno Zielinski" }],
     });
   });
 
@@ -619,9 +619,9 @@ describe("voto em enquete", () => {
     await votar("Opção 1", "VOTO3");
     await votar("Opção 3", "VOTO4");
 
-    const poll = (await enquete()).poll as { votes: { choice: string }[] };
+    const poll = (await enquete()).poll as { votes: { choices: string[] }[] };
     expect(poll.votes).toHaveLength(1);
-    expect(poll.votes[0]!.choice).toBe("Opção 3");
+    expect(poll.votes[0]!.choices).toEqual(["Opção 3"]);
   });
 
   it("votos de pessoas diferentes convivem", async () => {
@@ -643,8 +643,91 @@ describe("voto em enquete", () => {
       ),
     );
 
-    const poll = (await enquete()).poll as { votes: { choice: string }[] };
+    const poll = (await enquete()).poll as { votes: { choices: string[] }[] };
     expect(poll.votes).toHaveLength(2);
+  });
+
+  it("múltipla escolha vem com todas as opções marcadas, separadas por vírgula", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTOM1");
+    // o provedor reenvia o estado completo, não só a opção nova
+    await votar("Opção 1, Opção 2", "VOTOM2");
+
+    const poll = (await enquete()).poll as { votes: { choices: string[] }[] };
+    expect(poll.votes).toHaveLength(1);
+    expect(poll.votes[0]!.choices).toEqual(["Opção 1", "Opção 2"]);
+  });
+
+  it("desmarcar uma opção reduz o voto ao que sobrou", async () => {
+    await criarEnquete();
+    await votar("Opção 1, Opção 2", "VOTOM3");
+    await votar("Opção 2", "VOTOM4");
+
+    const poll = (await enquete()).poll as { votes: { choices: string[] }[] };
+    expect(poll.votes[0]!.choices).toEqual(["Opção 2"]);
+  });
+
+  it("opção com vírgula no nome não é dividida ao meio", async () => {
+    await post(
+      evento({
+        messageid: "POLLV",
+        type: "poll",
+        messageType: "PollCreationMessageV3",
+        text: "Confirma?",
+        content: {
+          pollCreationMessageV3: {
+            name: "Confirma?",
+            options: [{ optionName: "Sim, quero" }, { optionName: "Não" }],
+            selectableOptionsCount: 1,
+          },
+        },
+      }),
+    );
+    await post(
+      evento({
+        messageid: "VOTOV",
+        type: "poll",
+        messageType: "PollUpdateMessage",
+        text: "",
+        vote: "Sim, quero",
+        quoted: "POLLV",
+        content: { pollCreationMessageKey: { ID: "POLLV" } },
+      }),
+    );
+
+    const salva = await prisma.whatsappMessage.findFirstOrThrow({
+      where: { organizationId: orgId, providerMessageId: "POLLV" },
+    });
+    expect((salva.poll as { votes: { choices: string[] }[] }).votes[0]!.choices).toEqual([
+      "Sim, quero",
+    ]);
+  });
+
+  it("desmarcar tudo tira o voto da enquete, sem virar bolha", async () => {
+    await criarEnquete();
+    await votar("Opção 1, Opção 2", "VOTOD1");
+    // desmarcar chega com o voto vazio, e continua sendo evento de voto
+    await votar("", "VOTOD2");
+
+    const poll = (await enquete()).poll as { votes: unknown[] };
+    expect(poll.votes).toEqual([]);
+    expect(await prisma.whatsappMessage.count({ where: { organizationId: orgId } })).toBe(1);
+  });
+
+  it("resposta de texto citando a enquete continua sendo mensagem", async () => {
+    await criarEnquete();
+    // o `quoted` sozinho não faz um voto: sem `pollCreationMessageKey` isto é uma resposta comum
+    await post(
+      evento({
+        messageid: "RESPOSTA1",
+        type: "text",
+        text: "Prefiro a primeira",
+        content: "Prefiro a primeira",
+        quoted: POLL_ID,
+      }),
+    );
+
+    expect(await prisma.whatsappMessage.count({ where: { organizationId: orgId } })).toBe(2);
   });
 
   it("voto em enquete que não temos é ignorado, sem virar bolha", async () => {

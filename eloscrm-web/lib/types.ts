@@ -530,7 +530,8 @@ export type SharedPoll = {
 export type PollVote = {
   voter: string;
   voterName: string | null;
-  choice: string;
+  /** uma opção na enquete de escolha única; todas as marcadas na de múltipla */
+  choices: string[];
   votedAt: string;
 };
 

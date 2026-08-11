@@ -37,7 +37,8 @@ export const PollCard = ({ poll, mine }: { poll: SharedPoll; mine: boolean }) =>
 
     <ul className="flex flex-col gap-1">
       {poll.options.map((opcao, indice) => {
-        const desta = votos.filter((voto) => voto.choice === opcao);
+        // múltipla escolha: o mesmo voto marca várias opções, então ele conta em cada uma delas
+        const desta = votos.filter((voto) => voto.choices.includes(opcao));
         const escolhida = desta.length > 0;
 
         return (

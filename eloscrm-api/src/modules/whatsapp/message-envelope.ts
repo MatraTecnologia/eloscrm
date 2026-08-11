@@ -212,8 +212,14 @@ export const parsePoll = (message: Record<string, unknown>): ParsedPoll | null =
 export type ParsedVote = {
   /** `messageid` da enquete respondida */
   pollId: string;
-  /** opção escolhida, em texto claro — o provedor já resolve o `encPayload` para nós */
-  choice: string;
+  /**
+   * O que foi votado, em texto claro — o provedor já resolve o `encPayload` para nós.
+   *
+   * Vem cru porque em enquete de múltipla escolha ele traz **todas** as opções marcadas separadas
+   * por vírgula (`"Opção 1, Opção 2"`), e separá-las com segurança exige saber quais são as opções
+   * da enquete — coisa que só quem carrega a mensagem original tem. Ver `applyVote`.
+   */
+  choicesText: string;
 };
 
 /**
@@ -223,15 +229,21 @@ export type ParsedVote = {
  * não precisamos abrir) e o alvo em dois lugares — `quoted` e `content.pollCreationMessageKey.ID`.
  * Os dois foram observados iguais em 2026-08-10; a chave do `content` é a fonte mais específica e
  * vem primeiro.
+ *
+ * **O gatilho é a `pollCreationMessageKey`, não o texto do voto.** Desmarcar tudo manda
+ * `vote: ""` e continua sendo evento de voto — exigir texto fazia essa mensagem cair no fluxo
+ * normal e virar bolha na conversa. E o gatilho não pode ser o `quoted` sozinho: uma resposta de
+ * texto citando a enquete também o traz, e viraria voto.
  */
 export const parseVote = (message: Record<string, unknown>): ParsedVote | null => {
   const content = asRecord(message.content);
-  const referencia = asRecord(content.pollCreationMessageKey);
-  const pollId = str(referencia.ID) ?? str(message.quoted);
-  const choice = str(message.vote)?.trim();
+  if (!content.pollCreationMessageKey) return null;
 
-  if (!pollId || !choice) return null;
-  return { pollId, choice };
+  const pollId = str(asRecord(content.pollCreationMessageKey).ID) ?? str(message.quoted);
+  if (!pollId) return null;
+
+  // vazio é "tirei meu voto", e é assim que ele chega
+  return { pollId, choicesText: str(message.vote)?.trim() ?? "" };
 };
 
 export type ParsedConversation = {
