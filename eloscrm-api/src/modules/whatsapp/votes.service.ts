@@ -11,6 +11,31 @@ export type PollVote = {
   votedAt: string;
 };
 
+/**
+ * Normaliza a enquete na saída da API.
+ *
+ * O voto já foi gravado com `choice` (uma opção) antes de o tráfego mostrar que múltipla escolha
+ * manda todas juntas. Esses registros existem em produção — o deploy saiu entre uma coisa e outra —,
+ * e sem tradução o front quebrava com `choices` indefinido ao abrir a conversa.
+ *
+ * Converter na leitura, e não por backfill, resolve o histórico e o que estiver em voo de uma vez:
+ * a próxima gravação já sai no formato novo.
+ */
+export const normalizePoll = <T>(poll: T): T => {
+  if (!poll || typeof poll !== "object") return poll;
+
+  const atual = poll as { votes?: { choices?: string[]; choice?: string }[] };
+  if (!Array.isArray(atual.votes)) return poll;
+
+  return {
+    ...atual,
+    votes: atual.votes.map((voto) => ({
+      ...voto,
+      choices: voto.choices ?? (voto.choice ? [voto.choice] : []),
+    })),
+  } as T;
+};
+
 type StoredPoll = {
   name: string;
   options: string[];

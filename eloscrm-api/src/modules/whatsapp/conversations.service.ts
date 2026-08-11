@@ -28,6 +28,7 @@ import {
 } from "../../lib/storage.js";
 import * as clients from "../clients/clients.service.js";
 import { resolveMediaUrl } from "./media.service.js";
+import { normalizePoll } from "./votes.service.js";
 import type { Result } from "../../lib/uazapi/types.js";
 import { instanceClient, requireIntegration, uazapiError } from "./whatsapp.gateway.js";
 import {
@@ -102,7 +103,7 @@ const withPreview = <T extends { messages: LastMessage[] }>(conversation: T) => 
     lastMessage: last
       ? last.deletedAt
         ? { ...last, text: null, mediaFilename: null, contacts: null, location: null, poll: null }
-        : last
+        : { ...last, poll: normalizePoll(last.poll) }
       : null,
   };
 };
@@ -242,6 +243,9 @@ const serializeMessage = async (
   const { mediaKey: _key, mediaTempUrl: _tmp, reactions, ...rest } = hideDeleted(message);
   return {
     ...rest,
+    // voto gravado antes de múltipla escolha existir vinha com `choice`; a tradução é aqui para o
+    // histórico não quebrar a thread
+    poll: normalizePoll(rest.poll),
     mediaUrl: media?.url ?? null,
     mediaSource: media?.source ?? null,
     quoted: (message.quotedId ? quoted?.get(message.quotedId) : null) ?? null,

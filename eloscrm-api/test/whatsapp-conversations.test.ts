@@ -158,6 +158,28 @@ describe("GET /v1/whatsapp/conversations", () => {
     expect(JSON.stringify(items)).not.toContain("segredo");
   });
 
+  it("voto gravado no formato antigo não quebra a thread", async () => {
+    // `choice` (uma opção) é como o voto era gravado antes de o tráfego mostrar que múltipla
+    // escolha manda todas juntas — e esses registros existem em produção. Sem tradução na leitura,
+    // a tela quebrava com "Cannot read properties of undefined (reading 'includes')" ao abrir a
+    // conversa: o front espera `choices`.
+    await criarMensagem({
+      type: "poll",
+      text: "Enquete 1",
+      poll: {
+        name: "Enquete 1",
+        options: ["Opção 1", "Opção 2"],
+        multiple: false,
+        votes: [{ voter: "abc@lid", voterName: "Fulano", choice: "Opção 1", votedAt: "2026-08-10T00:00:00.000Z" }],
+      },
+    });
+
+    const res = await get(`/v1/whatsapp/conversations/${conversationId}/messages`);
+    const [mensagem] = res.json().items;
+
+    expect(mensagem.poll.votes[0].choices).toEqual(["Opção 1"]);
+  });
+
   it("conversa sem mensagem nenhuma devolve prévia nula, não estoura", async () => {
     const { items } = (await get("/v1/whatsapp/conversations")).json();
 
