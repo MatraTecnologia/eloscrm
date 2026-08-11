@@ -236,8 +236,15 @@ Enquete é o terceiro caso do mesmo formato: o tipo já era reconhecido (`type: 
 opções se perdiam e a bolha mostrava só a pergunta. `parsePoll` busca o bloco por **prefixo**
 (`pollCreationMessage…`) porque o sufixo é versão de protocolo — uma `V4` amanhã continua
 funcionando —, com `convertOptions` (opções separadas por `|`) como reserva. `selectableOptionsCount`
-1 é escolha única; 0 é "pode marcar várias". **Voto não é ingerido**: chega em evento próprio, então
-o cartão mostra as opções sem contagem em vez de afirmar "0 votos".
+1 é escolha única; 0 é "pode marcar várias".
+
+**O voto (`PollUpdateMessage`) atualiza a enquete, como a reação atualiza a bolha** — não vira linha
+na conversa. Ingerido como mensagem ele produzia uma bolha órfã por voto e, sem texto nem mídia,
+ainda caía no cartão genérico de "Arquivo". `applyVote` (`votes.service.ts`) acha a enquete pelo
+`content.pollCreationMessageKey.ID` (ou pelo `quoted`) e substitui o voto **da mesma pessoa** —
+trocar de opção emite outro evento. O voto vem decifrado em `message.vote`; o `content.vote` é o
+payload cifrado e não precisa ser aberto. ⚠️ `pollCreationMessageKey` começa com o mesmo prefixo do
+bloco de criação: `parsePoll` a exclui explicitamente, senão um voto passaria por enquete nova.
 
 O vCard é lido na **ingestão** (`parseContacts`) e guardado já traduzido na coluna `contacts`
 (`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
@@ -330,4 +337,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 21:38 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 21:55 (-03)

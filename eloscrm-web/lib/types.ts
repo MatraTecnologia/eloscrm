@@ -522,6 +522,16 @@ export type SharedPoll = {
   options: string[];
   /** true quando dá para marcar mais de uma */
   multiple: boolean;
+  /** votos que chegaram pelo webhook; ausente enquanto ninguém votou */
+  votes?: PollVote[] | null;
+};
+
+/** Um voto. `voter` é o LID de quem votou — `me` quando saiu da própria imobiliária. */
+export type PollVote = {
+  voter: string;
+  voterName: string | null;
+  choice: string;
+  votedAt: string;
 };
 
 /** Localização compartilhada. `name`/`address` só vêm quando é um lugar, não um ponto no mapa. */

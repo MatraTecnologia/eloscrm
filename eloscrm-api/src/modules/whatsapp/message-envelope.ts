@@ -183,7 +183,11 @@ export type ParsedPoll = {
  */
 export const parsePoll = (message: Record<string, unknown>): ParsedPoll | null => {
   const content = asRecord(message.content);
-  const chave = Object.keys(content).find((nome) => nome.startsWith("pollCreationMessage"));
+  // `pollCreationMessageKey` também começa com o prefixo, e é o oposto disto: a **referência** à
+  // enquete que o voto responde. Sem excluí-la, um voto passaria por criação de enquete.
+  const chave = Object.keys(content).find(
+    (nome) => nome.startsWith("pollCreationMessage") && nome !== "pollCreationMessageKey",
+  );
   const poll = chave ? asRecord(content[chave]) : {};
 
   const doProvedor = Array.isArray(poll.options)
@@ -202,6 +206,32 @@ export const parsePoll = (message: Record<string, unknown>): ParsedPoll | null =
   if (!name || options.length === 0) return null;
 
   return { name, options, multiple: int(poll.selectableOptionsCount) !== 1 };
+};
+
+/** Voto em enquete: atualiza a enquete original, não vira mensagem. */
+export type ParsedVote = {
+  /** `messageid` da enquete respondida */
+  pollId: string;
+  /** opção escolhida, em texto claro — o provedor já resolve o `encPayload` para nós */
+  choice: string;
+};
+
+/**
+ * Lê o voto de um `PollUpdateMessage`.
+ *
+ * O envelope traz o voto **decifrado** em `message.vote` (o `content.vote` é o payload cifrado, que
+ * não precisamos abrir) e o alvo em dois lugares — `quoted` e `content.pollCreationMessageKey.ID`.
+ * Os dois foram observados iguais em 2026-08-10; a chave do `content` é a fonte mais específica e
+ * vem primeiro.
+ */
+export const parseVote = (message: Record<string, unknown>): ParsedVote | null => {
+  const content = asRecord(message.content);
+  const referencia = asRecord(content.pollCreationMessageKey);
+  const pollId = str(referencia.ID) ?? str(message.quoted);
+  const choice = str(message.vote)?.trim();
+
+  if (!pollId || !choice) return null;
+  return { pollId, choice };
 };
 
 export type ParsedConversation = {
@@ -233,6 +263,7 @@ export type ParsedMessage = {
   contacts: ParsedContact[] | null;
   location: ParsedLocation | null;
   poll: ParsedPoll | null;
+  vote: ParsedVote | null;
   mediaMime: string | null;
   mediaSize: number | null;
   mediaFilename: string | null;
@@ -300,6 +331,7 @@ export const parseMessage = (body: Record<string, unknown>): ParsedMessage | nul
     contacts: parseContacts(message),
     location: parseLocation(message),
     poll: parsePoll(message),
+    vote: parseVote(message),
     mediaMime: str(content.mimetype),
     mediaSize: int(content.fileLength),
     mediaFilename: str(content.fileName),

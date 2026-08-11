@@ -543,3 +543,124 @@ describe("enquete", () => {
     expect((await mensagemSalva()).poll).toBeNull();
   });
 });
+
+/**
+ * Voto em enquete (`PollUpdateMessage`), do tráfego real de 2026-08-10.
+ *
+ * Chega com `type: "poll"` e sem texto, então virava bolha própria — e, sem texto nem mídia, ainda
+ * caía no cartão genérico de arquivo na tela. O voto pertence à enquete, como a reação pertence à
+ * bolha que recebeu o emoji.
+ */
+describe("voto em enquete", () => {
+  const POLL_ID = "AC354AA0AA0FA34E0F4706AD26254C13";
+
+  const criarEnquete = () =>
+    post(
+      evento({
+        messageid: POLL_ID,
+        type: "poll",
+        messageType: "PollCreationMessageV3",
+        text: "Enquete 1",
+        convertOptions: "Opção 1|Opção 2|Opção 3",
+        content: {
+          pollCreationMessageV3: {
+            name: "Enquete 1",
+            options: [{ optionName: "Opção 1" }, { optionName: "Opção 2" }, { optionName: "Opção 3" }],
+            selectableOptionsCount: 0,
+          },
+        },
+      }),
+    );
+
+  const votar = (choice: string, messageid: string, senderName = "Bruno Zielinski") =>
+    post(
+      evento({
+        messageid,
+        type: "poll",
+        mediaType: "",
+        messageType: "PollUpdateMessage",
+        text: "",
+        vote: choice,
+        senderName,
+        quoted: POLL_ID,
+        content: {
+          pollCreationMessageKey: { remoteJID: "226070083190831@lid", fromMe: true, ID: POLL_ID },
+          vote: { encPayload: "eHTVAxpQ9u9j", encIV: "87ZpEeSdPV664" },
+          metadata: { pollNameHash: "MkDL4GCWnstD63ZS" },
+        },
+      }),
+    );
+
+  const enquete = () =>
+    prisma.whatsappMessage.findFirstOrThrow({
+      where: { organizationId: orgId, providerMessageId: POLL_ID },
+    });
+
+  it("o voto não vira mensagem na thread", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTO1");
+
+    // só a enquete: o voto foi para dentro dela
+    expect(await prisma.whatsappMessage.count({ where: { organizationId: orgId } })).toBe(1);
+  });
+
+  it("o voto entra na enquete, com quem votou", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTO2");
+
+    expect((await enquete()).poll).toMatchObject({
+      name: "Enquete 1",
+      votes: [{ choice: "Opção 1", voterName: "Bruno Zielinski" }],
+    });
+  });
+
+  it("trocar de opção substitui o voto, não acumula", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTO3");
+    await votar("Opção 3", "VOTO4");
+
+    const poll = (await enquete()).poll as { votes: { choice: string }[] };
+    expect(poll.votes).toHaveLength(1);
+    expect(poll.votes[0]!.choice).toBe("Opção 3");
+  });
+
+  it("votos de pessoas diferentes convivem", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTO5");
+    await post(
+      evento(
+        {
+          messageid: "VOTO6",
+          type: "poll",
+          messageType: "PollUpdateMessage",
+          text: "",
+          vote: "Opção 2",
+          senderName: "Outra Pessoa",
+          sender_lid: "999999@lid",
+          quoted: POLL_ID,
+          content: { pollCreationMessageKey: { ID: POLL_ID } },
+        },
+      ),
+    );
+
+    const poll = (await enquete()).poll as { votes: { choice: string }[] };
+    expect(poll.votes).toHaveLength(2);
+  });
+
+  it("voto em enquete que não temos é ignorado, sem virar bolha", async () => {
+    await votar("Opção 1", "VOTO7");
+
+    expect(await prisma.whatsappMessage.count({ where: { organizationId: orgId } })).toBe(0);
+  });
+
+  it("a referência à enquete não é confundida com a criação de uma", async () => {
+    await criarEnquete();
+    await votar("Opção 1", "VOTO8");
+
+    // `pollCreationMessageKey` começa com o mesmo prefixo do bloco de criação
+    const votos = await prisma.whatsappMessage.findMany({
+      where: { organizationId: orgId, providerMessageId: "VOTO8" },
+    });
+    expect(votos).toHaveLength(0);
+  });
+});

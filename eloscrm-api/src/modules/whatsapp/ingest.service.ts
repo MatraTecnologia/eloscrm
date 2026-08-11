@@ -6,6 +6,7 @@ import * as repo from "./conversations.repo.js";
 import { enqueueMediaJob } from "./media.service.js";
 import { parseConversation, parseMessage } from "./message-envelope.js";
 import { applyReaction } from "./reactions.service.js";
+import { applyVote } from "./votes.service.js";
 
 export const MESSAGE_QUEUE = "whatsapp-message";
 
@@ -55,6 +56,13 @@ export const processMessageEvent = async (job: MessageJob) => {
   // lido — reagir não é escrever.
   if (parsedMessage.type === WhatsappMessageType.reaction) {
     return applyReaction(job.organizationId, conversation.id, parsedMessage);
+  }
+
+  // Voto segue a mesma regra da reação, e pelo mesmo motivo: o WhatsApp mostra o resultado dentro da
+  // enquete, então uma bolha por voto seria ruído — e, sem texto nem mídia, ela ainda caía no cartão
+  // genérico de arquivo.
+  if (parsedMessage.vote) {
+    return applyVote(job.organizationId, conversation.id, parsedMessage);
   }
 
   const message = await repo.createMessageIfNew(job.organizationId, conversation.id, parsedMessage);

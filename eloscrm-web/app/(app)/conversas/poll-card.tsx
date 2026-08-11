@@ -11,11 +11,14 @@ import type { SharedPoll } from "@/lib/types";
  * ordem em que foram criadas, com a marca de seleção que o WhatsApp usa: círculo para escolher uma,
  * quadrado para marcar várias.
  *
- * **Sem contagem de votos, e isso é honesto.** O voto chega em evento separado, que a ingestão não
- * consome; mostrar "0 votos" ao lado de cada opção afirmaria algo que não sabemos. O corretor
- * responde a enquete no celular, onde ela é interativa de verdade.
+ * Os votos chegam em evento próprio (`PollUpdateMessage`) e a ingestão os aplica **nesta** mensagem,
+ * como faz com a reação. Enquanto ninguém votou, o cartão não inventa "0 votos": mostra só as
+ * opções. Votar continua sendo no celular — a uazapi não expõe endpoint para isso.
  */
-export const PollCard = ({ poll, mine }: { poll: SharedPoll; mine: boolean }) => (
+export const PollCard = ({ poll, mine }: { poll: SharedPoll; mine: boolean }) => {
+  const votos = poll.votes ?? [];
+
+  return (
   <div
     className={cn(
       "flex w-64 flex-col gap-2 rounded-md p-2 sm:w-72",
@@ -33,21 +36,43 @@ export const PollCard = ({ poll, mine }: { poll: SharedPoll; mine: boolean }) =>
     </div>
 
     <ul className="flex flex-col gap-1">
-      {poll.options.map((opcao, indice) => (
-        <li
-          key={`${opcao}-${indice}`}
-          className="border-current/15 flex items-center gap-2 rounded border px-2 py-1.5 text-xs"
-        >
-          <span
-            aria-hidden
+      {poll.options.map((opcao, indice) => {
+        const desta = votos.filter((voto) => voto.choice === opcao);
+        const escolhida = desta.length > 0;
+
+        return (
+          <li
+            key={`${opcao}-${indice}`}
             className={cn(
-              "border-current/40 size-3 shrink-0 border",
-              poll.multiple ? "rounded-[3px]" : "rounded-full",
+              "border-current/15 flex items-center gap-2 rounded border px-2 py-1.5 text-xs",
+              escolhida && "border-current/40 bg-current/5",
             )}
-          />
-          <span className="min-w-0 break-words">{opcao}</span>
-        </li>
-      ))}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-3 shrink-0 items-center justify-center border",
+                escolhida ? "border-current bg-current/70" : "border-current/40",
+                poll.multiple ? "rounded-[3px]" : "rounded-full",
+              )}
+            />
+            <span className="min-w-0 flex-1 break-words">{opcao}</span>
+            {escolhida && (
+              // quem votou importa mais que quantos: a conversa é com uma pessoa só, e na de grupo
+              // o nome é o que diz de quem foi
+              <span
+                className="shrink-0 text-[11px] opacity-70"
+                title={desta.map((voto) => voto.voterName ?? "Alguém").join(", ")}
+              >
+                {desta.length === 1
+                  ? (desta[0]!.voterName ?? "Votou")
+                  : `${desta.length} votos`}
+              </span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   </div>
-);
+  );
+};

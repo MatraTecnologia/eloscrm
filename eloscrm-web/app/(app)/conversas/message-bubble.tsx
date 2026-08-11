@@ -253,7 +253,9 @@ export const MessageBubble = ({
     !apagada &&
     !contatos &&
     !ehLocal &&
-    !enquete &&
+    // mesmo sem opções guardadas: uma enquete não tem arquivo, e cair no MediaContent a
+    // transformava num cartão de "Arquivo"
+    message.type !== "poll" &&
     message.type !== "text" &&
     message.type !== "location" &&
     message.type !== "unsupported";
