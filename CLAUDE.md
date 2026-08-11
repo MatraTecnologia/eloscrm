@@ -83,6 +83,13 @@ A auditoria de 2026-08-06 é o caso mais recente: `AuditEvent` ganhou colunas e 
 
 Esquecer isso não dá erro de boot — a API sobe normal e só as rotas que tocam as colunas novas respondem **500**. Já aconteceu: o schema de nutrição (`ClientStatus`, `NurtureReason`, `client.nurtureUntil`…) chegou em produção sem ser aplicado e derrubou `/v1/dashboard/stats` e `/v1/agenda`, que filtram por `status`.
 
+⚠️ **Na ingestão de mensagem o sintoma é pior que 500: é silêncio.** Com `REDIS_URL` — o caso de
+produção — o webhook só enfileira e responde `200` na hora; a escrita acontece no worker, depois. Se
+a coluna não existir, o job falha com `P2022` nas três tentativas do BullMQ e **a mensagem some**:
+nada na tela, nada de 5xx para a uazapi reentregar, e o corretor só descobre quando o cliente
+pergunta por que não responderam. Verificado em 2026-08-10, derrubando a coluna de propósito no dev.
+Por isso o `db push` vem **antes** de subir a imagem nova, nunca depois.
+
 ```bash
 DATABASE_URL="postgres://…produção…" pnpm -C eloscrm-api exec prisma db push
 ```
@@ -131,4 +138,4 @@ do provedor, autenticado por segredo na URL + hash do token no corpo.
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-06 12:35 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-10 21:24 (-03)

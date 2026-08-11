@@ -65,7 +65,7 @@ pnpm db:seed                              # tsx prisma/seed.ts
 pnpm audit:purge [--days N] [--dry-run]   # purga da auditoria por retenção (sem Redis, é a rotina)
 pnpm audit:backfill-labels [--dry-run]    # rótulo nos eventos gravados antes da coluna existir
 pnpm backfill:lead-names [--apply]        # leads e cards que ficaram chamados pelo telefone
-pnpm backfill:shared-contacts [--apply]   # contatos compartilhados ingeridos antes do parser
+pnpm backfill:message-kinds [--apply]     # contato e localização ingeridos antes do parser
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
@@ -226,10 +226,16 @@ contain downloadable media"* escrito na bolha do corretor, com o vCard resumido 
 `DOWNLOADABLE` em `message-envelope.ts` é **allowlist**: tipo novo do provedor passa a não baixar por
 padrão, porque o erro de não tentar é invisível e o de tentar aparece na tela de quem atende.
 
+Localização é o mesmo caso e o mesmo remédio: `mediaType: location`, mapa estático em
+`content.JPEGThumbnail` (que já entrava por `mediaThumb`) e as coordenadas em `parseLocation` →
+coluna `location`. Coordenada `(0, 0)` é descartada — é o que sobra quando o campo não veio, e fica
+no meio do Atlântico. O backfill dessas só recupera o **tipo**: as coordenadas nunca foram gravadas,
+e o `text` vem vazio, então a bolha antiga mostra o mapa sem virar link.
+
 O vCard é lido na **ingestão** (`parseContacts`) e guardado já traduzido na coluna `contacts`
 (`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
 `X-WA-BIZ-DESCRIPTION` — texto de propaganda com emoji e quebras de linha que ninguém exibe. Para o
-que já entrou errado: `pnpm backfill:shared-contacts` reconstrói a partir do `text` (é o `rawType`
+que já entrou errado: `pnpm backfill:message-kinds` reconstrói a partir do `text` (é o `rawType`
 que identifica as linhas) e limpa o `mediaError`; o telefone sai com o nono dígito, diferente do
 `waid` que a ingestão nova grava — os dois discam para a mesma pessoa.
 

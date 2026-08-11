@@ -67,6 +67,9 @@ const resumo = (message: Preview) => {
     }
     case "document":
       return message.mediaFilename?.trim() || rotulo;
+    // o nome do lugar diz mais que "Localização"; ponto solto no mapa não tem nome e fica no rótulo
+    case "location":
+      return message.location?.name?.trim() || rotulo;
     case "contact": {
       // quem foi indicado importa mais que o rótulo: é por esse nome que o corretor lembra da conversa
       const [primeiro, ...resto] = message.contacts ?? [];

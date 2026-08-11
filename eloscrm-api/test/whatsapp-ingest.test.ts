@@ -358,3 +358,106 @@ describe("contato compartilhado", () => {
     expect((await mensagemSalva()).contacts).toBeNull();
   });
 });
+
+/**
+ * Localização — os dois formatos, do tráfego real de 2026-08-10.
+ *
+ * Também chega como `type: "media"` com `mediaType: location`, e sem tratamento caía em
+ * `unsupported` com o `text` vazio: bolha em branco, só o horário. O mapa estático vem no
+ * `JPEGThumbnail` do mesmo `content` e entra por `mediaThumb`, como o de foto e vídeo.
+ */
+describe("localização compartilhada", () => {
+  const THUMB = "/9j/4AAQSkZJRgABAQAAAQABAAD/thumb-fake";
+
+  const mensagemSalva = () =>
+    prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId } });
+
+  it("lugar traz nome, endereço e coordenadas", async () => {
+    await post(
+      evento({
+        messageid: "LOCAL1",
+        type: "media",
+        mediaType: "location",
+        messageType: "LocationMessage",
+        text: "",
+        content: {
+          degreesLatitude: -23.28798522,
+          degreesLongitude: -51.12338326,
+          name: "Supermercado 88",
+          address: "Av. das Maritacas, 1546 - Sl 20, Londrina, 86031-070, PR, BR",
+          URL: "https://m.facebook.com/supermercado88/",
+          JPEGThumbnail: THUMB,
+        },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    expect(salva.type).toBe("location");
+    expect(salva.location).toEqual({
+      lat: -23.28798522,
+      lng: -51.12338326,
+      name: "Supermercado 88",
+      address: "Av. das Maritacas, 1546 - Sl 20, Londrina, 86031-070, PR, BR",
+      url: "https://m.facebook.com/supermercado88/",
+    });
+    // o mapa estático entra pelo mesmo caminho da miniatura de foto
+    expect(salva.mediaThumb).toBe(THUMB);
+  });
+
+  it("ponto solto vem só com as coordenadas", async () => {
+    await post(
+      evento({
+        messageid: "LOCAL2",
+        type: "media",
+        mediaType: "location",
+        messageType: "LocationMessage",
+        text: "",
+        content: {
+          degreesLatitude: -23.2900191,
+          degreesLongitude: -51.1174595,
+          JPEGThumbnail: THUMB,
+        },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    expect(salva.type).toBe("location");
+    expect(salva.location).toEqual({
+      lat: -23.2900191,
+      lng: -51.1174595,
+      name: null,
+      address: null,
+      url: null,
+    });
+  });
+
+  it("não entra na fila de download — mapa não é arquivo", async () => {
+    await post(
+      evento({
+        messageid: "LOCAL3",
+        type: "media",
+        mediaType: "location",
+        messageType: "LocationMessage",
+        content: { degreesLatitude: -23.29, degreesLongitude: -51.11, JPEGThumbnail: THUMB },
+      }),
+    );
+
+    const salva = await mensagemSalva();
+    expect(salva.mediaStatus).toBe("none");
+    expect(salva.mediaError).toBeNull();
+  });
+
+  it("coordenada zerada não vira localização — (0,0) é o meio do Atlântico", async () => {
+    await post(
+      evento({
+        messageid: "LOCAL4",
+        type: "media",
+        mediaType: "location",
+        messageType: "LocationMessage",
+        content: { degreesLatitude: 0, degreesLongitude: 0 },
+      }),
+    );
+
+    expect((await mensagemSalva()).location).toBeNull();
+  });
+});

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { WhatsappMessage } from "@/lib/types";
 import { MessageActions } from "./message-actions";
 import { ContactCard } from "./contact-card";
+import { LocationCard } from "./location-card";
 import { QuotedPreview } from "./quoted-preview";
 import { ReactionPicker } from "./reaction-picker";
 import { VoicePlayer } from "./voice-player";
@@ -239,9 +240,18 @@ export const MessageBubble = ({
   const mine = message.direction === "outbound";
   const apagada = !!message.deletedAt;
   const contatos = !apagada && message.type === "contact" ? message.contacts : null;
-  // contato não passa pelo MediaContent: ele chega com `mediaType` (vcard) mas não tem arquivo
+  // o tipo manda, não o conteúdo: localização ingerida antes do parser ficou sem coordenadas,
+  // e o cartão sabe mostrar só o mapa
+  const ehLocal = !apagada && message.type === "location";
+  // contato e localização não passam pelo MediaContent: chegam com `mediaType` (vcard, location)
+  // mas não têm arquivo do outro lado
   const temMidia =
-    !apagada && !contatos && message.type !== "text" && message.type !== "unsupported";
+    !apagada &&
+    !contatos &&
+    !ehLocal &&
+    message.type !== "text" &&
+    message.type !== "location" &&
+    message.type !== "unsupported";
   const citada = message.quoted;
   const fixada = !!message.pinnedUntil && new Date(message.pinnedUntil) > new Date();
 
@@ -312,6 +322,10 @@ export const MessageBubble = ({
 
             {contatos && <ContactCard contacts={contatos} mine={mine} />}
 
+            {ehLocal && (
+              <LocationCard location={message.location} thumb={message.mediaThumb} mine={mine} />
+            )}
+
             {temMidia && <MediaContent message={message} onOpen={onOpenMedia} />}
 
             {message.mediaError && (
@@ -320,7 +334,7 @@ export const MessageBubble = ({
 
             {/* com o cartão na tela, o `text` é o mesmo vCard resumido pelo provedor — repeti-lo
                 traria de volta o "X-Wa-Biz-Name:" que o cartão existe para esconder */}
-            {message.text && !contatos && (
+            {message.text && !contatos && !ehLocal && (
               <span className="break-words whitespace-pre-wrap">{message.text}</span>
             )}
 

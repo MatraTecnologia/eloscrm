@@ -37,6 +37,7 @@ const TYPE_BY_MEDIA: Record<string, WhatsappMessageType> = {
   // `vcard` para um, `contact_array` para vários), mas não é arquivo — ver `DOWNLOADABLE` abaixo
   vcard: WhatsappMessageType.contact,
   contact_array: WhatsappMessageType.contact,
+  location: WhatsappMessageType.location,
 };
 
 /**
@@ -129,6 +130,41 @@ export const parseContacts = (message: Record<string, unknown>): ParsedContact[]
   return contatos.length > 0 ? contatos : null;
 };
 
+/** Localização compartilhada. `name`/`address` só vêm quando é um lugar, não um ponto no mapa. */
+export type ParsedLocation = {
+  lat: number;
+  lng: number;
+  name: string | null;
+  address: string | null;
+  /** link que o próprio lugar carrega (site, página do estabelecimento) */
+  url: string | null;
+};
+
+/**
+ * Lê a localização de `content`.
+ *
+ * Dois formatos observados em 2026-08-10, ambos `mediaType: location`: o ponto solto traz só as
+ * coordenadas, e o lugar traz também `name`, `address` e às vezes uma `URL`. O mapa estático vem no
+ * `JPEGThumbnail` do mesmo `content`, então ele já entra por `mediaThumb` sem tratamento à parte.
+ *
+ * Coordenada zero-zero é descartada: é o que sobra quando o campo não veio, e (0, 0) fica no meio do
+ * Atlântico — melhor não ter localização do que apontar para lá.
+ */
+export const parseLocation = (message: Record<string, unknown>): ParsedLocation | null => {
+  const content = asRecord(message.content);
+  const lat = typeof content.degreesLatitude === "number" ? content.degreesLatitude : null;
+  const lng = typeof content.degreesLongitude === "number" ? content.degreesLongitude : null;
+  if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
+
+  return {
+    lat,
+    lng,
+    name: str(content.name),
+    address: str(content.address),
+    url: str(content.URL),
+  };
+};
+
 export type ParsedConversation = {
   chatid: string;
   phone: string | null;
@@ -156,6 +192,7 @@ export type ParsedMessage = {
   sentAt: Date;
   hasMedia: boolean;
   contacts: ParsedContact[] | null;
+  location: ParsedLocation | null;
   mediaMime: string | null;
   mediaSize: number | null;
   mediaFilename: string | null;
@@ -221,6 +258,7 @@ export const parseMessage = (body: Record<string, unknown>): ParsedMessage | nul
     sentAt: new Date(int(message.messageTimestamp) ?? Date.now()),
     hasMedia: mediaType !== null && DOWNLOADABLE.has(mediaType),
     contacts: parseContacts(message),
+    location: parseLocation(message),
     mediaMime: str(content.mimetype),
     mediaSize: int(content.fileLength),
     mediaFilename: str(content.fileName),

@@ -668,6 +668,9 @@ model WhatsappMessage {
   mediaWidth    Int?
   mediaHeight   Int?
   // JPEGThumbnail em base64, direto do webhook: preview instantâneo, sem chamada externa
+  // Localização compartilhada: `{ lat, lng, name?, address?, url? }`. O mapa estático que vem no
+  // mesmo envelope é lido como `mediaThumb`, junto com o de foto e vídeo.
+  location      Json?
   // Contatos de uma mensagem de contato compartilhado, já traduzidos do vCard
   // (`[{ name, phones[], business }]`). Guardar o parse, e não o cartão cru, mantém fora do banco o
   // `X-WA-BIZ-DESCRIPTION` — texto de propaganda com emoji e quebras de linha que ninguém exibe.

@@ -1,8 +1,9 @@
 /**
- * Conserta os contatos compartilhados que já foram ingeridos antes de a ingestão saber lê-los.
+ * Conserta as mensagens ingeridas antes de a ingestão saber lê-las: contato compartilhado e
+ * localização.
  *
- *   pnpm tsx scripts/backfill-shared-contacts.ts          # só mostra o que mudaria
- *   pnpm tsx scripts/backfill-shared-contacts.ts --apply  # grava
+ *   pnpm tsx scripts/backfill-message-kinds.ts          # só mostra o que mudaria
+ *   pnpm tsx scripts/backfill-message-kinds.ts --apply  # grava
  *
  * Rodar uma vez por banco, depois do `prisma db push` que cria a coluna `contacts`. Sem isto, as
  * mensagens antigas continuam como `unsupported`, com o vCard resumido escrito na bolha e um
@@ -68,6 +69,37 @@ const parseResumo = (text: string): Contato[] => {
   return contatos.filter((contato) => contato.phones.length > 0);
 };
 
+/**
+ * Localização: só o tipo se recupera.
+ *
+ * As coordenadas não foram guardadas — a coluna não existia —, e não há de onde tirá-las: o `text`
+ * dessas mensagens vem vazio. O que sobrou é o mapa estático em `mediaThumb`, e é o suficiente para
+ * a bolha deixar de ser um retângulo em branco: o cartão mostra o mapa e diz "Localização", sem
+ * link. Mensagem nova, essa sim, chega completa.
+ */
+const corrigirLocalizacoes = async () => {
+  const mensagens = await prisma.whatsappMessage.findMany({
+    where: { rawType: "LocationMessage", type: { not: WhatsappMessageType.location } },
+    select: { id: true, mediaThumb: true },
+  });
+
+  console.log(`\n${mensagens.length} localização(ões) marcadas como tipo desconhecido`);
+  const semMapa = mensagens.filter((mensagem) => !mensagem.mediaThumb).length;
+  if (semMapa > 0) console.log(`  ${semMapa} sem o mapa estático — a bolha fica só com o rótulo`);
+
+  if (!apply) return mensagens.length;
+
+  await prisma.whatsappMessage.updateMany({
+    where: { id: { in: mensagens.map((mensagem) => mensagem.id) } },
+    data: {
+      type: WhatsappMessageType.location,
+      mediaStatus: WhatsappMediaStatus.none,
+      mediaError: null,
+    },
+  });
+  return mensagens.length;
+};
+
 const run = async () => {
   const mensagens = await prisma.whatsappMessage.findMany({
     where: { rawType: { in: RAW_TYPES }, contacts: { equals: Prisma.DbNull } },
@@ -90,6 +122,7 @@ const run = async () => {
   if (pendentes.length > 10) console.log(`  … e mais ${pendentes.length - 10}`);
 
   if (!apply) {
+    await corrigirLocalizacoes();
     console.log("\nnada gravado. rode com --apply para valer.");
     return;
   }
@@ -106,7 +139,8 @@ const run = async () => {
       },
     });
   }
-  console.log(`\n${pendentes.length} mensagem(ns) atualizada(s).`);
+  const locais = await corrigirLocalizacoes();
+  console.log(`\n${pendentes.length} contato(s) e ${locais} localização(ões) atualizados.`);
 };
 
 await run();

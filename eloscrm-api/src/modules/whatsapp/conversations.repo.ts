@@ -62,6 +62,7 @@ export const createMessageIfNew = async (
     rawType: parsed.rawType,
     text: parsed.text,
     contacts: parsed.contacts ?? undefined,
+    location: parsed.location ?? undefined,
     quotedId: parsed.quotedId,
     reactionTo: parsed.reactionTo,
     sentByApi: parsed.sentByApi,

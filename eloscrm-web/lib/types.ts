@@ -498,6 +498,7 @@ export type ConversationPreview = {
   mediaFilename: string | null;
   mediaDuration: number | null;
   contacts: SharedContact[] | null;
+  location: SharedLocation | null;
   deletedAt: string | null;
 };
 
@@ -512,6 +513,15 @@ export type WhatsappQuoted = {
   mediaThumb: string | null;
   // apagada no WhatsApp: a API não manda o conteúdo, só o marcador
   deletedAt: string | null;
+};
+
+/** Localização compartilhada. `name`/`address` só vêm quando é um lugar, não um ponto no mapa. */
+export type SharedLocation = {
+  lat: number;
+  lng: number;
+  name: string | null;
+  address: string | null;
+  url: string | null;
 };
 
 /** Um contato que o cliente compartilhou na conversa. */
@@ -569,6 +579,7 @@ export type WhatsappMessage = {
   mediaError: string | null;
   // contato compartilhado, já traduzido do vCard pela ingestão
   contacts: SharedContact[] | null;
+  location: SharedLocation | null;
   // já resolvida pela API (R2 presigned ou URL temporária do provedor); null se indisponível
   mediaUrl: string | null;
   mediaSource: "r2" | "provider" | null;
