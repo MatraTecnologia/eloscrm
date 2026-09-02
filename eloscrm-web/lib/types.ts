@@ -1,4 +1,4 @@
-export type ClientSource = "SITE" | "INSTAGRAM" | "INDICACAO" | "WHATSAPP" | "OUTROS";
+export type ClientSource = "SITE" | "INSTAGRAM" | "INDICACAO" | "WHATSAPP" | "META" | "OUTROS";
 export type ActivityType = "CALL" | "VISIT" | "PROPOSAL" | "NOTE";
 export type PropertyStatus = "DISPONIVEL" | "RESERVADO" | "VENDIDO" | "INATIVO";
 export type LeadTemperature = "FRIO" | "MORNO" | "QUENTE";
@@ -132,6 +132,7 @@ export type AuditEntity =
   | "WHATSAPP_MESSAGE"
   | "WHATSAPP_INSTANCE"
   | "LEAD_AUTOMATION"
+  | "META_INTEGRATION"
   | "MEMBER"
   | "INVITATION"
   | "ORGANIZATION"
@@ -626,4 +627,54 @@ export type LeadAutomation = {
   autoAssign: boolean;
   strategy: "LEAST_OPEN";
   members: LeadAutomationMember[];
+};
+
+// Integração com o Meta Lead Ads. Espelha MetaIntegration/MetaPage/MetaLeadForm/MetaLead da API.
+export type MetaTokenType = "user" | "system_user";
+export type MetaIntegrationStatus = "active" | "token_invalid";
+
+export type MetaPage = { id: string; pageId: string; name: string };
+
+export type MetaLeadForm = {
+  id: string;
+  formId: string;
+  name: string;
+  remoteStatus: string | null;
+  enabled: boolean;
+  /** null = usa o destino padrão da integração */
+  pipelineId: string | null;
+  stageId: string | null;
+  lastLeadAt: string | null;
+  leadsCount: number;
+  page: { pageId: string; name: string };
+};
+
+export type MetaIntegration = {
+  id: string;
+  tokenType: MetaTokenType;
+  tokenLast4: string;
+  metaUserName: string;
+  status: MetaIntegrationStatus;
+  lastError: string | null;
+  pipelineId: string | null;
+  stageId: string | null;
+  lastSyncAt: string | null;
+  pages: MetaPage[];
+  forms: MetaLeadForm[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MetaLead = {
+  id: string;
+  leadgenId: string;
+  createdTime: string;
+  receivedAt: string;
+  fieldData: { name: string; values: string[] }[];
+  adName: string | null;
+  campaignName: string | null;
+  platform: string | null;
+  clientId: string | null;
+  dealId: string | null;
+  form: { name: string; page: string };
 };

@@ -14,6 +14,7 @@ import {
   Snowflake,
   Users,
 } from "lucide-react";
+import { MetaIcon } from "@/components/icons/meta";
 import { WhatsappIcon } from "@/components/icons/whatsapp";
 import {
   Sidebar,
@@ -40,6 +41,7 @@ const items = [
   { title: "Agenda", href: "/agenda", icon: Calendar },
   { title: "Conversas", href: "/conversas", icon: MessageSquare },
   { title: "WhatsApp", href: "/integracoes/whatsapp", icon: WhatsappIcon },
+  { title: "Meta", href: "/integracoes/meta", icon: MetaIcon },
   { title: "Configurações", href: "/settings", icon: Settings },
 ];
 

@@ -128,7 +128,8 @@ const createClient = async (input: AutomationInput, enabled: boolean) => {
   return { clientId: client.id, ownerId };
 };
 
-const createDeal = async (
+/** Também usado pela ingestão de leads do Meta: mesma regra de "nunca dois cards do mesmo lead". */
+export const createDeal = async (
   orgId: string,
   clientId: string,
   ownerId: string | null,

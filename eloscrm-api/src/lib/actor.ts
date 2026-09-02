@@ -44,5 +44,8 @@ export const AUTOMATION_ACTOR: Actor = {
 /** Evento entregue pela uazapi: não há usuário na ponta, e o que agiu foi o provedor. */
 export const WEBHOOK_ACTOR: Actor = { id: "", name: "WhatsApp", source: AuditSource.WEBHOOK };
 
+/** Lead que chegou pelo Meta Lead Ads: o histórico mostra de onde a ficha veio. */
+export const META_ACTOR: Actor = { id: "", name: "Meta Lead Ads", source: AuditSource.AUTOMATION };
+
 /** O que roda sem request: purga por retenção e afins. */
 export const SYSTEM_ACTOR: Actor = { id: "", name: "Sistema", source: AuditSource.SYSTEM };

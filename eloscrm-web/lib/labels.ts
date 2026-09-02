@@ -18,6 +18,7 @@ export const clientSourceLabels: Record<ClientSource, string> = {
   INSTAGRAM: "Instagram",
   INDICACAO: "Indicação",
   WHATSAPP: "WhatsApp",
+  META: "Meta Ads",
   OUTROS: "Outros",
 };
 
@@ -212,6 +213,7 @@ export const ENTITY_NOUNS: Record<AuditEntity, string> = {
   WHATSAPP_MESSAGE: "envio de WhatsApp",
   WHATSAPP_INSTANCE: "número de WhatsApp",
   LEAD_AUTOMATION: "atendimento automático",
+  META_INTEGRATION: "integração com o Meta",
   MEMBER: "membro",
   INVITATION: "convite",
   ORGANIZATION: "cadastro da imobiliária",
@@ -232,6 +234,7 @@ export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
   WHATSAPP_MESSAGE: "Mensagem",
   WHATSAPP_INSTANCE: "WhatsApp",
   LEAD_AUTOMATION: "Automação",
+  META_INTEGRATION: "Meta",
   MEMBER: "Membro",
   INVITATION: "Convite",
   ORGANIZATION: "Imobiliária",

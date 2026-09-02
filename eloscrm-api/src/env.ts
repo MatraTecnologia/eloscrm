@@ -45,6 +45,10 @@ export const env = createEnv({
     // Fila das conversas de WhatsApp. Sem ela o processamento é inline — o que mantém teste e CI
     // sem infra, mas em produção devolve o problema que a fila existe para resolver.
     REDIS_URL: z.string().trim().min(1).optional(),
+    // Meta Lead Ads. O token é do cliente (usuário ou usuário do sistema) e vive cifrado no banco com
+    // a mesma chave dos tokens de WhatsApp — sem a chave, as rotas de Meta respondem 503. A versão
+    // da Graph API é env porque o Meta aposenta versões a cada ~2 anos e trocar não deve exigir deploy.
+    META_GRAPH_VERSION: z.string().trim().regex(/^v\d+\.\d+$/).default("v26.0"),
     // Quanto tempo o log de auditoria fica. A tabela cresce a cada ação e nada mais a poda: sem isto
     // ela só aumenta. 365 dias cobre o ciclo de uma negociação imobiliária com folga, e é também o
     // teto do dado pessoal que o snapshot de um registro apagado carrega.

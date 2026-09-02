@@ -52,6 +52,7 @@ const FIELDS: Partial<Record<AuditEntity, readonly string[]>> = {
   [AuditEntity.WHATSAPP_MESSAGE]: ["direction", "type", "sentAt"],
   [AuditEntity.CONVERSATION]: ["phoneMasked", "isGroup", "messageCount", "firstMessageAt", "lastMessageAt"],
   [AuditEntity.WHATSAPP_INSTANCE]: ["status", "ownerMasked"],
+  [AuditEntity.META_INTEGRATION]: ["status", "tokenType", "metaUserName"],
   [AuditEntity.MEMBER]: ["role"],
   [AuditEntity.INVITATION]: ["role", "emailMasked"],
 };

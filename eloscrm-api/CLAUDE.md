@@ -284,6 +284,40 @@ a bolha ficava `pending` para sempre, que na tela se lê como "ainda indo" em ve
 **Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
 a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
 
+## Integração Meta Lead Ads
+
+Cliente da Graph API em `src/lib/meta/graph.ts` (só leitura: `/me`, `/me/accounts`,
+`/{page}/leadgen_forms`, `/{form}/leads`), módulo em `src/modules/meta/`, rotas em `/v1/meta/integration`.
+`META_GRAPH_VERSION` (default `v26.0`) é env porque o Meta aposenta versões.
+
+**Uma integração por organização**, sem `:id` nas rotas — mesmo desenho da instância de WhatsApp. O único
+id na URL é o do formulário (`PATCH /integration/forms/:id`), e o service o procura dentro da integração
+da org. **O token é do cliente** (usuário ou usuário do sistema), digitado na tela, validado contra a
+Graph API antes de gravar e cifrado com a `UAZAPI_TOKEN_ENCRYPTION_KEY` — a chave é compartilhada de
+propósito, para não nascer um segundo segredo de cofre. Os tokens de página (`MetaPage.tokenEnc`) também
+ficam cifrados: são eles que a leitura de leads exige. Nada disso sai pela API — só `tokenLast4`.
+
+**O cron roda a cada minuto** (`meta.sync.service.ts`, fila `meta-lead-sync`, concorrência 1) e visita só
+integrações `active` com formulário ligado. Sem Redis não há agendamento: a rotina é `pnpm meta:sync` ou
+o botão **Buscar leads agora** da tela. A idempotência é o `@unique` em `MetaLead.leadgenId`: a linha é
+gravada **antes** de criar lead/negócio, então duas rodadas da mesma janela não duplicam nada. A marca
+d'água é `MetaLeadForm.lastLeadAt`, recuada 1s na busca porque o filtro `time_created` da Graph API é em
+segundos inteiros. **Ligar um formulário marca a água em "agora"**: o histórico anterior não entra —
+ligar uma campanha com meses de leads despejaria tudo no estágio de entrada.
+
+Token recusado (código 190/102) põe a integração em `token_invalid` e o cron para de visitá-la até alguém
+trocar o token; outra falha fica em `lastError` e a rodada seguinte tenta de novo.
+
+Lead → ficha: `lead-fields.ts` lê `field_data` (nome/e-mail/telefone pelos nomes padrão do Meta e os
+equivalentes em português; o resto vira `description`). Ficha existente é reaproveitada por `phoneKey`
+(depois por e-mail); ambiguidade cria ficha nova, como na ingestão do WhatsApp. O negócio é criado por
+`createDeal` do `apply.service.ts` — mesma regra de "nunca dois cards do mesmo lead" — e o dono vem da
+roleta da automação de leads (`resolveOwner`), se ela estiver ligada. Destino: o do formulário, senão o
+padrão da integração; sem nenhum dos dois, só a ficha é criada.
+
+**Os testes mockam a Graph API** (`vi.mock` de `src/lib/meta/index.js` em `test/meta.test.ts`), como os
+de WhatsApp mockam a uazapi.
+
 ## Auditoria
 
 Toda escrita do domínio, da integração e da identidade grava um `AuditEvent`. Plano completo com as
@@ -349,4 +383,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-08-10 22:05 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-02 14:29 (-03)

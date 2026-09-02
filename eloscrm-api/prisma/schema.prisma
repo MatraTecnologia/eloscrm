@@ -101,6 +101,8 @@ model Organization {
   leadAutomation LeadAutomation?
   conversations  Conversation[]
   whatsappMessages WhatsappMessage[]
+  metaIntegration  MetaIntegration?
+  metaLeads        MetaLead[]
 
   @@unique([slug])
   @@map("organization")
@@ -142,6 +144,7 @@ enum ClientSource {
   INSTAGRAM
   INDICACAO
   WHATSAPP
+  META
   OUTROS
 }
 
@@ -175,6 +178,7 @@ enum AuditEntity {
   WHATSAPP_MESSAGE
   WHATSAPP_INSTANCE
   LEAD_AUTOMATION
+  META_INTEGRATION
   MEMBER
   INVITATION
   ORGANIZATION
@@ -805,4 +809,116 @@ model WhatsappReaction {
 
   @@unique([messageId, authorLid])
   @@index([messageId])
+}
+
+enum MetaTokenType {
+  user
+  system_user
+}
+
+enum MetaIntegrationStatus {
+  active
+  // a Graph API recusou o token (código 190): nada é buscado até alguém trocar o token
+  token_invalid
+}
+
+/// Integração com o Meta Lead Ads (Facebook/Instagram). Uma por imobiliária, como a instância de
+/// WhatsApp — o @unique é o que permite às rotas serem /v1/meta/integration, sem id na URL.
+model MetaIntegration {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  tokenType  MetaTokenType
+  // token de usuário ou de usuário do sistema, cifrado em AES-256-GCM; nunca sai da API em claro
+  tokenEnc   String
+  tokenLast4 String
+  // quem o token representa, como a Graph API devolveu em /me
+  metaUserId   String
+  metaUserName String
+
+  status    MetaIntegrationStatus @default(active)
+  lastError String?
+
+  // destino padrão dos leads; cada formulário pode sobrescrever
+  pipelineId String?
+  stageId    String?
+
+  lastSyncAt DateTime?
+
+  pages MetaPage[]
+  forms MetaLeadForm[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Página do Facebook a que o token dá acesso. O token de página é o que a Graph API exige para ler
+/// leads, e é derivado do token do usuário em /me/accounts — guardado cifrado para o cron não
+/// precisar refazer a derivação a cada minuto.
+model MetaPage {
+  id            String          @id @default(cuid())
+  integrationId String
+  integration   MetaIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  pageId   String
+  name     String
+  tokenEnc String
+
+  forms MetaLeadForm[]
+
+  @@unique([integrationId, pageId])
+}
+
+model MetaLeadForm {
+  id            String          @id @default(cuid())
+  integrationId String
+  integration   MetaIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  pageId        String
+  page          MetaPage        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  formId String
+  name   String
+  // status do formulário no Meta (ACTIVE, ARCHIVED…), informativo
+  remoteStatus String?
+
+  // desligado por padrão: formulário novo que aparecesse já ligado despejaria leads antigos no funil
+  enabled Boolean @default(false)
+  // sobrescreve o destino padrão da integração; null = usa o padrão
+  pipelineId String?
+  stageId    String?
+
+  // marca d'água do último lead ingerido; a busca seguinte pede só o que veio depois
+  lastLeadAt DateTime?
+  leadsCount Int       @default(0)
+
+  leads MetaLead[]
+
+  @@unique([integrationId, formId])
+}
+
+/// Lead entregue pelo Meta. O @unique em `leadgenId` é a idempotência do cron: a mesma janela pode
+/// ser buscada duas vezes (retentativa, dois workers) sem duplicar lead nem card.
+model MetaLead {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  formId         String
+  form           MetaLeadForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  leadgenId   String   @unique
+  createdTime DateTime
+  // respostas do formulário como vieram: [{ name, values[] }]
+  fieldData   Json
+  adName       String?
+  campaignName String?
+  platform     String?
+
+  // sem relação declarada, como Deal.ownerId: lead/negócio apagados não apagam o registro do que veio
+  clientId String?
+  dealId   String?
+
+  receivedAt DateTime @default(now())
+
+  @@index([organizationId, receivedAt])
 }
