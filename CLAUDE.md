@@ -114,6 +114,10 @@ SELECT issuer, "accountId", COUNT(*) FROM account GROUP BY 1,2 HAVING COUNT(*) >
 -- 3. só então
 ALTER TABLE account ALTER COLUMN issuer SET NOT NULL;
 CREATE UNIQUE INDEX "account_issuer_accountId_uidx" ON account (issuer, "accountId");
+-- 4. rede de rollback: sem isto, um `NOT NULL` fecha a porta para a imagem 1.6, que insere conta
+-- nova sem mencionar a coluna e leva NullConstraintViolation no primeiro cadastro. O `db push`
+-- ignora este default (continua respondendo "already in sync"); remova quando a janela fechar.
+ALTER TABLE account ALTER COLUMN issuer SET DEFAULT 'local:credential';
 ```
 
 `local:credential` vale porque todas as contas aqui são de e-mail e senha — não há provedor social.
