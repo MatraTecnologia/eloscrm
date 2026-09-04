@@ -1,11 +1,11 @@
 # Contexto de build = eloscrm-api/ (no Easypanel: Build Path = /eloscrm-api).
 # Prisma 7 rust-free: o query compiler vem em WASM dentro de @prisma/client,
-# não há engine nativo — por isso alpine basta, sem openssl/glibc extra.
+# não há engine nativo — nenhuma imagem precisa de openssl/glibc extra por causa dele.
 
-FROM node:22-alpine AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
 # ---- deps: árvore completa (precisa de tsc e do CLI do prisma) ----
@@ -33,8 +33,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod --no-optional
 
 # ---- runner ----
-FROM node:22-alpine AS runner
-RUN apk add --no-cache tini
+FROM node:24-slim AS runner
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tini \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV PORT=3333
 WORKDIR /app
@@ -43,7 +45,8 @@ COPY --from=build /app/dist/src ./dist/src
 COPY package.json ./
 USER node
 EXPOSE 3333
+# a imagem slim não traz wget nem curl; o fetch global do Node 24 resolve sem instalar nada
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}/health" || exit 1
-ENTRYPOINT ["/sbin/tini", "--"]
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/src/server.js"]

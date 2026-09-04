@@ -13,7 +13,7 @@ Um único repo git com **dois projetos independentes** — não há `package.jso
 - `eloscrm-api/` — Fastify 5 + Prisma 7 + Better Auth. Ver `eloscrm-api/CLAUDE.md` para padrões, multi-tenancy e convenções (não duplicadas aqui).
 - `eloscrm-web/` — Next.js 16 (App Router) + React 19 + TanStack Query + shadcn/ui.
 
-pnpm em ambos (API pinna `pnpm@11.9.0`, web `pnpm@11.15.1`), Node 22+.
+pnpm em ambos (`pnpm@11.25.0` nos dois), Node 24+.
 
 Na raiz existem só ferramentas de ambiente, nenhum código: `docker-compose.yml` (Postgres do projeto), `scripts/setup.sh`, `scripts/dev.sh` e `.github/workflows/ci.yml`.
 
@@ -138,4 +138,4 @@ do provedor, autenticado por segredo na URL + hash do token no corpo.
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-08-10 21:24 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-04 10:56 (-03)

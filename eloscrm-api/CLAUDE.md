@@ -10,7 +10,7 @@ e roda por conta própria. Visão geral dos dois: `../CLAUDE.md`.
 
 Este projeto segue o **Padrão A** do `~/.claude/STANDARDS.md`:
 
-- **pnpm** (`pnpm@11.9.0`), Node 22+ (ambiente atual: v24.18.0)
+- **pnpm** (`pnpm@11.25.0`), Node 24+ (ambiente atual: v24.20.0)
 - **Prisma 7 rust-free** — generator `prisma-client`, client em `src/generated/prisma`
   (import relativo, **nunca** `@prisma/client`), driver adapter `@prisma/adapter-pg`
 - **Sem migrations** — `prisma db push`
@@ -383,4 +383,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-02 14:29 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-04 10:56 (-03)

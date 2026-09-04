@@ -1,5 +1,3 @@
 allowBuilds:
   sharp: true
   unrs-resolver: true
-minimumReleaseAgeExclude:
-  - shadcn@4.14.1
