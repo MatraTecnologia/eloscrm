@@ -23,7 +23,7 @@
     "backfill:lead-names": "tsx scripts/backfill-lead-names.ts",
     "backfill:message-kinds": "tsx scripts/backfill-message-kinds.ts",
     "meta:sync": "tsx scripts/meta-sync.ts",
-    "auth:generate": "pnpm dlx @better-auth/cli@1.4.21 generate --output prisma/schema.prisma -y"
+    "auth:generate": "pnpm dlx auth@1.7.2 generate --output prisma/schema.prisma -y"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1125.0",
@@ -35,7 +35,7 @@
     "@prisma/client": "^7.10.0",
     "@t3-oss/env-core": "^0.13.11",
     "axios": "^1.20.0",
-    "better-auth": "^1.6.24",
+    "better-auth": "^1.7.2",
     "bullmq": "^6.3.4",
     "dotenv": "^17.4.2",
     "fastify": "^5.12.1",

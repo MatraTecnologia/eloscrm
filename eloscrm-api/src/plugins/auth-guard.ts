@@ -3,12 +3,15 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
 
-type AuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
+// 1.7 deixou de propagar os campos que os plugins acrescentam à sessão pelo retorno de
+// `getSession`: `activeOrganizationId`, do organization plugin, sumiu do tipo (o valor continua
+// vindo em runtime). `$Infer.Session` é a inferência completa, com o que os plugins declaram.
+type AuthSession = typeof auth.$Infer.Session;
 
 declare module "fastify" {
   interface FastifyRequest {
-    session: NonNullable<AuthSession>["session"] | null;
-    user: NonNullable<AuthSession>["user"] | null;
+    session: AuthSession["session"] | null;
+    user: AuthSession["user"] | null;
   }
 }
 

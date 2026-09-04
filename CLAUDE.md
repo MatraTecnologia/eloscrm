@@ -96,6 +96,30 @@ DATABASE_URL="postgres://…produção…" pnpm -C eloscrm-api exec prisma db pu
 
 Se o `db push` pedir `--accept-data-loss`, **pare**: significa drift entre o schema e o banco, e a mudança não é puramente aditiva.
 
+### A coluna `account.issuer` é a exceção: `db push` não dá conta
+
+O better-auth 1.7 exige `issuer` em `account`, com índice único `(issuer, accountId)`. Como a coluna
+é obrigatória e a tabela em produção tem linhas, o `db push` recusa (*"Added the required column
+`issuer` ... it is not possible to execute this step"*) e o `--force-reset` que ele sugere apagaria o
+banco. A ordem abaixo foi ensaiada num banco com dados no formato 1.6 e é a única que sobrevive ao
+deploy contínuo — enquanto a coluna é nula, a imagem 1.6 continua rodando:
+
+```sql
+-- 1. antes de subir a imagem nova, com o 1.6 ainda no ar
+ALTER TABLE account ADD COLUMN issuer text;
+UPDATE account SET issuer = 'local:credential' WHERE "providerId" = 'credential';
+-- 2. as duas têm de voltar vazias/zero
+SELECT COUNT(*) FROM account WHERE issuer IS NULL;
+SELECT issuer, "accountId", COUNT(*) FROM account GROUP BY 1,2 HAVING COUNT(*) > 1;
+-- 3. só então
+ALTER TABLE account ALTER COLUMN issuer SET NOT NULL;
+CREATE UNIQUE INDEX "account_issuer_accountId_uidx" ON account (issuer, "accountId");
+```
+
+`local:credential` vale porque todas as contas aqui são de e-mail e senha — não há provedor social.
+Se um dia houver, o namespace passa a ser `local:oauth:<providerId>` e a conta é outra conversa.
+Depois disso, `prisma db push` responde "already in sync" e não altera nada.
+
 ## Contrato entre os dois projetos
 
 - **Auth é servida pelo Fastify**, não pelo Next: `authHandler` monta o Better Auth em `/api/auth/*` na API. O web fala com ela via `lib/auth-client.ts` (`baseURL = NEXT_PUBLIC_API_URL`, default `http://localhost:3333`).
@@ -138,4 +162,4 @@ do provedor, autenticado por segredo na URL + hash do token no corpo.
 - Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-04 10:56 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-04 11:25 (-03)
