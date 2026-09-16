@@ -18,13 +18,17 @@ export type DealInput = {
   tagIds?: string[];
 };
 
+// A API mais antiga responde negócio sem `tags`, e o web pode subir antes dela: normalizar aqui é o
+// que impede `deal.tags.length` de derrubar o kanban inteiro nessa janela.
+const withTags = (deals: Deal[]) => deals.map((deal) => ({ ...deal, tags: deal.tags ?? [] }));
+
 export const useDeals = (pipelineId: string | undefined) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
     queryKey: ["deals", org?.id, pipelineId],
     queryFn: async () => {
       const { data } = await api.get<Deal[]>("/deals", { params: { pipelineId } });
-      return data;
+      return withTags(data);
     },
     enabled: !!org?.id && !!pipelineId,
   });
@@ -47,7 +51,7 @@ export const useOrgDeals = () => {
     queryKey: ["deals", org?.id, "all"],
     queryFn: async () => {
       const { data } = await api.get<Deal[]>("/deals");
-      return data;
+      return withTags(data);
     },
     enabled: !!org?.id,
   });
