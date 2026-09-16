@@ -22,7 +22,7 @@ import type {
 } from "./broadcasts.schema.js";
 import { renderTemplate, templateVarsOf } from "./template.js";
 
-export const BROADCAST_QUEUE = "broadcast:send";
+export const BROADCAST_QUEUE = "broadcast-send";
 
 // Intervalo entre mensagens: base fixa mais um sorteio. Rajada com ritmo de máquina é o padrão que
 // o WhatsApp bloqueia, e o bloqueio derruba o número da imobiliária inteira — não só o disparo.

@@ -187,7 +187,7 @@ de diagnóstico e precisa de fila e limite.
 
 **Disparo em massa: `src/modules/broadcasts/`, rotas `/v1/broadcasts`.** É o "envio em massa" que o
 parágrafo acima antecipava, e por isso nasceu com fila e limite: no máximo 200 destinatários por
-disparo, **um job por destinatário** na fila `broadcast:send` com `delay` acumulado (6 s + sorteio de
+disparo, **um job por destinatário** na fila `broadcast-send` com `delay` acumulado (6 s + sorteio de
 até 6 s entre mensagens — rajada com ritmo de máquina é o que o WhatsApp bloqueia, e o bloqueio
 derruba o número da imobiliária inteira) e worker com concorrência 1. `attempts: 1` e o processador
 **nunca lança**: o resultado vai para a linha do `BroadcastRecipient` (`SENT`/`FAILED`/`SKIPPED`),
