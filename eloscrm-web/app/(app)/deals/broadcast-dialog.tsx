@@ -172,7 +172,7 @@ export const BroadcastDialog = ({
                 <AlertTitle>WhatsApp desconectado</AlertTitle>
                 <AlertDescription>
                   Dá para montar o disparo, mas o envio exige o número conectado.{" "}
-                  <Link href="/integracoes" className="underline">
+                  <Link href="/integracoes/whatsapp" className="underline">
                     Abrir integrações
                   </Link>
                 </AlertDescription>

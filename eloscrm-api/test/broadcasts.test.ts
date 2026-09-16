@@ -5,6 +5,7 @@ import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { renderTemplate } from "../src/modules/broadcasts/template.js";
 import { toWaNumber } from "../src/lib/phone.js";
+import { encryptToken, hashToken } from "../src/lib/crypto.js";
 
 let app: FastifyInstance;
 const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
@@ -18,6 +19,7 @@ let quenteId = "";
 let semFoneId = "";
 let comValorId = "";
 let comTagId = "";
+let orgId = "";
 
 type Preview = { dealId: string; sendable: boolean; client: { name: string } };
 
@@ -36,7 +38,7 @@ const preview = async (filters: Record<string, unknown>) => {
 
 beforeAll(async () => {
   app = await makeApp();
-  ({ cookie } = await signUpWithOrg(app, `bc-a-${stamp}@eloscrm.test`, `bc-a-${stamp}`));
+  ({ cookie, orgId } = await signUpWithOrg(app, `bc-a-${stamp}@eloscrm.test`, `bc-a-${stamp}`));
   ({ cookie: cookieB } = await signUpWithOrg(app, `bc-b-${stamp}@eloscrm.test`, `bc-b-${stamp}`));
 
   const pipelines = await app.inject({ method: "GET", url: "/v1/pipelines", headers: headers() });
@@ -60,6 +62,39 @@ beforeAll(async () => {
   semFoneId = await deal(semFone, { stageId: stageB });
   comValorId = await deal(comValor, { value: 350000 });
   comTagId = await deal(comTag, { tagIds: [tagId] });
+
+  // conversas para o filtro de retorno: Ana recebeu a nossa e não respondeu; Carla respondeu
+  const instance = await prisma.uazapiInstance.create({
+    data: {
+      organizationId: orgId,
+      remoteId: `remote-bc-${stamp}`,
+      name: "bc",
+      tokenEnc: encryptToken(`tok-bc-${stamp}`),
+      tokenHash: hashToken(`tok-bc-${stamp}`),
+      webhookSecret: `secret-bc-${stamp}`,
+    },
+  });
+  const conversa = async (clientId: string, phone: string, mensagens: ["inbound" | "outbound", Date][]) => {
+    const c = await prisma.conversation.create({
+      data: { organizationId: orgId, instanceId: instance.id, chatid: `${phone}@s.whatsapp.net`, phone, clientId },
+    });
+    for (const [direction, sentAt] of mensagens) {
+      await prisma.whatsappMessage.create({
+        data: {
+          organizationId: orgId,
+          conversationId: c.id,
+          providerId: `bc-${stamp}-${Math.random()}`,
+          direction,
+          type: "text",
+          text: direction,
+          sentAt,
+        },
+      });
+    }
+  };
+  const dias = (n: number) => new Date(Date.now() - n * 86_400_000);
+  await conversa(quente, "5543999123456", [["inbound", dias(10)], ["outbound", dias(5)]]);
+  await conversa(comValor, "5543999887766", [["outbound", dias(3)], ["inbound", dias(2)]]);
 });
 
 afterAll(async () => {
@@ -126,6 +161,13 @@ describe("broadcasts/preview", () => {
 
   it("filtra por temperatura do lead", async () => {
     expect((await preview({ temperatures: ["QUENTE"] })).map((r) => r.dealId)).toEqual([quenteId]);
+  });
+
+  it("filtra por retorno: sem resposta após nosso contato, e com prazo mínimo", async () => {
+    expect((await preview({ reply: "NO_REPLY" })).map((r) => r.dealId)).toEqual([quenteId]);
+    expect((await preview({ reply: "NO_REPLY", noReplyDays: 3 })).map((r) => r.dealId)).toEqual([quenteId]);
+    expect((await preview({ reply: "NO_REPLY", noReplyDays: 7 })).map((r) => r.dealId)).toEqual([]);
+    expect((await preview({ reply: "REPLIED" })).map((r) => r.dealId)).toEqual([comValorId]);
   });
 
   it("recusa faixa invertida (422) e funil de outra imobiliária (404)", async () => {

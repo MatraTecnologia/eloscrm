@@ -200,7 +200,9 @@ procurada pela **`phoneKey`** dentro da instância (o nono dígito varia entre c
 só quando o lead nunca falou com o número. O texto já vai **renderizado por destinatário** na criação
 (`template.ts`, variáveis `{{nome}}`, `{{titulo}}`…): o worker não precisa do negócio, e o que foi
 enviado fica registrado mesmo que o lead mude de nome depois. As condições (`broadcastFiltersSchema`:
-estágio, etiqueta tem/não tem, valor, temperatura, responsável) são o mesmo formato que uma
+estágio, etiqueta tem/não tem, valor, temperatura, responsável e retorno no WhatsApp — este último
+em `reply-filter.ts`, fora do `where`, porque "a última mensagem é nossa" compara linhas da mesma
+conversa) são o mesmo formato que uma
 automação futura vai gravar — por isso vivem no schema, não no corpo do disparo. Etiquetas de negócio
 são entidade própria (`Tag`, m:n com `Deal`) justamente para condição apontar por id.
 

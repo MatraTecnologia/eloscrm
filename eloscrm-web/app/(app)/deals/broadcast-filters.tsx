@@ -77,6 +77,7 @@ export const BroadcastFiltersForm = ({
     set(key, clean(toggle(filters[key], id)));
 
   const valueMode = filters.value ?? ANY;
+  const replyMode = filters.reply ?? ANY;
 
   return (
     <div className="space-y-4">
@@ -188,6 +189,60 @@ export const BroadcastFiltersForm = ({
             onChange={(e) =>
               set("valueMax", parseCurrencyInput(formatCurrencyInput(e.target.value)) ?? undefined)
             }
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label>Retorno no WhatsApp</Label>
+          <Select
+            value={replyMode}
+            onValueChange={(v) => {
+              const mode = v === ANY || !v ? undefined : (v as "NO_REPLY" | "REPLIED");
+              // o prazo só faz sentido para "sem retorno": nos outros modos sai junto
+              onChange({
+                ...filters,
+                reply: mode,
+                ...(mode === "NO_REPLY" ? {} : { noReplyDays: undefined }),
+              });
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {(v: string) =>
+                  v === "NO_REPLY"
+                    ? "Sem retorno após nosso contato"
+                    : v === "REPLIED"
+                      ? "Respondeu à última mensagem"
+                      : "Qualquer"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ANY}>Qualquer</SelectItem>
+              <SelectItem value="NO_REPLY">Sem retorno após nosso contato</SelectItem>
+              <SelectItem value="REPLIED">Respondeu à última mensagem</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Olha a última mensagem da conversa do lead. Quem nunca conversou não entra.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="bc-days">Sem resposta há (dias)</Label>
+          <Input
+            id="bc-days"
+            type="number"
+            min={1}
+            max={365}
+            placeholder="qualquer"
+            disabled={replyMode !== "NO_REPLY"}
+            value={filters.noReplyDays ?? ""}
+            onChange={(e) => {
+              const n = Number.parseInt(e.target.value, 10);
+              set("noReplyDays", Number.isFinite(n) && n > 0 ? n : undefined);
+            }}
           />
         </div>
       </div>

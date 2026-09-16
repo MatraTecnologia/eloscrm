@@ -20,6 +20,7 @@ import type {
   ListBroadcastsQuery,
   PreviewBroadcastInput,
 } from "./broadcasts.schema.js";
+import { applyReplyFilter } from "./reply-filter.js";
 import { renderTemplate, templateVarsOf } from "./template.js";
 
 export const BROADCAST_QUEUE = "broadcast-send";
@@ -46,7 +47,7 @@ const requirePipeline = async (orgId: string, pipelineId: string) => {
 
 /** Negócios que o filtro devolve, já com nome do corretor e o número discável (ou null). */
 const resolveTargets = async (orgId: string, pipelineId: string, filters: PreviewBroadcastInput["filters"]) => {
-  const deals = await repo.matchDeals(orgId, pipelineId, filters);
+  const deals = await applyReplyFilter(orgId, await repo.matchDeals(orgId, pipelineId, filters), filters);
   const ownerIds = [...new Set(deals.flatMap((d) => (d.ownerId ? [d.ownerId] : [])))];
   const owners = await repo.memberNames(orgId, ownerIds);
   return deals.map((deal) => ({

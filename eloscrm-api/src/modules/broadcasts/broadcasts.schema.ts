@@ -18,6 +18,12 @@ export const broadcastFiltersSchema = z
     valueMax: z.number().nonnegative().optional(),
     temperatures: z.array(z.enum(["FRIO", "MORNO", "QUENTE"])).optional(),
     ownerIds: ids.optional(),
+    // retorno do lead no WhatsApp: NO_REPLY = a última mensagem da conversa é nossa (contatamos e
+    // ninguém respondeu); REPLIED = a última é dele. Quem nunca conversou fica de fora nos dois.
+    reply: z.enum(["NO_REPLY", "REPLIED"]).optional(),
+    // só com NO_REPLY: a nossa última mensagem tem pelo menos N dias — evita cobrar retorno de quem
+    // recebeu a primeira mensagem há uma hora
+    noReplyDays: z.number().int().min(1).max(365).optional(),
   })
   .refine((f) => f.valueMin === undefined || f.valueMax === undefined || f.valueMin <= f.valueMax, {
     message: "Valor mínimo maior que o máximo",

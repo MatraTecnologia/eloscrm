@@ -82,6 +82,10 @@ export type BroadcastFilters = {
   valueMax?: number;
   temperatures?: LeadTemperature[];
   ownerIds?: string[];
+  // NO_REPLY = contatamos e a última mensagem da conversa continua sendo nossa; REPLIED = a última é
+  // do lead. Quem nunca conversou fica de fora nos dois.
+  reply?: "NO_REPLY" | "REPLIED";
+  noReplyDays?: number;
 };
 
 export type BroadcastPreviewRow = {
