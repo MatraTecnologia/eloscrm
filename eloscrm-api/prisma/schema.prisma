@@ -93,6 +93,8 @@ model Organization {
   pipelines   Pipeline[]
   stages      Stage[]
   deals       Deal[]
+  tags        Tag[]
+  broadcasts  Broadcast[]
   activities  Activity[]
   auditEvents AuditEvent[]
   comments    Comment[]
@@ -181,6 +183,8 @@ enum AuditEntity {
   WHATSAPP_INSTANCE
   LEAD_AUTOMATION
   META_INTEGRATION
+  TAG
+  BROADCAST
   MEMBER
   INVITATION
   ORGANIZATION
@@ -218,6 +222,7 @@ enum AuditAction {
   ROLE_CHANGED
   INVITED
   INVITE_REVOKED
+  CANCELED
   EXPORTED
   PURGED
 }
@@ -366,11 +371,97 @@ model Deal {
   value          Decimal?
   lostReason     String?
   activities     Activity[]
+  // etiquetas da imobiliária, escolhidas por negócio: a tabela de junção é implícita, e apagar a
+  // etiqueta só a tira dos negócios — não apaga negócio nenhum
+  tags           Tag[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, pipelineId])
   @@index([stageId])
+}
+
+enum BroadcastStatus {
+  RUNNING
+  DONE
+  CANCELED
+}
+
+enum BroadcastRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// Disparo em massa pelo WhatsApp para negócios de um funil. `filters` guarda as condições que
+// selecionaram os destinatários (estágio, etiqueta, valor…) como JSON: são o registro do critério, não
+// uma regra viva — o que foi selecionado de fato está em `recipients`.
+model Broadcast {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // sem FK, como Deal.ownerId: funil apagado não leva o histórico do disparo junto
+  pipelineId     String
+  pipelineName   String
+  text           String
+  filters        Json
+  status         BroadcastStatus @default(RUNNING)
+
+  createdById   String?
+  createdByName String
+
+  total   Int
+  sent    Int @default(0)
+  failed  Int @default(0)
+  skipped Int @default(0)
+
+  recipients BroadcastRecipient[]
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([organizationId, createdAt])
+}
+
+// Um por negócio selecionado. Nome e telefone ficam desnormalizados: a tela do disparo precisa
+// continuar legível depois de o lead ou o negócio serem apagados.
+model BroadcastRecipient {
+  id          String    @id @default(cuid())
+  broadcastId String
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  dealId      String
+  clientId    String
+  clientName  String
+  // dígitos com DDI, como a uazapi recebe; null = lead sem telefone válido, vira SKIPPED na hora
+  number      String?
+  // texto já com as variáveis resolvidas, gravado na criação: o worker não precisa do negócio, e o
+  // que foi enviado de fato fica registrado mesmo que o lead mude de nome depois
+  text        String
+  status      BroadcastRecipientStatus @default(PENDING)
+  error       String?
+  // id da WhatsappMessage criada no envio: é o que liga o disparo à bolha na conversa
+  messageId   String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([broadcastId, dealId])
+}
+
+// Etiqueta de negócio. É entidade própria, e não `String[]` como em Client.tags, porque nasce para
+// ser referenciada por condição de automação: renomear ou recolorir não pode quebrar a regra que
+// aponta para ela, então quem viaja é o id.
+model Tag {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  color          String
+  deals          Deal[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
 }
 
 model Activity {

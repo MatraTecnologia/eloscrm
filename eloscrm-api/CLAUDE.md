@@ -185,6 +185,25 @@ recusa com `409 INSTANCE_NOT_CONNECTED` se a instância não estiver conectada, 
 de conversa e não tem valor de auditoria. Se um dia virar envio em massa, isso deixa de ser uma rota
 de diagnóstico e precisa de fila e limite.
 
+**Disparo em massa: `src/modules/broadcasts/`, rotas `/v1/broadcasts`.** É o "envio em massa" que o
+parágrafo acima antecipava, e por isso nasceu com fila e limite: no máximo 200 destinatários por
+disparo, **um job por destinatário** na fila `broadcast:send` com `delay` acumulado (6 s + sorteio de
+até 6 s entre mensagens — rajada com ritmo de máquina é o que o WhatsApp bloqueia, e o bloqueio
+derruba o número da imobiliária inteira) e worker com concorrência 1. `attempts: 1` e o processador
+**nunca lança**: o resultado vai para a linha do `BroadcastRecipient` (`SENT`/`FAILED`/`SKIPPED`),
+porque uma retentativa depois de um envio que chegou seria mensagem duplicada no celular do cliente.
+Sem `REDIS_URL` o `enqueue` roda inline e o `delay` é ignorado — em dev o disparo sai de uma vez.
+
+O envio reaproveita `sendText` de conversas, então a mensagem vira bolha na caixa de entrada e é
+auditada como `MESSAGE_SENT` com origem `AUTOMATION` e o criador do disparo como ator. A conversa é
+procurada pela **`phoneKey`** dentro da instância (o nono dígito varia entre cadastro e JID) e criada
+só quando o lead nunca falou com o número. O texto já vai **renderizado por destinatário** na criação
+(`template.ts`, variáveis `{{nome}}`, `{{titulo}}`…): o worker não precisa do negócio, e o que foi
+enviado fica registrado mesmo que o lead mude de nome depois. As condições (`broadcastFiltersSchema`:
+estágio, etiqueta tem/não tem, valor, temperatura, responsável) são o mesmo formato que uma
+automação futura vai gravar — por isso vivem no schema, não no corpo do disparo. Etiquetas de negócio
+são entidade própria (`Tag`, m:n com `Deal`) justamente para condição apontar por id.
+
 **Perder a `UAZAPI_TOKEN_ENCRYPTION_KEY` inutiliza todos os tokens salvos** (AES-256-GCM em
 `src/lib/crypto.ts`). Ela pertence ao cofre de produção, junto com `BETTER_AUTH_SECRET`.
 
@@ -383,4 +402,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-04 10:56 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-16 12:56 (-03)

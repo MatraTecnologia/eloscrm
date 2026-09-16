@@ -14,6 +14,8 @@ export type DealInput = {
   propertyId?: string | null;
   ownerId?: string | null;
   lostReason?: string | null;
+  // lista final de etiquetas: `[]` tira todas, omitir deixa como está
+  tagIds?: string[];
 };
 
 export const useDeals = (pipelineId: string | undefined) => {

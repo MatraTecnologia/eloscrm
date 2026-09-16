@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, Building2, Plus, Settings2, Trash2, User } from "lucide-react";
+import { ArrowRightLeft, Building2, Plus, Send, Settings2, Tags, Trash2, User } from "lucide-react";
 import { WhatsappIcon } from "@/components/icons/whatsapp";
 import { toast } from "sonner";
 import { useBulkTransferDeals, useDeals, useDeleteDeal, useUpdateDeal } from "@/lib/queries/deals";
@@ -26,12 +26,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { BroadcastDialog } from "./broadcast-dialog";
 import { DealDetailDialog } from "./deal-detail-dialog";
 import { DealFormDialog } from "./deal-form-dialog";
 import { LostReasonDialog } from "./lost-reason-dialog";
 import { MoveDealMenu } from "./move-deal-menu";
 import { useKanbanDrag } from "./use-kanban-drag";
 import { StageManagerDialog } from "./stage-manager-dialog";
+import { TagChip } from "./tag-chip";
+import { TagManagerDialog } from "./tag-manager-dialog";
 import { TransferPipelineDialog } from "./transfer-pipeline-dialog";
 
 export const KanbanBoard = ({
@@ -144,7 +147,22 @@ export const KanbanBoard = ({
           espremerem o nome do funil até ele quebrar no meio */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{pipeline.name}</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <BroadcastDialog
+            pipeline={pipeline}
+            trigger={
+              <Button variant="outline">
+                <Send className="size-4" /> Disparo
+              </Button>
+            }
+          />
+          <TagManagerDialog
+            trigger={
+              <Button variant="outline">
+                <Tags className="size-4" /> Etiquetas
+              </Button>
+            }
+          />
           <StageManagerDialog
             pipeline={pipeline}
             trigger={
@@ -255,6 +273,13 @@ export const KanbanBoard = ({
                           >
                             {/* espaço para os três controles do canto: marcar, mover e excluir */}
                             <div className="text-sm font-medium">{deal.title}</div>
+                            {deal.tags.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {deal.tags.map((tag) => (
+                                  <TagChip key={tag.id} tag={tag} />
+                                ))}
+                              </div>
+                            )}
                             {client && (
                               <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                 <User className="size-3 shrink-0" />

@@ -8,6 +8,14 @@ const optionalFields = {
   ownerId: z.string().nullable().optional(),
   value: z.number().nullable().optional(),
   lostReason: z.string().nullable().optional(),
+  // a lista inteira, sempre: `[]` tira todas, omitir deixa como está. Desduplicado aqui porque o
+  // service prova que todas são da imobiliária comparando contagens — id repetido faria a conta
+  // bater com menos etiquetas de verdade.
+  tagIds: z
+    .array(z.string().min(1))
+    .max(20)
+    .transform((ids) => [...new Set(ids)])
+    .optional(),
 };
 
 export const createDealSchema = z.object({
@@ -54,6 +62,7 @@ export const listDealsQuerySchema = z.object({
   pipelineId: z.string().optional(),
   stageId: z.string().optional(),
   ownerId: z.string().optional(),
+  tagId: z.string().optional(),
 });
 
 export type CreateDealInput = z.infer<typeof createDealSchema>;

@@ -42,6 +42,7 @@ import { WhatsappIcon } from '@/components/icons/whatsapp'
 import Link from 'next/link'
 import { useState } from 'react'
 import { DealForm } from './deal-form'
+import { TagChip } from './tag-chip'
 import { TransferPipelineDialog } from './transfer-pipeline-dialog'
 
 const TAB_CLASS = 'data-active:text-primary after:bg-primary'
@@ -128,6 +129,9 @@ export const DealDetailDialog = ({
                 {stage.name}
               </Badge>
             )}
+            {deal.tags.map(tag => (
+              <TagChip key={tag.id} tag={tag} />
+            ))}
             <span className="text-sm font-medium">
               {formatCurrency(deal.value)}
             </span>

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TagPicker } from "./tag-picker";
 import {
   Select,
   SelectContent,
@@ -58,6 +59,7 @@ export const DealForm = ({
   const [propertyId, setPropertyId] = useState(deal?.propertyId ?? NONE);
   const [ownerId, setOwnerId] = useState(deal?.ownerId ?? NONE);
   const [lostReason, setLostReason] = useState(deal?.lostReason ?? "");
+  const [tagIds, setTagIds] = useState<string[]>(deal?.tags.map((tag) => tag.id) ?? []);
 
   const saving = create.isPending || update.isPending;
   const selectedStage = stages.find((stage) => stage.id === stageId);
@@ -76,6 +78,7 @@ export const DealForm = ({
       propertyId: propertyId === NONE ? null : propertyId,
       ownerId: ownerId === NONE ? null : ownerId,
       lostReason: lostReason.trim() || null,
+      tagIds,
     };
     try {
       // `pipelineId` só na criação. Editar não é lugar de trocar o negócio de funil — isso tem
@@ -226,6 +229,11 @@ export const DealForm = ({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Etiquetas</Label>
+        <TagPicker value={tagIds} onChange={setTagIds} />
       </div>
 
       {showLostReason && (

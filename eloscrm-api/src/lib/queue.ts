@@ -49,10 +49,12 @@ export const createWorker = <T>(name: string, processor: Processor<T>, concurren
   });
 };
 
-export const enqueue = async <T>(name: string, data: T) => {
+// `options` é o que permite espaçar jobs (`delay`): sem Redis o processador roda na hora e o atraso
+// é ignorado — em teste e dev é o comportamento que se quer
+export const enqueue = async <T>(name: string, data: T, options?: JobsOptions) => {
   const queue = getQueue(name);
   if (queue) {
-    await queue.add(name, data);
+    await queue.add(name, data, options);
     return;
   }
   const processor = processors.get(name);

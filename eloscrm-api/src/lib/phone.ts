@@ -31,6 +31,19 @@ export const formatBrPhone = (value: string | null | undefined): string | null =
   return `(${ddd}) ${resto.slice(0, resto.length - 4)}-${resto.slice(-4)}`;
 };
 
+/**
+ * Número no formato que a uazapi recebe: só dígitos, com DDI. Telefone nacional de 10 ou 11 dígitos
+ * ganha o 55; o que já vem com DDI passa como está; qualquer outro tamanho não é número discável e
+ * volta `null` — é o que impede um disparo de gastar tentativa em lead com telefone incompleto.
+ */
+export const toWaNumber = (value: string | null | undefined): string | null => {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
+  return null;
+};
+
 export const phoneKey = (value: string | null | undefined): string | null => {
   const digits = (value ?? "").replace(/\D/g, "");
   if (!digits) return null;

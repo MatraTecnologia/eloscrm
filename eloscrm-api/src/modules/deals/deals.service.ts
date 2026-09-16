@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma.js";
 import * as attachments from "../attachments/attachments.service.js";
 import * as comments from "../comments/comments.service.js";
 import { assertStageInOrgPipeline } from "../pipelines/pipelines.service.js";
+import { assertTagsInOrg } from "../tags/tags.service.js";
 import * as repo from "./deals.repo.js";
 import type {
   BulkTransferDealsInput,
@@ -32,7 +33,12 @@ const ensureRelationsInOrg = async (orgId: string, data: CreateDealInput | Updat
     const property = await repo.findPropertyInOrg(orgId, data.propertyId);
     if (!property) throw notFound("Imóvel não encontrado");
   }
+  if (data.tagIds) await assertTagsInOrg(orgId, data.tagIds);
 };
+
+// o histórico grava a etiqueta pelo nome: id não diz nada a quem lê, e a etiqueta pode ser apagada
+// depois. Os dois lados vêm do include, então não há ida extra ao banco.
+const tagNames = (tags: { name: string }[]) => tags.map((tag) => tag.name);
 
 // id no histórico não diz nada a quem lê; o nome é o que interessa. Serve estágio e funil, que
 // mudam juntos na transferência.
@@ -128,8 +134,15 @@ export const update = async (orgId: string, id: string, data: UpdateDealInput, a
   const aplicado = { ...data, ...limpaPerda };
   const updated = await repo.updateDealById(id, aplicado);
   // o diff acompanha o que foi gravado, não o que veio no corpo: o motivo apagado por regra também
-  // é mudança e precisa aparecer no histórico
-  const changes = diffFields(deal, aplicado);
+  // é mudança e precisa aparecer no histórico. `tagIds` fica de fora dele: é lista de ids, e o
+  // negócio lido tem `tags` com objetos — a comparação é feita à parte, por nome.
+  const { tagIds: _tagIds, ...camposSimples } = aplicado;
+  const changes = diffFields(deal, camposSimples);
+  if (data.tagIds) {
+    const from = tagNames(deal.tags);
+    const to = tagNames(updated.tags);
+    if (JSON.stringify(from) !== JSON.stringify(to)) changes.tags = { from, to };
+  }
 
   if (changes.stageId || changes.pipelineId) {
     // um PATCH pode mudar estágio e dono juntos; o movimento no funil é o que a timeline destaca

@@ -59,6 +59,82 @@ export type Pipeline = {
   updatedAt: string;
 };
 
+// etiqueta de negócio, por imobiliária. `color` é hex de seis dígitos, sempre minúsculo (a API
+// normaliza); a tela deriva fundo e borda do chip concatenando alfa no fim.
+export type Tag = {
+  id: string;
+  organizationId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DealTag = Pick<Tag, "id" | "name" | "color">;
+
+// Condições do disparo, combinadas por E. Espelha `broadcastFiltersSchema` da API.
+export type BroadcastFilters = {
+  stageIds?: string[];
+  tagsAny?: string[];
+  tagsNone?: string[];
+  value?: "FILLED" | "EMPTY";
+  valueMin?: number;
+  valueMax?: number;
+  temperatures?: LeadTemperature[];
+  ownerIds?: string[];
+};
+
+export type BroadcastPreviewRow = {
+  dealId: string;
+  title: string;
+  value: string | null;
+  stageId: string;
+  propertyTitle: string | null;
+  ownerName: string | null;
+  tags: DealTag[];
+  client: { id: string; name: string; phone: string | null; temperature: LeadTemperature };
+  sendable: boolean;
+};
+
+export type BroadcastStatus = "RUNNING" | "DONE" | "CANCELED";
+export type BroadcastRecipientStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+
+export type Broadcast = {
+  id: string;
+  organizationId: string;
+  pipelineId: string;
+  pipelineName: string;
+  text: string;
+  filters: BroadcastFilters;
+  status: BroadcastStatus;
+  createdById: string | null;
+  createdByName: string;
+  total: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BroadcastRecipient = {
+  id: string;
+  broadcastId: string;
+  dealId: string;
+  clientId: string;
+  clientName: string;
+  number: string | null;
+  text: string;
+  status: BroadcastRecipientStatus;
+  error: string | null;
+  messageId: string | null;
+  sentAt: string | null;
+  createdAt: string;
+};
+
+export type BroadcastDetail = Broadcast & { recipients: BroadcastRecipient[] };
+
 export type Deal = {
   id: string;
   organizationId: string;
@@ -70,6 +146,8 @@ export type Deal = {
   title: string;
   value: string | null;
   lostReason: string | null;
+  // sempre presente: toda leitura de negócio na API faz o include
+  tags: DealTag[];
   createdAt: string;
   updatedAt: string;
 };
@@ -133,6 +211,8 @@ export type AuditEntity =
   | "WHATSAPP_INSTANCE"
   | "LEAD_AUTOMATION"
   | "META_INTEGRATION"
+  | "TAG"
+  | "BROADCAST"
   | "MEMBER"
   | "INVITATION"
   | "ORGANIZATION"
@@ -173,7 +253,8 @@ export type AuditAction =
   | "INVITED"
   | "INVITE_REVOKED"
   | "EXPORTED"
-  | "PURGED";
+  | "PURGED"
+  | "CANCELED";
 
 export type AuditSource = "USER" | "AUTOMATION" | "WEBHOOK" | "SYSTEM";
 
