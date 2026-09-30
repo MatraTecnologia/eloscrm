@@ -1,5 +1,9 @@
 # Sessão — hardening de auth e Leads 360
 
+> **Registro histórico de sessão.** Resultados, contagens e pendências refletem a data desta sessão.
+> Para o estado atual, consulte o [guia da raiz](../AGENTS.md), o [guia da API](../eloscrm-api/AGENTS.md)
+> e os [débitos do WhatsApp](2026-08-04-debitos-whatsapp.md).
+
 Registro do que foi feito, decidido e descoberto numa sessão que começou como auditoria do auth e
 terminou com três fases de produto entregues. **57 commits**, de `1e61ac2` a `0100fb7`, tudo na `main`.
 
@@ -172,4 +176,4 @@ tal nos relatórios de task.
 e **se recusou a contornar mexendo no banco**, reportando a lacuna. Foi a decisão certa: o incidente da
 seção 5 aconteceu justamente por um improviso desse tipo.
 
-> Criado em 2026-07-30 09:43 (-03) · Última modificação: 2026-07-30 09:43 (-03)
+> Criado em 2026-07-30 09:43 (-03) · Última modificação: 2026-09-30 14:44 (-03)

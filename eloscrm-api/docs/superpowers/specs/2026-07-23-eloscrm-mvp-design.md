@@ -1,5 +1,10 @@
 # elosCRM — MVP · Spec Técnico
 
+> **Spec histórica.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > CRM multi-tenant para imobiliárias. Núcleo: **funil de vendas** (leads → negociação).
 > Modelo de tenancy estilo Slack-workspace (usuário pertence a N imobiliárias).
 
@@ -154,4 +159,4 @@ eloscrm-web/app/
 
 ---
 
-> Criado em 2026-07-23 16:40 (-03) · Última modificação: 2026-08-05 11:35 (-03)
+> Criado em 2026-07-23 16:40 (-03) · Última modificação: 2026-09-30 14:44 (-03)

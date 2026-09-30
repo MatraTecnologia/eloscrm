@@ -1,5 +1,10 @@
 # Plano 1 — Fundação da API (elosCRM) — Implementation Plan
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Subir a API Fastify com Postgres/Prisma 7 rust-free, Better Auth (organization plugin) e enforcement de multi-tenancy row-level, deixando login, troca de organização e isolamento de dados funcionando e verificados.
@@ -950,4 +955,4 @@ git commit -m "adiciona seed com imobiliária demo"
 
 ---
 
-> Criado em 2026-07-23 16:50 (-03) · Última modificação: 2026-07-23 17:01 (-03)
+> Criado em 2026-07-23 16:50 (-03) · Última modificação: 2026-09-30 14:44 (-03)

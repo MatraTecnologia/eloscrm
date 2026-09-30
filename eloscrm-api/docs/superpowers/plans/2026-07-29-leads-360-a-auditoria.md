@@ -1,5 +1,10 @@
 # Leads 360 — Plano A: contexto de request e auditoria
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
@@ -1751,4 +1756,4 @@ Depois disso, o plano B (descrição, tags, temperatura, orçamento e comentári
 cima de `actor`/`recordAudit`, e o C (anexos no R2 e timeline unificada) em cima do
 `src/lib/storage.ts` que já existe.
 
-> Criado em 2026-07-29 10:52 (-03) · Última modificação: 2026-07-29 10:52 (-03)
+> Criado em 2026-07-29 10:52 (-03) · Última modificação: 2026-09-30 14:44 (-03)

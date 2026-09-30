@@ -1,5 +1,10 @@
 # Integração WhatsApp (uazapi) — Spec de Design + Plano
 
+> **Spec histórica.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > Cada imobiliária conecta **um** número de WhatsApp. Esta fase entrega apenas o
 > **ciclo de vida da instância**: criar, conectar (QR/paircode), acompanhar estado, reconciliar e
 > remover. Sincronização de mensagens → lead fica para a fase seguinte.
@@ -675,4 +680,4 @@ integração não está configurada, e os três envelopes candidatos aceitos pel
 
 **Em aberto**, nenhum bloqueante: o rate limit do receptor (§11) e a rotação de `webhookSecret`.
 
-> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-08-04 00:22 (-03)
+> Criado em 2026-08-03 21:33 (-03) · Última modificação: 2026-09-30 14:44 (-03)

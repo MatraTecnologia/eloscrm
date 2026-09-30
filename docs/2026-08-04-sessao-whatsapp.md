@@ -1,5 +1,9 @@
 # Sessão — integração de WhatsApp, da instância à conversa
 
+> **Registro histórico de sessão.** Resultados, contagens e pendências refletem a data desta sessão.
+> Para o estado atual, consulte o [guia da raiz](../AGENTS.md), o [guia da API](../eloscrm-api/AGENTS.md)
+> e os [débitos do WhatsApp](2026-08-04-debitos-whatsapp.md).
+
 Registro do que foi feito, decidido e descoberto numa sessão que começou com uma pasta de código
 importado que não compilava e terminou com conversas reais chegando no CRM. **23 commits**, de
 `95682b6` a `e3753a8`, na `main`.
@@ -142,4 +146,4 @@ senão o webhook processa inline.
 
 ---
 
-> Criado em 2026-08-04 09:36 (-03) · Última modificação: 2026-08-04 09:36 (-03)
+> Criado em 2026-08-04 09:36 (-03) · Última modificação: 2026-09-30 14:44 (-03)

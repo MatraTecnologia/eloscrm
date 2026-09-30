@@ -1,5 +1,10 @@
 # Leads 360 — Plano B: cadastro do lead e comentários
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
@@ -1572,4 +1577,4 @@ fundir — atividade, auditoria, comentário e anexo — e pode consumir o `src/
 - **Retenção de PII no histórico** — pendência herdada do plano A: excluir um lead não apaga os dados
   pessoais gravados no `changes` do `AuditEvent`. Vale para `Comment` também.
 
-> Criado em 2026-07-29 14:39 (-03) · Última modificação: 2026-07-29 14:39 (-03)
+> Criado em 2026-07-29 14:39 (-03) · Última modificação: 2026-09-30 14:44 (-03)

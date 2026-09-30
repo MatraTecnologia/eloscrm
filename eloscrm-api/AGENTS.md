@@ -16,7 +16,7 @@ Este projeto segue o **Padrão A** do `~/.claude/STANDARDS.md`:
 - **Sem migrations** — `prisma db push`
 - `DATABASE_URL` em `prisma.config.ts`
 - **T3 Env + Zod** em `src/env.ts` — nunca `process.env` cru
-- Rotas com registro manual em `src/routes/`
+- Rotas em `src/routes/`, carregadas por `@fastify/autoload` em `src/app.ts`; o caminho da pasta define o prefixo
 - `@prisma/client` fica em `dependencies` (não é resíduo): o client gerado do Prisma 7 rust-free
   importa `@prisma/client/runtime/*` internamente, e sob o node_modules estrito do pnpm o pacote
   precisa estar declarado no projeto para resolver. A regra "nunca `@prisma/client`" vale para
@@ -69,13 +69,15 @@ pnpm backfill:message-kinds [--apply]     # contato e localização ingeridos an
 pnpm auth:generate                        # regera os models do Better Auth no schema.prisma
 ```
 
-**Pré-requisitos (clone novo).** `./scripts/setup.sh` na raiz do repo faz tudo; manualmente:
+**Pré-requisitos (clone novo).** Com o Postgres disponível e os bancos de dev e teste criados,
+`./scripts/setup.sh` na raiz do repo prepara envs, dependências e schemas. Serviços locais e S3 são
+pré-requisitos descritos no `../AGENTS.md`; manualmente:
 
 - `pnpm install && pnpm db:generate` — `src/generated/` não é versionado e todo o código importa dele.
 - `cp .env.example .env` + `pnpm db:push` — dev aponta para o Postgres local (`docker compose up -d`
   na raiz, ou qualquer Postgres na 5432).
 - `cp .env.test.example .env.test` + `pnpm db:push:test` — **banco separado**, exclusivo dos testes.
-  Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem
+  O Postgres é real, sem mocks nem banco em memória. Os testes sobem o app inteiro (`test/helpers/app.ts`) e fazem
   sign-up de verdade em `/api/auth/*` via `app.inject`. Com `requireEmailVerification` ligado o
   sign-up não devolve sessão: `test/helpers/session.ts` marca `emailVerified` no banco e faz o
   sign-in em seguida. Teste novo deve usar esse helper, nunca ler o cookie da resposta do sign-up.
@@ -83,7 +85,9 @@ pnpm auth:generate                        # regera os models do Better Auth no s
 **Isolamento dos testes.** `test/global-setup.ts` trunca todas as tabelas uma vez antes da run;
 `test/setup.ts` carrega `.env.test` com `override: true` em cada worker. Os arquivos rodam em
 paralelo e cada um cria a própria organização — por isso não há cleanup em `afterAll`, e não faz
-sentido reintroduzir correntes de `deleteMany`. Timeouts em 15s por causa do bcrypt do sign-up.
+sentido reintroduzir correntes de `deleteMany`. Os timeouts de 15s dão margem aos fluxos de auth e
+banco real no CI. O Better Auth usa scrypt; o projeto não configura um algoritmo próprio. uazapi e
+Graph API são mockadas nos testes dessas integrações.
 
 **Lint.** É **oxlint**, não ESLint (`typescript-eslint` ainda não suporta o TypeScript 7 do projeto).
 `.oxlintrc.json` liga a categoria `correctness` e transforma em regra duas convenções que antes só
@@ -105,8 +109,10 @@ existiam neste documento: `no-console` (liberado em `prisma/` e `scripts/`, que 
 Cliente HTTP em `src/lib/uazapi/` (tem `AGENTS.md` próprio), módulo em `src/modules/whatsapp/`,
 design em `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`.
 
-**Uma instância por organização.** `UazapiInstance.organizationId` é `@unique` e nenhuma rota tem
-`:id` — todas são `/v1/whatsapp/instance` e resolvem por `request.orgId`. Não recoloque id na URL:
+**Uma instância por organização.** `UazapiInstance.organizationId` é `@unique`. As rotas de gestão
+em `/v1/whatsapp/instance` resolvem a instância por `request.orgId`, sem id de instância na URL.
+As rotas de conversas em `/v1/whatsapp/conversations/:id` usam id de conversa e validam a org.
+Não recoloque id de instância na URL de gestão:
 é o que hoje torna impossível apontar para a instância de outra imobiliária.
 
 **A rota `/webhooks/uazapi/:instanceId/:secret` não tem `authGuard` de propósito.** Quem chama é o
@@ -179,14 +185,13 @@ apontado em `PUBLIC_API_URL`, o estado da conexão só muda pelo botão **Sincro
 as rotas de WhatsApp respondem `503 INTEGRATION_NOT_CONFIGURED`. `GET /v1/whatsapp/instance` funciona
 mesmo assim — lê só o estado local.
 
-**`POST /instance/test-send` é a única rota que faz o número enviar mensagem.** Gestor apenas,
+**`POST /v1/whatsapp/instance/test-send` é a rota de diagnóstico de envio.** Gestor apenas,
 recusa com `409 INSTANCE_NOT_CONNECTED` se a instância não estiver conectada, e o log
 (`test_message_sent`) guarda o número de destino e o id da mensagem — **não o texto**, que é conteúdo
-de conversa e não tem valor de auditoria. Se um dia virar envio em massa, isso deixa de ser uma rota
-de diagnóstico e precisa de fila e limite.
+de conversa e não tem valor de auditoria. O atendimento envia texto e mídia pelas rotas de
+conversas; os disparos em massa usam `/v1/broadcasts`.
 
-**Disparo em massa: `src/modules/broadcasts/`, rotas `/v1/broadcasts`.** É o "envio em massa" que o
-parágrafo acima antecipava, e por isso nasceu com fila e limite: no máximo 200 destinatários por
+**Disparo em massa: `src/modules/broadcasts/`, rotas `/v1/broadcasts`.** Usa fila e limite: no máximo 200 destinatários por
 disparo, **um job por destinatário** na fila `broadcast-send` com `delay` acumulado (6 s + sorteio de
 até 6 s entre mensagens — rajada com ritmo de máquina é o que o WhatsApp bloqueia, e o bloqueio
 derruba o número da imobiliária inteira) e worker com concorrência 1. `attempts: 1` e o processador
@@ -302,8 +307,8 @@ dois com `try/catch`, e o `try` é obrigatório: quem estoura primeiro é o `ins
 descriptografar o token, **antes** de existir promise — um `.catch()` encadeado não veria a exceção e
 a bolha ficava `pending` para sempre, que na tela se lê como "ainda indo" em vez de "não foi".
 
-**Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`) — exceção deliberada, e só ela:
-a regra "sem mocks" deste documento é sobre o Postgres, não sobre serviço externo de terceiro.
+**Os testes mockam a uazapi** (`vi.mock` em `test/whatsapp.test.ts`), assim como a Graph API nos testes
+de Meta. O Postgres permanece real: a regra de não usar mocks se aplica ao banco.
 
 ## Integração Meta Lead Ads
 
@@ -374,11 +379,12 @@ decisões: `docs/superpowers/plans/2026-08-06-auditoria-completa.md`.
   `src/modules/audit/identity.audit.ts`): erro em hook do Better Auth trancaria o login. Mas conta e
   emite `process.emitWarning`, e o número sai em `GET /health` (`auditFailures`) — sem isso, trilha
   quebrada por schema desatualizado seria idêntica a um dia sem logins.
-- **Excluir a organização apaga tudo que é dela**, log inclusive: as 13 relações de `Organization` são
-  `onDelete: Cascade`. O que o Postgres não alcança está em
-  `src/modules/audit/organization-purge.service.ts`, chamado pelo `beforeDeleteOrganization` — objetos
-  do R2 (anexos e mídias) e a instância remota na uazapi. Roda **antes** do delete, porque depois não
-  há mais chave nem token. Quem apagar a org direto no banco continua deixando objeto órfão no bucket.
+- **Excluir a organização apaga os registros vinculados por `onDelete: Cascade`**, log inclusive.
+  O caminho atual é `DELETE /v1/organization` → `organization.service.remove`: exige o dono e a
+  confirmação do slug, chama `purgeOrganizationAssets` para os objetos do R2 (anexos e mídias) e a
+  instância remota na uazapi, e só então exclui a org. A exclusão pelo plugin do Better Auth está
+  desabilitada (`disableOrganizationDeletion: true`); o hook `beforeDeleteOrganization` permanece
+  como proteção caso ela seja reativada. Quem apagar a org direto no banco deixa objetos órfãos no bucket.
 - **Eventos antigos sem rótulo:** `pnpm audit:backfill-labels` (com `--dry-run`) preenche o que ainda
   existe; item já apagado fica sem nome, porque ele não está em lugar nenhum.
 
@@ -391,8 +397,11 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
 
 ## Docs
 
-- Spec do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
-- Plano da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
+Specs e planos abaixo registram decisões e evidências históricas. Use este guia e o código para o
+comportamento atual; consulte as observações de tráfego antes de alterar a ingestão.
+
+- Spec histórica do MVP: `docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
+- Plano histórico da fundação: `docs/superpowers/plans/2026-07-23-api-fundacao.md`
 - WhatsApp/uazapi, instância: `docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`
 - WhatsApp, conversas: `docs/superpowers/specs/2026-08-04-whatsapp-conversas-design.md` — a §2 é o
   que a spec do provedor **não** documenta (envelope dos webhooks, os sete tipos de mensagem,
@@ -404,4 +413,4 @@ construa um 5xx exposto com `new Error` + `statusCode` na mão — use `httpErro
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-30 14:17 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-30 14:44 (-03)

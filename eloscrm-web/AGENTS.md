@@ -38,9 +38,9 @@ Dois clients, propositalmente separados:
 - `lib/api.ts` — axios com `baseURL = ${API_URL}/v1` e `withCredentials: true`. Só domínio.
   O interceptor desembrulha o envelope `{ error: { code, message } }` da API (o `catch` recebe já o
   `error`, não o response) e, em 401 fora de `/login`, redireciona para `/login`.
-- `lib/auth-client.ts` — Better Auth (`better-auth/react` + `organizationClient`) apontando para a
+- `lib/auth-client.ts` — Better Auth (`better-auth/react` + `organizationClient` + `emailOTPClient`) apontando para a
   **raiz** da API, porque as rotas de auth ficam em `/api/auth/*`, fora do `/v1`. Exporta
-  `signIn`/`signOut`/`useSession`/`organization`/`useListOrganizations`/`useActiveOrganization`.
+  `authClient`/`signIn`/`signUp`/`signOut`/`useSession`/`organization`/`useListOrganizations`/`useActiveOrganization`.
 
 Sessão é por cookie: o CORS da API é pinado em `WEB_ORIGIN` com `credentials: true` — rodar o front
 em outra origem quebra o login silenciosamente (cookie não viaja).
@@ -110,4 +110,4 @@ mostra dados da org anterior.
   em paisagem passa dos 768px e continua sendo toque. No toque o arraste nasce de um long-press,
   que é o que permite manter `touch-action: pan-y` e não matar a rolagem da coluna.
 
-> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-09-30 14:17 (-03)
+> Criado em 2026-07-27 10:22 (-03) · Última modificação: 2026-09-30 14:44 (-03)

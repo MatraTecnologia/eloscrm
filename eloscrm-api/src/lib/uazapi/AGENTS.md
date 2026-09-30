@@ -1,8 +1,10 @@
 # lib/uazapi
 
-Cliente HTTP modular para a **uazapiGO** (WhatsApp API, v2.1.1). Spec OpenAPI de referência em [`docs/uazapi/`](../../../../../docs/uazapi/) (na raiz do repo, fora dos dois projetos).
+Cliente HTTP modular para a **uazapiGO** (WhatsApp API, v2.1.1). Spec OpenAPI de referência em [`docs/uazapi/`](../../../../docs/uazapi/) (na raiz do repo, fora dos dois projetos).
 
-**Consumidor:** `src/modules/whatsapp/` — ciclo de vida da instância por imobiliária. Design em
+**Consumidor:** `src/modules/whatsapp/` — gestão da instância, envio de mensagens e mídia,
+download de mídia, reações, fixação e exclusão de mensagens. Os disparos de `src/modules/broadcasts/`
+reutilizam o envio de conversas. Design em
 [`docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md`](../../../docs/superpowers/specs/2026-08-03-whatsapp-uazapi-design.md).
 
 ## Estrutura
@@ -16,7 +18,7 @@ uazapi/
 ├── instance.ts    # /instance/connect, /status, /reset, /disconnect, /wa_messages_limits (token)
 ├── webhook.ts     # /webhook (get/upsert/delete), /webhook/errors (token)
 ├── send.ts        # /send/text, /send/media, /message/presence (token)
-├── messages.ts    # /message/find, /message/download, /message/react (token)
+├── messages.ts    # /message/find, /download, /react, /delete, /pin (token)
 ├── proxy.ts       # /proxy-managed/cities, /instance/proxy (GET/POST) (token)
 ├── contacts.ts    # /chat/check, /chat/details, /contacts, /contacts/list (token)
 └── groups.ts      # /group/info, /group/list (GET/POST) (token)
@@ -26,7 +28,9 @@ uazapi/
 
 ## Duas coisas que parecem descuido e não são
 
-**Metade dos módulos não tem consumidor.** Só `admin`, `instance` e `webhook` são usados hoje. `send`, `messages`, `contacts`, `groups` e `proxy` foram importados junto e ficam esperando a fase de sincronização de leads — decisão registrada no spec de design, não sobra de copy-paste. Não podar.
+**Módulos com e sem consumidor.** `admin`, `instance`, `webhook`, `send` e `messages` são usados pelo
+módulo de WhatsApp. `contacts`, `groups` e `proxy` permanecem disponíveis no cliente, sem consumidor
+no código da aplicação. Não removê-los como parte de mudanças em conversas.
 
 **O estilo diverge do resto da API.** Esta pasta usa aspas simples e sem ponto-e-vírgula; o resto de `src/` usa aspas duplas com ponto-e-vírgula. Não há Prettier no projeto e o oxlint não tem regra de formatação, então reformatar geraria um diff de ~1500 linhas sem ganho. Código novo **fora** desta pasta segue o estilo da API.
 
@@ -43,14 +47,17 @@ O `buildAuthHeaders` em `client.ts` injeta automaticamente — não passe `Autho
 
 ## Uso
 
+Os imports dos exemplos abaixo partem de um arquivo em `src/`; ajuste o caminho relativo ao consumidor.
+
 ### Singleton (config via env)
 
 ```typescript
-import { uazapi } from '@/lib/uazapi/index.js'
+import { uazapi } from './lib/uazapi/index.js'
+import { uazapiError } from './modules/whatsapp/whatsapp.gateway.js'
 
 // Operações administrativas globais (usa UAZAPI_ADMIN_TOKEN do env)
 const result = await uazapi().admin.listInstances()
-if (!result.success) return reply.badGateway(result.error.error)
+if (!result.success) throw uazapiError(result.error)
 const instances = result.data
 
 // Escopo por instância (override do token via withInstance)
@@ -65,7 +72,7 @@ Requer `UAZAPI_BASE_URL` (obrigatória para `uazapi()`); `UAZAPI_ADMIN_TOKEN` é
 ### Config explícita (multi-tenant)
 
 ```typescript
-import { createUazapiClient } from '@/lib/uazapi/index.js'
+import { createUazapiClient } from './lib/uazapi/index.js'
 
 const client = createUazapiClient({
   baseURL: tenant.uazapiBaseUrl,
@@ -107,10 +114,7 @@ Toda chamada retorna `Promise<Result<T>> = Ok<T> | Err`. Nunca lança em erro HT
 
 ```typescript
 const r = await uazapi().instance.status({ token })
-if (!r.success) {
-  request.log.error({ err: r.error }, 'uazapi falhou')
-  return reply.badGateway(r.error.message_ptbr ?? r.error.error)
-}
+if (!r.success) throw uazapiError(r.error)
 return r.data
 ```
 
@@ -189,6 +193,8 @@ Todos suportam `CommonSendOptions` (delay, readchat, readmessages, replyid, view
 | `find(params?)` | `POST /message/find` | Busca paginada com filtros por `id`, `chatid`, `track_*`, `limit`, `offset` |
 | `download(params)` | `POST /message/download` | Baixa a mídia; `return_link: true` devolve `fileURL` temporária (~2 dias) |
 | `react(params)` | `POST /message/react` | Reage com emoji; `text` vazio **remove** a reação |
+| `delete(params)` | `POST /message/delete` | Apaga mensagem para todos |
+| `pin(params)` | `POST /message/pin` | Fixa ou desafixa mensagem; duração de 1, 7 ou 30 dias |
 
 Útil para verificar status de envios `async: true` (filtrar por `status: 'Failed'`).
 
@@ -234,9 +240,12 @@ URLs aceitas em `proxy_url` e `proxy_fallback` (quando URL): `http://`, `https:/
 ## Convenções
 
 - **Sem `function` declarations.** Tudo `const` arrow.
-- **Sem try/catch nos consumidores.** Use o `Result<T>`. Erros já estão normalizados em `UazapiErrorPayload`.
-- **Sem comentários.** Os nomes dos métodos espelham as tags da uazapi.
+- **Confira o `Result<T>` retornado pelas chamadas HTTP.** Erros HTTP são normalizados em
+  `UazapiErrorPayload`. A criação do cliente e a descriptografia do token podem lançar antes da
+  request: os consumidores precisam tratar essas exceções quando houver estado local a atualizar.
+  No envio, mantenha o `try/catch` de `sendOrMarkFailed` para marcar a mensagem como `failed`.
+- Comentários só para comportamentos não óbvios do provedor; os métodos espelham as tags da uazapi.
 - **ESM:** todos os imports com `.js`.
 - **Não exporte instâncias Axios.** Use apenas o `UazapiClient` (`uazapi()` / `createUazapiClient`).
 
-> Criado em 2026-09-30 14:17 (-03) · Última modificação: 2026-09-30 14:17 (-03)
+> Criado em 2026-09-30 14:17 (-03) · Última modificação: 2026-09-30 14:44 (-03)

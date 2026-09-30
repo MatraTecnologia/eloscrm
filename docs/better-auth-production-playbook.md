@@ -2,11 +2,17 @@
 
 Guia portável para replicar em outros projetos. Extraído de uma investigação real: um app em produção entrava em **loop de recarregamento** e a única saída era limpar os dados do site. A causa eram dois bugs empilhados, ambos com raiz em defaults do Better Auth que não são óbvios.
 
-Cada item traz **o quê**, **por quê**, **o código**, e **como verificar de verdade**. O histórico específico daquele caso está em [`auth-hardening-plan.md`](./auth-hardening-plan.md); aqui só o que se reaproveita.
+Cada item traz **o quê**, **por quê**, **o código**, e **como verificar de verdade**. O plano original da investigação não está versionado neste repositório.
 
 **Stack de referência:** Next.js (App Router) + API separada (Fastify) + Better Auth 1.6 + Prisma/PostgreSQL + Redis como `secondaryStorage`, com o front proxiando `/api/auth/*` para a API via rewrite (cookies same-origin).
 
 ---
+
+> **Referência portável para Better Auth 1.6.** Os exemplos abaixo usam a arquitetura da investigação
+> original. O elosCRM usa Better Auth 1.7.2, auth diretamente na API Fastify, gate de sessão no cliente
+> e Redis para jobs, sem `secondaryStorage` de auth. Para o estado atual do projeto, consulte os
+> guias da [API](../eloscrm-api/AGENTS.md) e do [web](../eloscrm-web/AGENTS.md). Confira a versão
+> instalada antes de reutilizar estes exemplos.
 
 ## 0. TL;DR — checklist
 
@@ -601,4 +607,4 @@ Afirmei "lint limpo" duas vezes baseado num `grep -c` que retornava zero — o c
 
 ---
 
-> Criado em 2026-07-14 11:32 (-03) · Última modificação: 2026-07-14 11:32 (-03)
+> Criado em 2026-07-14 11:32 (-03) · Última modificação: 2026-09-30 14:44 (-03)

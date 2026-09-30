@@ -15,17 +15,19 @@ Um único repo git com **dois projetos independentes** — não há `package.jso
 
 pnpm em ambos (`pnpm@11.25.0` nos dois), Node 24+.
 
-Na raiz existem só ferramentas de ambiente, nenhum código: `docker-compose.yml` (Postgres do projeto), `scripts/setup.sh`, `scripts/dev.sh` e `.github/workflows/ci.yml`.
+Na raiz ficam a documentação e as ferramentas de ambiente: `docker-compose.yml` (Postgres e Redis do projeto), `scripts/setup.sh`, `scripts/dev.sh` e `.github/workflows/ci.yml`. O código da aplicação fica nos dois projetos.
 
 `eloscrm-web/AGENTS.md` contém as instruções do frontend, incluindo uma regra importante: **esta versão do Next tem breaking changes em relação ao conhecimento de treino — ler o guia relevante em `eloscrm-web/node_modules/next/dist/docs/` antes de escrever código de Next.**
 
 ## Setup e comandos
 
-Clone novo, uma linha: `./scripts/setup.sh` — copia os `.env` dos exemplos, gera `BETTER_AUTH_SECRET`, instala deps nos dois projetos, gera o client do Prisma e aplica o schema nos bancos de dev e de teste.
+Com o Postgres disponível e os bancos `eloscrm_dev` e `eloscrm_test` criados, rode `./scripts/setup.sh`: copia os `.env` dos exemplos, gera `BETTER_AUTH_SECRET`, instala deps nos dois projetos, gera o client do Prisma e aplica o schema nos bancos de dev e de teste. O script não sobe serviços nem cria os bancos.
 
 `./scripts/dev.sh` sobe API (3333) e web (3000) juntos; Ctrl-C derruba os dois (o script usa `set -m` para matar a árvore, senão o node fica órfão segurando a porta).
 
-Postgres: `docker compose up -d` na raiz sobe `eloscrm-postgres` na 5432 com os bancos `eloscrm_dev` e `eloscrm_test`. Quem já tem um Postgres local nessa porta não precisa subir o compose — basta criar os dois bancos nele.
+`docker compose up -d` na raiz sobe `eloscrm-postgres` na 5432 (cria `eloscrm_dev` e `eloscrm_test` na primeira inicialização do volume) e `eloscrm-redis` na 6379. Quem já tem os serviços nessas portas pode reutilizá-los; no Postgres, crie os dois bancos. Para subir só o banco, use `docker compose up -d postgres`.
+
+O compose não inclui S3. Uploads e testes de storage exigem um serviço S3 compatível configurado pelas envs `R2_*` da API. Os exemplos usam SeaweedFS local na 8333; o bucket privado de dev é `eloscrm-private`. A suíte cria o bucket de teste no serviço configurado em `.env.test`.
 
 ### eloscrm-api
 
@@ -61,25 +63,25 @@ pnpm typecheck  # tsc --noEmit
 
 ## Testes dependem de Postgres real
 
-Não há mocks nem banco em memória: os testes sobem o app inteiro (`test/helpers/app.ts` → `buildApp()`) e fazem sign-up de verdade via `app.inject` em `/api/auth/*` (`test/helpers/session.ts`). Como `requireEmailVerification` está ligado, o sign-up não abre sessão: o helper marca `emailVerified` no banco e só então faz o sign-in — nenhum teste deve voltar a ler o cookie direto da resposta do sign-up.
+O Postgres é real, sem mocks nem banco em memória; uazapi e Graph API são mockadas. Os testes sobem o app inteiro (`test/helpers/app.ts` → `buildApp()`) e fazem sign-up de verdade via `app.inject` em `/api/auth/*` (`test/helpers/session.ts`). Como `requireEmailVerification` está ligado, o sign-up não abre sessão: o helper marca `emailVerified` no banco e só então faz o sign-in — nenhum teste deve voltar a ler o cookie direto da resposta do sign-up.
 
 - **Banco separado do de dev.** `test/setup.ts` carrega `.env.test` com `override: true`, então o `DATABASE_URL` de teste vence qualquer coisa já presente no ambiente. Nunca apontar esse arquivo para o banco de dev ou para um remoto.
 - **Limpeza é global, não por arquivo.** `test/global-setup.ts` trunca todas as tabelas uma vez antes da run. Os arquivos rodam em paralelo e cada um cria a própria organização, então não há cleanup em `afterAll` — não reintroduza correntes de `deleteMany`.
-- `vitest.config.ts` mantém `testTimeout`/`hookTimeout` em 15s: o bcrypt do sign-up roda em processo e estoura os defaults (5s/10s) em runner de CI.
+- `vitest.config.ts` mantém `testTimeout`/`hookTimeout` em 15s: os fluxos de auth e banco real precisam de margem no runner de CI. O Better Auth usa scrypt para as senhas; o projeto não configura um algoritmo próprio.
 - O mesmo config faz `server.deps.inline` de `@fastify/autoload`: sob NodeNext, os imports com sufixo `.js` das rotas não resolvem para os `.ts` no Vitest sem isso.
 - O logger do Fastify fica desligado quando `NODE_ENV=test` (`src/app.ts`), senão o log de request por teste soterra a saída do Vitest.
 
 ## CI
 
-`.github/workflows/ci.yml`, em push para `main` e em todo PR. Job `api`: service container `postgres:17-alpine`, `db:generate` → `db:push` → `lint` → `typecheck` → `test`, com as envs no próprio job (sem `.env` no runner — o `dotenv` do `test/setup.ts` simplesmente não encontra arquivo e o ambiente prevalece). Job `web`: `lint` → `typecheck` → `build`.
+`.github/workflows/ci.yml`, em push para `main` e em todo PR. Job `api`: Postgres 17 e MinIO local para os testes de storage, `db:generate` → `db:push` → `lint` → `typecheck` → `test` → `build`, com as envs no próprio job (sem `.env` no runner — o `dotenv` do `test/setup.ts` simplesmente não encontra arquivo e o ambiente prevalece). Job `web`: `lint` → `typecheck` → `build`.
 
 Os dois jobs passam `package_json_file` ao `pnpm/action-setup`: `defaults.run.working-directory` só afeta steps `run`, e sem apontar o arquivo a action procura o `packageManager` no `package.json` da raiz — que não existe aqui.
 
 ## Deploy: aplicar o schema é passo manual
 
-**Todo deploy que leva schema novo exige `prisma db push` no banco de produção, à mão, antes ou junto de subir a imagem.** Não há migrations (é o Padrão A) e nada no pipeline aplica schema: o `Dockerfile` roda `db:generate` com um `DATABASE_URL` de fachada (que não conecta) e o runner só executa `node dist/src/server.js`.
+**Todo deploy que leva schema novo exige `prisma db push` no banco de produção, à mão, antes de subir a imagem.** Não há migrations (é o Padrão A) e nada no pipeline aplica schema: o `Dockerfile` roda `db:generate` com um `DATABASE_URL` de fachada (que não conecta) e o runner só executa `node dist/src/server.js`.
 
-A auditoria de 2026-08-06 é o caso mais recente: `AuditEvent` ganhou colunas e os enums `AuditEntity`/`AuditAction` ganharam valores (mais `AuditSource`), e sem o push as rotas de auditoria e toda escrita instrumentada respondem 500. Junto do deploy vão duas envs novas — `AUDIT_RETENTION_DAYS` (365) e, se houver, `REDIS_URL` para o job diário de purga; sem Redis, agendar `pnpm -C eloscrm-api audit:purge` no cron do host.
+A auditoria de 2026-08-06 é um exemplo: `AuditEvent` ganhou colunas e os enums `AuditEntity`/`AuditAction` ganharam valores (mais `AuditSource`), e sem o push as rotas de auditoria e toda escrita instrumentada respondem 500. Junto do deploy vão duas envs novas — `AUDIT_RETENTION_DAYS` (365) e, se houver, `REDIS_URL` para o job diário de purga; sem Redis, agendar `pnpm -C eloscrm-api audit:purge` no cron do host.
 
 Esquecer isso não dá erro de boot — a API sobe normal e só as rotas que tocam as colunas novas respondem **500**. Já aconteceu: o schema de nutrição (`ClientStatus`, `NurtureReason`, `client.nurtureUntil`…) chegou em produção sem ser aplicado e derrubou `/v1/dashboard/stats` e `/v1/agenda`, que filtram por `status`.
 
@@ -146,12 +148,12 @@ Dois pontos sensíveis à segurança:
 - `authGuard` e `orgGuard` são adicionados **por arquivo de rota** (`app.addHook("preHandler", …)` ou `{ preHandler: [...] }`), não globalmente. Rota nova sem os hooks fica **desprotegida** — copiar o padrão de `src/routes/v1/deals/index.ts`.
 - Só o `authGuardPlugin`/`orgGuardPlugin` (decorators) são globais em `src/app.ts`; eles apenas declaram `request.session`/`request.user`/`request.orgId`.
 
-Módulos existentes: `clients`, `deals`, `pipelines` (+ `stages`), `properties`, `activities`, `agenda`, `dashboard`, `whatsapp`.
+Módulos existentes em `src/modules/`: `activities`, `agenda`, `attachments`, `audit`, `broadcasts`, `clients`, `comments`, `dashboard`, `deals`, `lead-automation`, `members`, `meta`, `organization`, `pipelines` (inclui os estágios), `properties`, `tags`, `timeline` e `whatsapp`.
 
 O `whatsapp` foge do formato em dois pontos, ambos deliberados e documentados em
 `eloscrm-api/AGENTS.md`: fala com a uazapi por `src/lib/uazapi/` (não só com o Prisma), e registra
 **uma rota fora de `/v1` e sem guards** — `/webhooks/uazapi/:instanceId/:secret`, receptor de eventos
-do provedor, autenticado por segredo na URL + hash do token no corpo.
+do provedor, autenticado por segredo na URL; o hash do token no corpo é conferido quando o campo está presente.
 
 ## Estrutura do web
 
@@ -163,7 +165,11 @@ do provedor, autenticado por segredo na URL + hash do token no corpo.
 
 ## Docs
 
-- Spec do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
-- Plano da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
+Specs, planos e registros de sessão preservam decisões e evidências históricas. Para a arquitetura e
+os comandos atuais, use os `AGENTS.md` da raiz, da API e do web, conferindo o código antes de mudar
+contratos ou executar procedimentos antigos.
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-30 14:17 (-03)
+- Spec histórica do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
+- Plano histórico da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
+
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-30 14:44 (-03)

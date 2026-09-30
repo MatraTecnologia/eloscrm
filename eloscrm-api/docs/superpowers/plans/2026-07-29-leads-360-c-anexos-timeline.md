@@ -1,5 +1,10 @@
 # Leads 360 — Plano C: anexos privados e timeline unificada
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
@@ -1719,4 +1724,4 @@ lugar para descobrir.
 - **Paginação real da timeline** — hoje é `limit` com teto de 100, sem cursor.
 - **Retenção de PII** no histórico e nos comentários — pendência herdada das fases A e B.
 
-> Criado em 2026-07-29 21:27 (-03) · Última modificação: 2026-07-29 21:27 (-03)
+> Criado em 2026-07-29 21:27 (-03) · Última modificação: 2026-09-30 14:44 (-03)

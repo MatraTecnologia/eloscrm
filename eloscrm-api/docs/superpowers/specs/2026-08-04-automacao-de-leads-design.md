@@ -1,5 +1,10 @@
 # Automação de entrada de leads — criação e roleta de distribuição ✅ concluído
 
+> **Spec histórica.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 Quando alguém desconhecido manda mensagem no WhatsApp da imobiliária, hoje a conversa aparece no
 inbox e **espera**. Um humano decide criar o lead, escolhe o funil, arrasta o card e define o
 responsável. Este documento desenha o caminho para que essas três coisas aconteçam sozinhas, sob
@@ -374,4 +379,4 @@ aberto — o enum existe para elas, o código não.
 
 ---
 
-> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-08-06 10:12 (-03)
+> Criado em 2026-08-04 11:05 (-03) · Última modificação: 2026-09-30 14:44 (-03)

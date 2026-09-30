@@ -1,5 +1,10 @@
 # Conversas de WhatsApp no CRM — Spec de Design + Plano ✅ concluído
 
+> **Spec histórica.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > Fase 2 da integração. A fase 1 entregou o ciclo de vida da instância
 > ([spec](./2026-08-03-whatsapp-uazapi-design.md)); esta entrega a **conversa**: ingerir mensagens,
 > atender pelo CRM e transformar quem chega em lead dentro do funil.
@@ -957,4 +962,4 @@ newsletters, resposta automática/chatbot, e os campos `lead_*` da uazapi (§2.4
 
 ---
 
-> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-08-04 23:29 (-03)
+> Criado em 2026-08-04 01:29 (-03) · Última modificação: 2026-09-30 14:44 (-03)

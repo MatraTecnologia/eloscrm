@@ -1,5 +1,10 @@
 # Nutrição de Leads — Plano B (Web)
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dar cara de produto ao estado de nutrição que a API já entrega — a tela `/nurturing`, os dois
@@ -950,4 +955,4 @@ disparo de e-mail/WhatsApp e estado `DESCARTADO`. Os débitos técnicos do §8 q
 (`$transaction`, `PATCH` aceitando campos de nutrição em lead ativo, `.max(50)` em `deals`) não são
 deste plano.
 
-> Criado em 2026-07-30 17:31 (-03) · Última modificação: 2026-07-30 17:31 (-03)
+> Criado em 2026-07-30 17:31 (-03) · Última modificação: 2026-09-30 14:44 (-03)

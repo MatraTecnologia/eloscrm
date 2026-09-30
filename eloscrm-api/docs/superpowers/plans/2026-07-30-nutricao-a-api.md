@@ -1,5 +1,10 @@
 # Nutrição de Leads — Plano A (API)
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dar ao `Client` um estado de workflow "em nutrição" com motivo, data de retomada e regra
@@ -1958,4 +1963,4 @@ git commit -m "feat: separa base ativa e base em nutrição no painel"
 O Plano B (web) fica para depois de A verde: tela `/nurturing`, os dois diálogos, as três entradas e
 as cinco superfícies existentes que mudam.
 
-> Criado em 2026-07-30 16:12 (-03) · Última modificação: 2026-07-30 16:12 (-03)
+> Criado em 2026-07-30 16:12 (-03) · Última modificação: 2026-09-30 14:44 (-03)

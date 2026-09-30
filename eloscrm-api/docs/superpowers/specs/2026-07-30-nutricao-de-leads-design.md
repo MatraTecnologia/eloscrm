@@ -1,5 +1,10 @@
 # Nutrição de Leads — Spec de Design
 
+> **Spec histórica.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > Estado de workflow para o lead que **não está interessado agora, mas volta**: sai da lista de
 > trabalho, guarda o motivo, agenda a retomada e reaparece na Agenda na data certa.
 
@@ -360,4 +365,4 @@ Achados da revisão final do web que não bloquearam o merge:
   `/clients`; `<Label>` sem `htmlFor` no input de data do diálogo de nutrição e usado como título de
   seção sem controle associado; badge "Atrasada" duplicada entre os dois `kind` da agenda.
 
-> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-07-30 19:58 (-03)
+> Criado em 2026-07-30 15:51 (-03) · Última modificação: 2026-09-30 14:44 (-03)

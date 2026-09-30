@@ -1,5 +1,10 @@
 # Correções: colisão do seed e botão de remover comentário
 
+> **Plano histórico.** Este documento registra a proposta e a execução na época indicada no nome do arquivo.
+> Para a arquitetura e os comandos atuais, consulte os guias da [API](../../../AGENTS.md),
+> do [web](../../../../eloscrm-web/AGENTS.md) e da [raiz](../../../../AGENTS.md). Confira o código atual
+> antes de reutilizar os trechos de implementação abaixo.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
@@ -305,4 +310,4 @@ cd ../eloscrm-web && pnpm lint && pnpm typecheck && pnpm build
 - **Faxina de anexo `PENDING`** e **resíduo no bucket de teste** — follow-ups da fase C, sem relação com
   estes dois.
 
-> Criado em 2026-07-29 23:32 (-03) · Última modificação: 2026-07-29 23:32 (-03)
+> Criado em 2026-07-29 23:32 (-03) · Última modificação: 2026-09-30 14:44 (-03)
