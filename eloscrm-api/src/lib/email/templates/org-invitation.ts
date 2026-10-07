@@ -3,7 +3,7 @@ import { button, escapeHtml, fallbackLink, paragraph, renderEmail } from "../ren
 type Input = { organizationName: string; inviterName: string; role: string; url: string };
 
 // Espelha eloscrm-web/lib/labels.ts — o e-mail sai da API e não tem acesso àquele mapa.
-const labels: Record<string, string> = { owner: "Dono", admin: "Gestor", member: "Corretor" };
+const labels: Record<string, string> = { owner: "Dono", admin: "Administrador", member: "Corretor" };
 const roleLabel = (role: string) => labels[role] ?? role;
 
 export const orgInvitationTemplate = ({ organizationName, inviterName, role, url }: Input) => ({

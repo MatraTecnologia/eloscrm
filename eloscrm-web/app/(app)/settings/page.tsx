@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DeleteOrgCard } from './delete-org-card'
+import { MemberActions } from './member-actions'
 import {
   Select,
   SelectContent,
@@ -37,7 +38,7 @@ import { toast } from 'sonner'
 
 const roleLabels: Record<string, string> = {
   owner: 'Dono',
-  admin: 'Gestor',
+  admin: 'Administrador',
   member: 'Corretor',
 }
 
@@ -116,7 +117,7 @@ const InviteMemberDialog = () => {
               <SelectContent>
                 {/* owner fica de fora: dono não é papel que se convida */}
                 <SelectItem value="member">Corretor</SelectItem>
-                <SelectItem value="admin">Gestor</SelectItem>
+                <SelectItem value="admin">Administrador</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -132,8 +133,10 @@ const InviteMemberDialog = () => {
 }
 
 export default function SettingsPage() {
-  const { data: org, isPending } = useActiveOrganization()
+  const { data: org, isPending, refetch } = useActiveOrganization()
   const { data: session } = useSession()
+  const currentRole = org?.members.find(member => member.userId === session?.user.id)?.role
+  const canManage = currentRole === 'owner' || currentRole === 'admin'
   // excluir a imobiliária é do dono, não de gestor: o admin administra, o owner encerra
   const isOwner =
     org?.members.some(member => member.userId === session?.user.id && member.role === 'owner') ?? false
@@ -189,7 +192,7 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-medium">Membros</h2>
-              <InviteMemberDialog />
+              {canManage && <InviteMemberDialog />}
             </div>
             <div className="rounded-lg border">
               <Table>
@@ -197,13 +200,14 @@ export default function SettingsPage() {
                   <TableRow>
                     <TableHead>Membro</TableHead>
                     <TableHead>Papel</TableHead>
+                    {canManage && <TableHead>Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {org.members.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={2}
+                        colSpan={canManage ? 3 : 2}
                         className="py-10 text-center text-muted-foreground"
                       >
                         Nenhum membro ainda.
@@ -232,6 +236,19 @@ export default function SettingsPage() {
                           {roleLabels[member.role] ?? member.role}
                         </Badge>
                       </TableCell>
+                      {canManage && (
+                        <TableCell>
+                          {member.role !== 'owner' && member.userId !== session?.user.id && (
+                            <MemberActions
+                              memberId={member.id}
+                              organizationId={org.id}
+                              name={member.user.name}
+                              role={member.role}
+                              onSaved={() => { void refetch() }}
+                            />
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
