@@ -7,13 +7,13 @@ import { formatBrPhone, phoneKey } from "../../lib/phone.js";
 import { openDealsByOwner } from "./assignment.service.js";
 
 export const process = (orgId: string, messageId: string) => prisma.$transaction(async tx => {
-  // Os dois provedores compartilham a decisão; uma reentrega não cria outro lead ou negócio.
+  // Somente mensagens oficiais recebidas ao vivo criam leads e negócios.
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`inbound-automation:${orgId}`}, 0))::text`;
   const message = await tx.whatsappMessage.findFirst({ where: { organizationId: orgId, id: messageId, automationStatus: { in: ["pending", "failed"] }, automationNextAttemptAt: { lte: new Date() } }, include: { conversation: { include: { messagingContact: true } } } });
   if (!message) return;
   const conversation = message.conversation;
   const finish = (status: "processed" | "skipped", code?: string) => tx.whatsappMessage.updateMany({ where: { organizationId: orgId, id: messageId }, data: { automationStatus: status, automationProcessedAt: new Date(), automationErrorCode: code ?? null, automationSuggestedName: null, automationAttempts: { increment: 1 } } });
-  if (conversation.isGroup || (message.origin !== "uazapi" && (message.origin !== "cloud_api" || message.direction !== "inbound" || !message.liveReceivedAt))) return finish("skipped", "AUTOMATION_NOT_LIVE");
+  if (conversation.isGroup || (message.origin !== "cloud_api" || message.direction !== "inbound" || !message.liveReceivedAt)) return finish("skipped", "AUTOMATION_NOT_LIVE");
   await tx.$queryRaw`SELECT "id" FROM "LeadAutomation" WHERE "organizationId" = ${orgId} FOR UPDATE`;
   const config = await tx.leadAutomation.findUnique({ where: { organizationId: orgId }, include: { members: { where: { active: true } } } });
   if (!config) return finish("skipped", "AUTOMATION_DISABLED");

@@ -73,7 +73,7 @@ describe("automação oficial inbound persistida", () => {
   it("histórico e eco não agendam automação; guarda do processador exclui grupos e eventos sem live", async () => {
     await configure(); const history = await incoming("history"); const echo = await incoming("business_app");
     expect(history.message.automationStatus).toBeNull(); expect(echo.message.automationStatus).toBeNull();
-    for (const options of [{ group: true }, { origin: "history" as const }, { origin: "business_app" as const, direction: "outbound" as const }, { live: false }, { direction: "outbound" as const }]) {
+    for (const options of [{ origin: "uazapi" as const }, { group: true }, { origin: "history" as const }, { origin: "business_app" as const, direction: "outbound" as const }, { live: false }, { direction: "outbound" as const }]) {
       const fixture = await pending(options); await repo.process(orgId, fixture.message.id);
       expect(await prisma.whatsappMessage.findFirst({ where: { organizationId: orgId, id: fixture.message.id } })).toMatchObject({ automationStatus: "skipped", automationErrorCode: "AUTOMATION_NOT_LIVE" });
     }

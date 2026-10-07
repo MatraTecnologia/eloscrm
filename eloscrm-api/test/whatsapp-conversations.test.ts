@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { AuditAction, AuditEntity } from "../src/generated/prisma/client.js";
 import { makeApp } from "./helpers/app.js";
 import { signUpWithOrg } from "./helpers/session.js";
+import { createOfficialConnectionFixture } from "./helpers/official-connection.js";
 import { prisma } from "../src/lib/prisma.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
 import { R2_PRIVATE_BUCKET, headFile, uploadStream } from "../src/lib/storage.js";
@@ -35,6 +36,8 @@ beforeAll(async () => {
     },
   });
   instanceId = instance.id;
+  await prisma.uazapiInstance.update({ where: { id: instanceId }, data: { ownerJid: "5543999140409@s.whatsapp.net" } });
+  await createOfficialConnectionFixture(orgId, { displayPhoneNumber: "+55 43 99914-0409" });
 });
 
 afterAll(async () => {

@@ -17,7 +17,7 @@ export const assessMessage = async (tx: Prisma.TransactionClient, channel: Chann
   let phone = aliases.map(objectOf).find(alias => alias.kind === "phone" || alias.kind === "wa_id")?.value;
   const identityId = Array.isArray(message.recipientIdentity) ? undefined : objectOf(message.recipientIdentity ?? {}).identityId;
   if (typeof identityId === "string") {
-    const identity = await tx.contactIdentity.findFirst({ where: { organizationId: channel.organizationId, id: identityId, scope: `business:${channel.businessPortfolioId}`, source: "provider", validFrom: { lte: deliveredAt }, OR: [{ validUntil: null }, { validUntil: { gt: deliveredAt } }] }, select: { kind: true, value: true, contactId: true, recipientCountry: true } });
+    const identity = await tx.contactIdentity.findFirst({ where: { organizationId: channel.organizationId, id: identityId, scope: `business:${channel.businessPortfolioId}`, source: { in: ["provider", "campaign_import"] }, validFrom: { lte: deliveredAt }, OR: [{ validUntil: null }, { validUntil: { gt: deliveredAt } }] }, select: { kind: true, value: true, contactId: true, recipientCountry: true } });
     explicitCountry = identity?.recipientCountry ?? null;
     if (identity && ["phone", "wa_id"].includes(identity.kind)) phone = identity.value;
     // BSUID não é convertido em telefone para atribuir um país.

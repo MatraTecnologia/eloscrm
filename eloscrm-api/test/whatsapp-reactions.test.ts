@@ -113,105 +113,13 @@ const thread = async () => {
   return res.json();
 };
 
-describe("reação recebida", () => {
-  it("gruda na bolha do alvo em vez de virar mensagem na thread", async () => {
-    const alvo = await criarMensagem({ direction: "outbound", text: "R$ 450 mil" });
-
-    const res = await post(eventoReacao(alvo.providerMessageId!, "😮"));
-    expect(res.statusCode).toBe(200);
-
+describe("reação recebida pela uazapi", () => {
+  it("ignora a reação e preserva a mensagem histórica", async () => {
+    const target = await criarMensagem();
+    expect((await post(eventoReacao(target.providerMessageId!, ""))).statusCode).toBe(200);
     const { items } = await thread();
-    // uma bolha só: a reação não entra na conversa como mensagem
     expect(items).toHaveLength(1);
-    expect(items[0].reactions).toEqual([
-      { emoji: "😮", mine: false, authorName: "Bruno" },
-    ]);
-  });
-
-  it("trocar de emoji substitui, não acumula", async () => {
-    const alvo = await criarMensagem();
-
-    await post(eventoReacao(alvo.providerMessageId!, "😮"));
-    await post(eventoReacao(alvo.providerMessageId!, "👍"));
-
-    const { items } = await thread();
-    // o provedor garante uma reação ativa por pessoa e por mensagem
-    expect(items[0].reactions).toHaveLength(1);
-    expect(items[0].reactions[0].emoji).toBe("👍");
-  });
-
-  it("emoji vazio remove a reação", async () => {
-    const alvo = await criarMensagem();
-    await post(eventoReacao(alvo.providerMessageId!, "👍"));
-
-    await post(eventoReacao(alvo.providerMessageId!, ""));
-
-    const { items } = await thread();
     expect(items[0].reactions).toEqual([]);
-  });
-
-  it("remoção de fora vem sem `content.text`, e não só com ele vazio", async () => {
-    const alvo = await criarMensagem();
-    await post(eventoReacao(alvo.providerMessageId!, "😮"));
-
-    // Payload real de 2026-08-04: quem remove de fora manda `content` SEM o campo `text`, enquanto
-    // a remoção que sai daqui manda `text: ""`. Quem decide é `message.text`, vazio nos dois casos
-    // — ler `content.text` quebraria justamente na remoção vinda do contato.
-    const evento = eventoReacao(alvo.providerMessageId!, "");
-    delete (evento.message.content as { text?: string }).text;
-
-    const res = await post(evento);
-    expect(res.statusCode).toBe(200);
-
-    const { items } = await thread();
-    expect(items[0].reactions).toEqual([]);
-  });
-
-  it("remover o que não existe não quebra — a remoção pode chegar sozinha", async () => {
-    const alvo = await criarMensagem();
-
-    const res = await post(eventoReacao(alvo.providerMessageId!, ""));
-
-    expect(res.statusCode).toBe(200);
-    expect(await prisma.whatsappReaction.count()).toBe(0);
-  });
-
-  it("não mexe na prévia nem no não lido — reagir não é escrever", async () => {
-    const alvo = await criarMensagem();
-
-    await post(eventoReacao(alvo.providerMessageId!, "❤️"));
-
-    const conversa = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
-    expect(conversa.lastMessageText).toBe("oi");
-    expect(conversa.unreadCount).toBe(2);
-  });
-
-  it("alvo desconhecido é ignorado sem derrubar o webhook", async () => {
-    const res = await post(eventoReacao("NAO-EXISTE", "👍"));
-
-    expect(res.statusCode).toBe(200);
-    expect(await prisma.whatsappReaction.count()).toBe(0);
-  });
-
-  it("reação minha pelo celular e pelo CRM não viram duas linhas", async () => {
-    const alvo = await criarMensagem();
-    // pelo celular: chega com fromMe e com o LID da própria instância
-    await post(
-      eventoReacao(alvo.providerMessageId!, "👍", {
-        fromMe: true,
-        sender_lid: "226070083190831@lid",
-      }),
-    );
-    await post(
-      eventoReacao(alvo.providerMessageId!, "❤️", {
-        fromMe: true,
-        sender_lid: "226070083190831@lid",
-      }),
-    );
-
-    const { items } = await thread();
-    expect(items[0].reactions).toHaveLength(1);
-    expect(items[0].reactions[0].mine).toBe(true);
   });
 });
 

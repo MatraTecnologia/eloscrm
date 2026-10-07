@@ -1,6 +1,7 @@
 import * as z from "zod";
+import { importedAudienceSchema } from "../campaign-imports/imports.schema.js";
 
-const ids = z.array(z.string().min(1)).max(50);
+const ids = z.array(z.string().min(1).max(128)).max(50);
 
 /**
  * Condições que selecionam negócios de um funil. Todas opcionais e combinadas por E: omitida, a
@@ -8,7 +9,7 @@ const ids = z.array(z.string().min(1)).max(50);
  * aqui e não no corpo do disparo.
  */
 export const broadcastFiltersSchema = z
-  .object({
+  .strictObject({
     stageIds: ids.optional(),
     // "tem alguma destas" / "não tem nenhuma destas"
     tagsAny: ids.optional(),
@@ -30,27 +31,28 @@ export const broadcastFiltersSchema = z
     path: ["valueMax"],
   });
 
-export const previewBroadcastSchema = z.object({
-  pipelineId: z.string().min(1),
+export const previewBroadcastSchema = z.strictObject({
+  pipelineId: z.string().min(1).max(128),
   filters: broadcastFiltersSchema.default({}),
 });
 
 // `dealIds` é o subconjunto marcado na tela entre os que o filtro devolveu: o filtro seleciona, a
 // pessoa ainda desmarca quem não deve receber. Desduplicado porque cada destinatário é único por
 // negócio no banco.
-export const createBroadcastSchema = z.object({
-  pipelineId: z.string().min(1),
+export const createBroadcastSchema = z.strictObject({
+  pipelineId: z.string().min(1).max(128),
   filters: broadcastFiltersSchema.default({}),
   dealIds: z
-    .array(z.string().min(1))
-    .min(1)
+    .array(z.string().min(1).max(128))
     .max(200)
-    .transform((list) => [...new Set(list)]),
+    .transform((list) => [...new Set(list)]).default([]),
+  importedAudience: importedAudienceSchema.optional(),
   text: z.string().trim().min(1).max(2000),
-});
+  idempotencyKey: z.string().uuid().optional(),
+}).refine(value => value.importedAudience ? value.dealIds.length === 0 : value.dealIds.length > 0, "Selecione negócios ou uma lista importada, sem misturar os públicos");
 
-export const listBroadcastsQuerySchema = z.object({
-  pipelineId: z.string().optional(),
+export const listBroadcastsQuerySchema = z.strictObject({
+  pipelineId: z.string().min(1).max(128).optional(),
 });
 
 export type BroadcastFilters = z.infer<typeof broadcastFiltersSchema>;

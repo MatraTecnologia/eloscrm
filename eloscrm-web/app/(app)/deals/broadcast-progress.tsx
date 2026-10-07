@@ -3,18 +3,21 @@
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useBroadcast, useCancelBroadcast } from "@/lib/queries/broadcasts";
+import { useBroadcast, useBroadcastAction } from "@/lib/queries/broadcasts";
+import { CampaignRecipientReport } from "@/components/whatsapp-official/campaign-recipient-report";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import type { Broadcast, BroadcastRecipientStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<Broadcast["status"], string> = {
   RUNNING: "Enviando",
+  PAUSED: "Pausado",
   DONE: "Concluído",
   CANCELED: "Cancelado",
 };
@@ -24,6 +27,8 @@ const RECIPIENT: Record<
   { label: string; icon: typeof Clock; className: string }
 > = {
   PENDING: { label: "Na fila", icon: Clock, className: "text-muted-foreground" },
+  PROCESSING: { label: "Processando", icon: Clock, className: "text-muted-foreground" },
+  UNKNOWN: { label: "Resultado incerto", icon: XCircle, className: "text-destructive" },
   SENT: { label: "Enviada", icon: CheckCircle2, className: "text-success" },
   FAILED: { label: "Falhou", icon: XCircle, className: "text-destructive" },
   SKIPPED: { label: "Pulada", icon: Ban, className: "text-muted-foreground" },
@@ -44,20 +49,24 @@ export const BroadcastStatusBadge = ({ status }: { status: Broadcast["status"] }
 
 /** Andamento de um disparo: contadores, barra e a lista de destinatários com o que aconteceu. */
 export const BroadcastProgress = ({ broadcastId }: { broadcastId: string }) => {
-  const { data: broadcast, isLoading } = useBroadcast(broadcastId);
-  const cancel = useCancelBroadcast();
+  const query = useBroadcast(broadcastId);
+  const { data: broadcast, isLoading } = query;
+  const action = useBroadcastAction();
+  const [confirming, setConfirming] = useState(false);
 
+  if (query.isError) return <p role="alert">Não foi possível carregar o disparo. <Button variant="outline" onClick={() => query.refetch()}>Tentar novamente</Button></p>;
   if (isLoading || !broadcast) return <Skeleton className="h-40 w-full" />;
 
-  const feitos = broadcast.sent + broadcast.failed + broadcast.skipped;
-  const pct = broadcast.total ? Math.round((feitos / broadcast.total) * 100) : 100;
+  const completed = broadcast.sent + broadcast.failed + broadcast.skipped + broadcast.uncertain;
+  const percentage = broadcast.total ? Math.round((completed / broadcast.total) * 100) : 100;
 
-  const cancelar = async () => {
+  const run = async (next: "pause" | "resume" | "cancel") => {
     try {
-      await cancel.mutateAsync(broadcast.id);
-      toast.success("Disparo cancelado. O que já foi enviado permanece.");
-    } catch {
-      toast.error("Não foi possível cancelar");
+      await action.mutateAsync({ id: broadcast.id, action: next });
+      setConfirming(false);
+      toast.success(next === "pause" ? "Disparo pausado" : next === "resume" ? "Disparo retomado" : "Disparo encerrado. O que já foi enviado permanece.");
+    } catch (error) {
+      toast.error((error as { message?: string }).message ?? "Não foi possível atualizar o disparo");
     }
   };
 
@@ -70,28 +79,31 @@ export const BroadcastProgress = ({ broadcastId }: { broadcastId: string }) => {
           {format(parseISO(broadcast.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })} · por{" "}
           {broadcast.createdByName}
         </span>
-        {broadcast.status === "RUNNING" && (
+        {["RUNNING", "PAUSED"].includes(broadcast.status) && <Button variant="outline" size="sm" disabled={action.isPending} onClick={() => run(broadcast.status === "PAUSED" ? "resume" : "pause")}>{broadcast.status === "PAUSED" ? "Continuar" : "Pausar"}</Button>}
+        {["RUNNING", "PAUSED"].includes(broadcast.status) && (
           <Button
             variant="outline"
             size="sm"
             className="ms-auto"
-            disabled={cancel.isPending}
-            onClick={cancelar}
+            disabled={action.isPending}
+            onClick={() => setConfirming(true)}
           >
             <Ban className="size-3.5" /> Cancelar o restante
           </Button>
         )}
       </div>
 
-      <Progress value={pct} className="gap-1">
+      <p className="text-xs text-muted-foreground">O envio continua no servidor com o app fechado. Pausar impede novas tentativas; a tentativa em andamento pode concluir. Encerrar cancela apenas os destinos restantes.</p>
+      <Progress value={percentage} className="gap-1">
         <div className="flex w-full justify-between text-xs text-muted-foreground tabular-nums">
           <span>
             {broadcast.sent} enviadas
             {broadcast.failed > 0 && ` · ${broadcast.failed} falharam`}
             {broadcast.skipped > 0 && ` · ${broadcast.skipped} puladas`}
+            {broadcast.uncertain > 0 && ` · ${broadcast.uncertain} incertas`}
           </span>
           <span>
-            {feitos}/{broadcast.total}
+            {completed}/{broadcast.total}
           </span>
         </div>
       </Progress>
@@ -100,26 +112,8 @@ export const BroadcastProgress = ({ broadcastId }: { broadcastId: string }) => {
         {broadcast.text}
       </p>
 
-      <ScrollArea className="-mr-2 min-h-0 flex-1 scroll-fade">
-        <div className="space-y-1 pr-3">
-          {broadcast.recipients.map((r) => {
-            const meta = RECIPIENT[r.status];
-            const Icon = meta.icon;
-            return (
-              <div
-                key={r.id}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-              >
-                <Icon className={cn("size-4 shrink-0", meta.className)} />
-                <span className="min-w-0 flex-1 truncate">{r.clientName}</span>
-                <span className={cn("shrink-0 text-xs", meta.className)} title={r.error ?? undefined}>
-                  {r.error ?? meta.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+      <CampaignRecipientReport campaignId={broadcast.id} rows={broadcast.recipients.map(row => ({ id: row.id, name: row.clientName, destination: row.number, status: row.status, label: RECIPIENT[row.status].label, error: row.error, code: row.errorCode, stage: row.errorStage, attempts: row.attempts, startedAt: row.startedAt, completedAt: row.completedAt, text: row.text }))} />
+      <AlertDialog open={confirming} onOpenChange={setConfirming}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Encerrar o disparo?</AlertDialogTitle><AlertDialogDescription>Os destinatários ainda na fila serão cancelados. Mensagens já submetidas poderão concluir; esta campanha não poderá ser retomada depois de encerrada.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={action.isPending}>Voltar</AlertDialogCancel><Button variant="destructive" disabled={action.isPending} onClick={() => run("cancel")}>Encerrar disparo</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );
 };

@@ -20,7 +20,7 @@ const uazapiWebhookRoutes = async (app: FastifyInstance) => {
     debugLog("webhook.received", {
       instanceId,
       headers: safeHeaders(request.headers),
-      body: request.body,
+      bodyKeys: request.body && typeof request.body === "object" ? Object.keys(request.body) : [],
     });
 
     const body = webhookBodySchema.parse(request.body);

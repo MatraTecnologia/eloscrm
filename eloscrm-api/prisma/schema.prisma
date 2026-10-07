@@ -406,12 +406,15 @@ model Deal {
 
 enum BroadcastStatus {
   RUNNING
+  PAUSED
   DONE
   CANCELED
 }
 
 enum BroadcastRecipientStatus {
   PENDING
+  PROCESSING
+  UNKNOWN
   SENT
   FAILED
   SKIPPED
@@ -438,6 +441,9 @@ model Broadcast {
   sent    Int @default(0)
   failed  Int @default(0)
   skipped Int @default(0)
+  uncertain Int @default(0)
+  nextAt DateTime @default(now())
+  requestHash String?
 
   recipients BroadcastRecipient[]
   finishedAt DateTime?
@@ -463,6 +469,12 @@ model BroadcastRecipient {
   text        String
   status      BroadcastRecipientStatus @default(PENDING)
   error       String?
+  errorCode String?
+  errorStage String?
+  attempts Int @default(0)
+  startedAt DateTime?
+  completedAt DateTime?
+  leaseExpiresAt DateTime?
   // id da WhatsappMessage criada no envio: é o que liga o disparo à bolha na conversa
   messageId   String?
   sentAt      DateTime?
@@ -1215,6 +1227,11 @@ model OfficialCampaignRecipient {
   costSnapshot Json
   status String @default("pending")
   safeError String?
+  errorCode String?
+  errorStage String?
+  attempts Int @default(0)
+  startedAt DateTime?
+  completedAt DateTime?
   leaseToken String?
   leaseExpiresAt DateTime?
   command OfficialSendCommand?

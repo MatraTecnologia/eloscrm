@@ -169,7 +169,7 @@ const InboxWorkspace = () => {
   const [view, setView] = useQueryState("view");
   const [legacySelected] = useQueryState(CONVERSA_PARAM);
   if (view === "legacy" || (legacySelected && view !== "unified")) return <Inbox key={org?.id} onUnified={() => setView("unified")} />;
-  return <div className="-m-6 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden"><div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3"><div><h1 className="text-xl font-semibold">Conversas</h1><p className="text-sm text-muted-foreground">Histórico do contato nos números da imobiliária.</p></div><Button variant="outline" size="sm" onClick={() => setView("legacy")}>Ações uazapi</Button></div><UnifiedInbox key={org?.id} /></div>;
+  return <div className="-m-6 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden"><div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3"><div><h1 className="text-xl font-semibold">Conversas</h1><p className="text-sm text-muted-foreground">Atendimento pelo WhatsApp oficial e histórico do contato.</p></div></div><UnifiedInbox key={org?.id} /></div>;
 };
 
 const ConversationsPage = () => {

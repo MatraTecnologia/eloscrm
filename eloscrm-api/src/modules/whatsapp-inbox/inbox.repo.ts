@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma.js";
 import { conflict, notFound } from "../../lib/http-error.js";
+import { deleteFiles, R2_PRIVATE_BUCKET } from "../../lib/storage.js";
 import { recordAudit } from "../../lib/audit.js";
 import type { Actor } from "../../lib/actor.js";
 import type { ListInput } from "./inbox.schema.js";
@@ -46,8 +47,8 @@ export const children = (orgId: string, id: string) => prisma.conversation.findM
 });
 export const identities = (orgId: string, contactIds: string[]) => prisma.contactIdentity.findMany({ where: { organizationId: orgId, contactId: { in: contactIds }, validUntil: null, validFrom: { lte: new Date() }, source: "provider", kind: { in: ["phone", "wa_id", "bsuid", "parent_bsuid"] } }, select: { id: true, kind: true, contactId: true, scope: true } });
 export const messageCursor = (orgId: string, conversationIds: string[], id: string) => prisma.whatsappMessage.findFirst({ where: { organizationId: orgId, conversationId: { in: conversationIds }, id }, select: { id: true, sentAt: true } });
-export const messages = (orgId: string, conversationIds: string[], limit: number, cursor?: { id: string; sentAt: Date }) => prisma.whatsappMessage.findMany({
-  where: { organizationId: orgId, conversationId: { in: conversationIds }, type: { not: "reaction" }, ...(cursor ? { OR: [{ sentAt: { lt: cursor.sentAt } }, { sentAt: cursor.sentAt, id: { lt: cursor.id } }] } : {}) },
+export const messages = (orgId: string, conversationIds: string[], limit: number, cursor?: { id: string; sentAt: Date }, q?: string) => prisma.whatsappMessage.findMany({
+  where: { organizationId: orgId, conversationId: { in: conversationIds }, type: { not: "reaction" }, ...(q ? { deletedAt: null, text: { contains: q, mode: "insensitive" as const } } : {}), ...(cursor ? { OR: [{ sentAt: { lt: cursor.sentAt } }, { sentAt: cursor.sentAt, id: { lt: cursor.id } }] } : {}) },
   include: { reactions: { orderBy: { reactedAt: "asc" } }, officialCommand: { select: { id: true, status: true, safeError: true } }, sentBy: { select: { name: true } } },
   orderBy: [{ sentAt: "desc" }, { id: "desc" }], take: limit + 1,
 });
@@ -71,3 +72,42 @@ export const linkOfficial = (orgId: string, conversationId: string, clientId: st
   await recordAudit({ orgId, entityType: "CONVERSATION", entityId: conversationId, action: "LINKED", actor, context: { clientId, contactId: contact.id } }, tx);
   return { id: `client:${clientId}` };
 });
+
+export const archive = (orgId: string, id: string, archived: boolean, actor: Actor) => prisma.$transaction(async tx => {
+  const conversations = await tx.conversation.findMany({ where: childWhere(orgId, id), select: { id: true } });
+  if (!conversations.length) throw notFound("Atendimento não encontrado nesta imobiliária");
+  await tx.conversation.updateMany({ where: childWhere(orgId, id), data: { archivedAt: archived ? new Date() : null } });
+  for (const conversation of conversations) await recordAudit({ orgId, entityType: "CONVERSATION", entityId: conversation.id, action: archived ? "ARCHIVED" : "UNARCHIVED", actor }, tx);
+  return { ok: true };
+});
+
+export const remove = (orgId: string, id: string, actor: Actor) => prisma.$transaction(async tx => {
+  const conversations = await tx.conversation.findMany({ where: childWhere(orgId, id), select: { id: true, connection: { select: { businessPortfolioId: true } } } });
+  if (!conversations.length) throw notFound("Atendimento não encontrado nesta imobiliária");
+  for (const portfolio of [...new Set(conversations.flatMap(row => row.connection?.businessPortfolioId ? [row.connection.businessPortfolioId] : []))].sort()) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp:${orgId}:${portfolio}`}, 0))::text`;
+  const ids = conversations.map(row => row.id);
+  const active = await tx.officialSendCommand.count({ where: { organizationId: orgId, message: { conversationId: { in: ids } }, status: { in: ["pending", "preparing", "sending", "uncertain"] } } });
+  if (active) throw conflict("INBOX_SEND_ACTIVE", "Há envios pendentes ou sem confirmação. Aguarde a conclusão antes de excluir.");
+  const media = await tx.whatsappMessage.findMany({ where: { organizationId: orgId, conversationId: { in: ids }, mediaKey: { not: null } }, select: { mediaKey: true } });
+  const keys = [...new Set(media.flatMap(row => row.mediaKey ? [row.mediaKey] : []))];
+  const shared = await tx.whatsappMessage.findMany({ where: { organizationId: orgId, conversationId: { notIn: ids }, mediaKey: { in: keys } }, select: { mediaKey: true } });
+  const sharedKeys = new Set(shared.map(row => row.mediaKey));
+  await deleteFiles(R2_PRIVATE_BUCKET, keys.filter(key => !sharedKeys.has(key)));
+  for (const conversation of conversations) await recordAudit({ orgId, entityType: "CONVERSATION", entityId: conversation.id, action: "DELETED", actor }, tx);
+  // Mantém IDs para custos e auditoria, retirando conteúdo e vínculos do atendimento.
+  await tx.officialSendCommand.updateMany({ where: { organizationId: orgId, message: { conversationId: { in: ids } } }, data: { request: {}, payload: {}, payloadPurgedAt: new Date() } });
+  await tx.whatsappReaction.deleteMany({ where: { message: { organizationId: orgId, conversationId: { in: ids } } } });
+  await tx.whatsappMessage.updateMany({ where: { organizationId: orgId, conversationId: { in: ids } }, data: {
+    text: null, senderName: null, senderLid: null, recipientIdentity: Prisma.DbNull, deletedAt: new Date(),
+    mediaKey: null, mediaThumb: null, mediaTempUrl: null, mediaFilename: null, mediaWaveform: null,
+    officialMediaId: null, mediaStatus: "none", mediaNextAttemptAt: null, mediaLeaseToken: null,
+    poll: Prisma.DbNull, contacts: Prisma.DbNull, location: Prisma.DbNull, automationSuggestedName: null,
+    automationStatus: "skipped", automationNextAttemptAt: null,
+  } });
+  for (const conversation of conversations) await tx.conversation.updateMany({ where: { organizationId: orgId, id: conversation.id }, data: {
+    instanceId: null, connectionId: null, messagingContactId: null, clientId: null, chatid: conversation.id,
+    phone: null, phoneKey: null, lid: null, waName: null, contactName: null, photoUrl: null,
+    lastMessageText: null, unreadCount: 0, archivedAt: new Date(), serviceWindowExpiresAt: null,
+  } });
+  return { ok: true };
+}, { timeout: 30_000 });

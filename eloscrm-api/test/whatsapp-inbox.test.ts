@@ -160,3 +160,47 @@ describe("atendimento WhatsApp unificado", () => {
     expect(response.json().items[0].command).toMatchObject({ status: "uncertain", safeError: "Resultado incerto" });
   });
 });
+
+ describe("controles do atendimento oficial", () => {
+  it("busca todo o histórico sem revelar mensagens excluídas", async () => {
+    await prisma.whatsappMessage.createMany({ data: [
+      { organizationId: orgA, conversationId: officialConversationId, providerId: `search-a-${sequence++}`, providerMessageId: `search-a-${sequence++}`, origin: "cloud_api", direction: "inbound", type: "text", text: "VISITA confirmada", sentAt: new Date("2026-01-01T12:00:00Z") },
+      { organizationId: orgA, conversationId: officialConversationId, providerId: `search-b-${sequence++}`, providerMessageId: `search-b-${sequence++}`, origin: "cloud_api", direction: "inbound", type: "text", text: "visita excluída", deletedAt: new Date(), sentAt: new Date() },
+    ] });
+    const page = await inbox.messages(orgA, `contact:${contactId}`, { q: "visita", limit: 10 });
+    expect(page.items.map(message => message.text)).toEqual(["VISITA confirmada"]);
+  });
+  it("arquiva e reabre todos os canais, com isolamento entre imobiliárias", async () => {
+    const id = `contact:${contactId}`;
+    expect((await app.inject({ method: "POST", url: `/v1/whatsapp/inbox/${id}/archive`, headers: { cookie: cookieB, origin: env.WEB_ORIGIN }, payload: { archived: true } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: `/v1/whatsapp/inbox/${id}/archive`, headers: headers(), payload: { archived: true, extra: true } })).statusCode).toBe(422);
+    await inbox.archive(orgA, id, true, actor());
+    expect((await inbox.get(orgA, id)).archived).toBe(true);
+    await inbox.archive(orgA, id, false, actor());
+    expect((await inbox.get(orgA, id)).archived).toBe(false);
+  });
+  it("exclui histórico vinculado preservando lead e contatos, com autorização e origem", async () => {
+    const { id } = await inbox.linkOfficial(orgA, officialConversationId, clientId, actor());
+    const message = await prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgA, conversationId: officialConversationId } });
+    const cost = await prisma.messageCost.create({ data: { organizationId: orgA, connectionId: official.id, messageId: message.id, deliveredAt: new Date(), currency: "USD", amount: "0.01", state: "estimated_base", receiptId: `delete-cost-${sequence++}`, pricingHash: `delete-cost-${sequence++}` } });
+    expect((await app.inject({ method: "DELETE", url: `/v1/whatsapp/inbox/${id}`, headers: { cookie: cookieB, origin: env.WEB_ORIGIN } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "DELETE", url: `/v1/whatsapp/inbox/${id}`, headers: { ...headers(), origin: "https://foreign.eloscrm.test" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "DELETE", url: `/v1/whatsapp/inbox/${id}`, headers: headers() })).statusCode).toBe(200);
+    expect(await prisma.conversation.count({ where: { organizationId: orgA, clientId } })).toBe(0);
+    expect(await prisma.client.findFirst({ where: { organizationId: orgA, id: clientId } })).not.toBeNull();
+    expect(await prisma.messagingContact.findFirst({ where: { organizationId: orgA, id: contactId } })).not.toBeNull();
+    expect(await prisma.messageCost.findUnique({ where: { id: cost.id } })).toEqual(cost);
+    expect(await prisma.whatsappMessage.findUnique({ where: { id: message.id } })).toMatchObject({ text: null, deletedAt: expect.any(Date) });
+    await expect(inbox.get(orgA, id)).rejects.toMatchObject({ statusCode: 404 });
+    const newConversationId = await ingestMessage(official, { id: `after-delete-${sequence++}`, from: "15550001111", type: "text", text: { body: "Nova conversa após exclusão" }, timestamp: String(Math.floor(Date.now() / 1000)) }, [], "cloud_api", new Date());
+    expect(newConversationId).not.toBe(officialConversationId);
+    const restored = await inbox.get(orgA, id);
+    expect((await inbox.messages(orgA, restored.id, { limit: 10 })).items.map(row => row.text)).toEqual(["Nova conversa após exclusão"]);
+  });
+  it("impede excluir um atendimento com envio pendente", async () => {
+    const message = await prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgA, conversationId: officialConversationId } });
+    await prisma.officialSendCommand.create({ data: { id: `delete-pending-${sequence++}`, organizationId: orgA, connectionId: official.id, messageId: message.id, actorUserId: userId, identityId: "fixture-id", idempotencyKey: `delete-pending-${sequence++}`, requestHash: "fixture-hash", request: {}, payload: {}, status: "pending" } });
+    await expect(inbox.remove(orgA, `contact:${contactId}`, actor())).rejects.toMatchObject({ code: "INBOX_SEND_ACTIVE" });
+    expect(await prisma.conversation.findUnique({ where: { id: officialConversationId } })).not.toBeNull();
+  });
+});

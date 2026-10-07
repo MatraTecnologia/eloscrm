@@ -15,6 +15,6 @@ export const useOfficialCampaign = (id: string | null) => {
 };
 export const useCampaignAction = () => {
   const qc = useQueryClient(); const { data: org } = useActiveOrganization();
-  return useMutation({ mutationFn: async ({ id, action, previewHash }: { id: string; action: "start" | "refresh" | "cancel"; previewHash?: string }) => (await api.post<OfficialCampaign>(`/whatsapp/campaigns/${id}/${action}`, previewHash ? { previewHash } : {})).data,
+  return useMutation({ mutationFn: async ({ id, action, previewHash }: { id: string; action: "start" | "refresh" | "cancel" | "pause" | "resume"; previewHash?: string }) => (await api.post<OfficialCampaign>(`/whatsapp/campaigns/${id}/${action}`, previewHash ? { previewHash } : {})).data,
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["whatsapp-campaigns", org?.id] }); void qc.invalidateQueries({ queryKey: ["whatsapp-inbox", org?.id] }); } });
 };

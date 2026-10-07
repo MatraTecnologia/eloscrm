@@ -22,12 +22,12 @@ export const processCampaign = async ({ orgId, campaignId }: { orgId: string; ca
     const command = row.command ?? await createSend(orgId, row.campaign.connectionId, { type: "template", templateId: input.templateId, ...(input.headerUploadId ? { headerUploadId: input.headerUploadId } : {}), identityId: row.identityId, parameters: parametersSchema.parse(row.parameters), idempotencyKey: `campaign:${row.id}` }, { id: row.campaign.actorUserId, name: row.campaign.actorName, source: "AUTOMATION" }, row.id);
     await executeSend(orgId, command.id);
     const saved = await getCommand(orgId, command.id);
-    await repo.settle(orgId, row.id, claim.leaseToken, saved.status === "accepted" ? "sent" : saved.status === "failed" ? "failed" : ["pending", "preparing"].includes(saved.status) ? "pending" : "unknown", saved.safeError);
+    await repo.settle(orgId, row.id, claim.leaseToken, saved.status === "accepted" ? "sent" : saved.status === "failed" ? "failed" : ["pending", "preparing"].includes(saved.status) ? "pending" : "unknown", saved.safeError, saved.status === "failed" || saved.status === "uncertain" ? { code: saved.providerErrorCode === null ? "PROVIDER_UNCONFIRMED" : String(saved.providerErrorCode), stage: "provider" } : undefined);
     if (saved.status === "failed" && saved.safeError?.toLowerCase().includes("template")) await repo.pause(orgId, row.campaignId);
   } catch (error) {
     const code = error instanceof Error && "code" in error ? String(error.code) : null;
     const safeError = error instanceof Error && "expose" in error && error.expose === true ? error.message : "Não foi possível preparar este envio";
-    await repo.settle(orgId, row.id, claim.leaseToken, code === "CAMPAIGN_SUPPRESSED" || code === "CAMPAIGN_STOPPED" ? "skipped" : "failed", safeError);
+    await repo.settle(orgId, row.id, claim.leaseToken, code === "CAMPAIGN_SUPPRESSED" || code === "CAMPAIGN_STOPPED" ? "skipped" : "failed", safeError, { code: code && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "PREPARATION_FAILED", stage: "preparation" });
   }
 };
 createWorker<{ orgId: string; campaignId: string }>(CAMPAIGN_QUEUE, async job => processCampaign(job.data), 1);

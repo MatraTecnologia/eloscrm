@@ -17,7 +17,8 @@ export const resolveAliases = async (tx: Prisma.TransactionClient, connection: C
   }
   const orgId = connection.organizationId;
   const scope = `business:${connection.businessPortfolioId}`;
-  const existing = await tx.contactIdentity.findMany({ where: { organizationId: orgId, scope, OR: aliases } });
+  const importedPhones = aliases.filter(alias => alias.kind === "wa_id").map(alias => ({ kind: "phone" as const, value: alias.value, source: "campaign_import" }));
+  const existing = await tx.contactIdentity.findMany({ where: { organizationId: orgId, scope, OR: [...aliases, ...importedPhones] } });
   if (existing.some(alias => alias.validUntil && (!occurredAt || occurredAt >= alias.validUntil))) throw httpError(409, "OFFICIAL_IDENTITY_RETIRED", "A identidade exige revisão");
   const contactIds = [...new Set(existing.map(alias => alias.contactId))];
   if (contactIds.length > 1) throw httpError(409, "OFFICIAL_IDENTITY_CONFLICT", "O evento possui identidades vinculadas a contatos diferentes");

@@ -14,10 +14,10 @@ export const useInboxGroup = (id: string | null) => {
   const { data: org } = useActiveOrganization();
   return useQuery({ queryKey: ["whatsapp-inbox", org?.id, "group", id], enabled: !!org?.id && !!id, queryFn: async () => (await api.get<InboxGroup>(`/whatsapp/inbox/${encodeURIComponent(id!)}`)).data, refetchInterval: 5000 });
 };
-export const useInboxMessages = (id: string) => {
+export const useInboxMessages = (id: string, q?: string) => {
   const { data: org } = useActiveOrganization();
-  return useInfiniteQuery({ queryKey: ["whatsapp-inbox", org?.id, "messages", id], enabled: !!org?.id,
-    queryFn: async ({ pageParam }) => (await api.get<{ items: InboxMessage[]; nextBefore?: string }>(`/whatsapp/inbox/${encodeURIComponent(id)}/messages`, { params: { before: pageParam } })).data,
+  return useInfiniteQuery({ queryKey: ["whatsapp-inbox", org?.id, "messages", id, q], enabled: !!org?.id,
+    queryFn: async ({ pageParam }) => (await api.get<{ items: InboxMessage[]; nextBefore?: string }>(`/whatsapp/inbox/${encodeURIComponent(id)}/messages`, { params: { before: pageParam, q: q || undefined } })).data,
     initialPageParam: undefined as string | undefined, getNextPageParam: page => page.nextBefore, refetchInterval: query => (query.state.data?.pages.length ?? 1) > 1 ? 15_000 : 3000,
   });
 };

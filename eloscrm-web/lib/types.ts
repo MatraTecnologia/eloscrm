@@ -101,8 +101,8 @@ export type BroadcastPreviewRow = {
   exclusion?: string | null;
 };
 
-export type BroadcastStatus = "RUNNING" | "DONE" | "CANCELED";
-export type BroadcastRecipientStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+export type BroadcastStatus = "RUNNING" | "PAUSED" | "DONE" | "CANCELED";
+export type BroadcastRecipientStatus = "PENDING" | "PROCESSING" | "UNKNOWN" | "SENT" | "FAILED" | "SKIPPED";
 
 export type Broadcast = {
   id: string;
@@ -118,6 +118,7 @@ export type Broadcast = {
   sent: number;
   failed: number;
   skipped: number;
+  uncertain: number;
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -133,6 +134,11 @@ export type BroadcastRecipient = {
   text: string;
   status: BroadcastRecipientStatus;
   error: string | null;
+  errorCode: string | null;
+  errorStage: string | null;
+  attempts: number;
+  startedAt: string | null;
+  completedAt: string | null;
   messageId: string | null;
   sentAt: string | null;
   createdAt: string;

@@ -4,6 +4,9 @@ import {
   type Prisma,
 } from "../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma.js";
+import { conflict, notFound } from "../../lib/http-error.js";
+import { recordAudit } from "../../lib/audit.js";
+import type { Actor } from "../../lib/actor.js";
 import type { BroadcastFilters } from "./broadcasts.schema.js";
 
 const dealInclude = {
@@ -71,17 +74,51 @@ export const findBroadcast = (orgId: string, id: string) =>
 export const findRecipient = (id: string) =>
   prisma.broadcastRecipient.findUnique({ where: { id }, include: { broadcast: true } });
 
+export const existing = (orgId: string, idempotencyKey: string) => prisma.broadcast.findFirst({ where: { organizationId: orgId, id: idempotencyKey }, include: { recipients: true } });
+
+export const transition = (orgId: string, id: string, status: "RUNNING" | "PAUSED", actor: Actor) => prisma.$transaction(async tx => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`broadcast:${id}`}, 0))`;
+  const saved = await tx.broadcast.findFirst({ where: { organizationId: orgId, id } });
+  if (!saved) throw notFound("Disparo não encontrado");
+  if (!["RUNNING", "PAUSED"].includes(saved.status)) throw conflict("BROADCAST_FINISHED", "Este disparo já foi encerrado");
+  const updated = await tx.broadcast.update({ where: { id }, data: { status } });
+  await recordAudit({ orgId, entityType: "BROADCAST", entityId: id, action: "UPDATED", actor, context: { status } }, tx);
+  return updated;
+});
+
+export const claimRecipient = (id: string, spacing: boolean) => prisma.$transaction(async tx => {
+  const reference = await tx.broadcastRecipient.findUnique({ where: { id }, select: { broadcastId: true, broadcast: { select: { organizationId: true } } } });
+  if (!reference) return null;
+  const orgId = reference.broadcast.organizationId;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`broadcast-dispatch:${orgId}`}, 0))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`broadcast:${reference.broadcastId}`}, 0))`;
+  const row = await tx.broadcastRecipient.findFirst({ where: { id, status: "PENDING", broadcast: { organizationId: orgId, status: "RUNNING", ...(spacing ? { nextAt: { lte: new Date() } } : {}) } }, include: { broadcast: true } });
+  if (!row) return null;
+  const occupied = await tx.broadcastRecipient.count({ where: { status: "PROCESSING", broadcast: { organizationId: orgId }, leaseExpiresAt: { gt: new Date() } } });
+  const cooling = spacing && await tx.broadcast.count({ where: { organizationId: orgId, nextAt: { gt: new Date() } } });
+  if (occupied || cooling) return null;
+  await tx.broadcastRecipient.update({ where: { id }, data: { status: "PROCESSING", attempts: { increment: 1 }, startedAt: new Date(), leaseExpiresAt: new Date(Date.now() + 180000) } });
+  await tx.broadcast.update({ where: { id: row.broadcastId }, data: { nextAt: new Date(Date.now() + 10000) } });
+  return row;
+});
+
+export const releaseRecipient = (id: string) => prisma.broadcastRecipient.updateMany({ where: { id, status: "PROCESSING" }, data: { status: "PENDING", leaseExpiresAt: null } });
+export const recoverable = () => prisma.broadcastRecipient.findMany({ where: { OR: [{ status: "PENDING", broadcast: { status: "RUNNING", nextAt: { lte: new Date() } } }, { status: "PROCESSING", leaseExpiresAt: { lte: new Date() } }] }, select: { id: true, broadcastId: true, status: true }, orderBy: { createdAt: "asc" }, take: 200 });
+
 export const cancelBroadcast = (id: string) =>
   prisma.$transaction(async (tx) => {
-    const pendentes = await tx.broadcastRecipient.updateMany({
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`broadcast:${id}`}, 0))`;
+    const current = await tx.broadcast.findUnique({ where: { id } });
+    if (!current || !["RUNNING", "PAUSED"].includes(current.status)) throw conflict("BROADCAST_FINISHED", "Este disparo já foi encerrado");
+    const pending = await tx.broadcastRecipient.updateMany({
       where: { broadcastId: id, status: BroadcastRecipientStatus.PENDING },
-      data: { status: BroadcastRecipientStatus.SKIPPED, error: "Disparo cancelado" },
+      data: { status: BroadcastRecipientStatus.SKIPPED, error: "Disparo encerrado", errorCode: "BROADCAST_STOPPED", errorStage: "validation", completedAt: new Date() },
     });
     return tx.broadcast.update({
       where: { id },
       data: {
         status: BroadcastStatus.CANCELED,
-        skipped: { increment: pendentes.count },
+        skipped: { increment: pending.count },
         finishedAt: new Date(),
       },
     });
@@ -97,23 +134,24 @@ export const settleRecipient = (
   broadcastId: string,
   outcome:
     | { status: "SENT"; messageId: string }
-    | { status: "FAILED" | "SKIPPED"; error: string },
+    | { status: "FAILED" | "SKIPPED" | "UNKNOWN"; error: string; errorCode?: string; errorStage?: string },
 ) =>
   prisma.$transaction(async (tx) => {
-    await tx.broadcastRecipient.update({
-      where: { id: recipientId },
+    const updated = await tx.broadcastRecipient.updateMany({
+      where: { id: recipientId, broadcastId, status: { in: ["PENDING", "PROCESSING"] } },
       data:
         outcome.status === "SENT"
-          ? { status: BroadcastRecipientStatus.SENT, messageId: outcome.messageId, sentAt: new Date() }
-          : { status: BroadcastRecipientStatus[outcome.status], error: outcome.error },
+          ? { status: BroadcastRecipientStatus.SENT, messageId: outcome.messageId, sentAt: new Date(), completedAt: new Date(), leaseExpiresAt: null }
+          : { status: BroadcastRecipientStatus[outcome.status], error: outcome.error, errorCode: outcome.errorCode, errorStage: outcome.errorStage, completedAt: new Date(), leaseExpiresAt: null },
     });
-    const counter = { SENT: "sent", FAILED: "failed", SKIPPED: "skipped" }[outcome.status];
+    if (!updated.count) return;
+    const counter = { SENT: "sent", FAILED: "failed", SKIPPED: "skipped", UNKNOWN: "uncertain" }[outcome.status];
     const broadcast = await tx.broadcast.update({
       where: { id: broadcastId },
       data: { [counter]: { increment: 1 } },
     });
-    const concluido = broadcast.sent + broadcast.failed + broadcast.skipped >= broadcast.total;
-    if (concluido && broadcast.status === BroadcastStatus.RUNNING) {
+    const completed = broadcast.sent + broadcast.failed + broadcast.skipped + broadcast.uncertain >= broadcast.total;
+    if (completed && ["RUNNING", "PAUSED"].includes(broadcast.status)) {
       await tx.broadcast.update({
         where: { id: broadcastId },
         data: { status: BroadcastStatus.DONE, finishedAt: new Date() },

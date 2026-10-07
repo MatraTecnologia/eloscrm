@@ -120,7 +120,7 @@ describe("POST /v1/whatsapp/instance", () => {
     expect(JSON.stringify(body)).not.toContain(TOKEN);
 
     const [call] = remote.webhook.upsert.mock.calls;
-    expect(call[0].events).toEqual(["connection", "messages", "messages_update"]);
+    expect(call[0].events).toEqual(["connection", "messages_update"]);
     expect(call[0].excludeMessages).toEqual(["wasSentByApi"]);
     expect(call[0].url).toContain(`/webhooks/uazapi/${body.id}/`);
   });

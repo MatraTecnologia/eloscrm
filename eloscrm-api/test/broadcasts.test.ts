@@ -6,6 +6,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { renderTemplate } from "../src/modules/broadcasts/template.js";
 import { toWaNumber } from "../src/lib/phone.js";
 import * as permissions from "../src/modules/communication-permissions/permissions.repo.js";
+import { env } from "../src/env.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
 
 let app: FastifyInstance;
@@ -24,7 +25,7 @@ let orgId = "";
 
 type Preview = { dealId: string; sendable: boolean; client: { name: string } };
 
-const headers = () => ({ cookie });
+const headers = () => ({ cookie, origin: env.WEB_ORIGIN });
 
 const post = async (url: string, payload: Record<string, unknown>, h = headers()) => {
   const res = await app.inject({ method: "POST", url, headers: h, payload });
@@ -176,7 +177,7 @@ describe("broadcasts/preview", () => {
   it("recusa faixa invertida (422) e funil de outra imobiliária (404)", async () => {
     const invertida = await post("/v1/broadcasts/preview", { pipelineId, filters: { valueMin: 10, valueMax: 1 } });
     expect(invertida.statusCode).toBe(422);
-    const alheio = await post("/v1/broadcasts/preview", { pipelineId, filters: {} }, { cookie: cookieB });
+    const alheio = await post("/v1/broadcasts/preview", { pipelineId, filters: {} }, { cookie: cookieB, origin: env.WEB_ORIGIN });
     expect(alheio.statusCode).toBe(404);
   });
 });

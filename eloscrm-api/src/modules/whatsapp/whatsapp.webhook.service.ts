@@ -7,7 +7,7 @@ import {
 import { hashToken } from "../../lib/crypto.js";
 import { httpError } from "../../lib/http-error.js";
 import { applyInstanceSnapshot, eventForTransition, parseStatus, str } from "../../lib/uazapi/snapshot.js";
-import { enqueueMessageEvent } from "./ingest.service.js";
+import "./ingest.service.js";
 import {
   applyDeletion,
   applyPin,
@@ -19,7 +19,7 @@ import {
 import * as repo from "./whatsapp.repo.js";
 import { connectionDataOf, eventNameOf, type WebhookBody } from "./whatsapp.schema.js";
 
-const HANDLED_EVENTS = new Set(["connection", "messages", "messages_update"]);
+const HANDLED_EVENTS = new Set(["connection", "messages_update"]);
 
 const constantTimeEquals = (a: string, b: string) => {
   const bufA = Buffer.from(a);
@@ -104,17 +104,6 @@ export const process = async (
     }
     const parsed = parseStatusUpdate(raw);
     if (parsed) await applyStatusUpdate(instance.organizationId, parsed);
-    return { event, handled: true };
-  }
-
-  if (event === "messages") {
-    // só enfileira: persistir e baixar mídia aqui dentro faria a uazapi esperar e acumular
-    // retentativa. Sem REDIS_URL o enqueue processa inline, que é o modo de teste e CI.
-    await enqueueMessageEvent({
-      instanceId: instance.id,
-      organizationId: instance.organizationId,
-      body: body as Record<string, unknown>,
-    });
     return { event, handled: true };
   }
 

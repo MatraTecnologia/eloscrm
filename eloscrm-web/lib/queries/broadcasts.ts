@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import type { ImportedAudience } from "@/lib/import-types";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type {
   Broadcast,
@@ -28,7 +29,7 @@ export const useBroadcasts = (pipelineId: string | undefined, enabled = true) =>
     enabled: !!org?.id && !!pipelineId && enabled,
     // enquanto algum roda, a lista acompanha os contadores
     refetchInterval: (query) =>
-      query.state.data?.some((b) => b.status === "RUNNING") ? 4000 : false,
+      query.state.data?.some((b) => ["RUNNING", "PAUSED"].includes(b.status) || b.sent + b.failed + b.skipped + b.uncertain < b.total) ? 4000 : false,
   });
 };
 
@@ -41,7 +42,10 @@ export const useBroadcast = (id: string | null) => {
       return data;
     },
     enabled: !!org?.id && !!id,
-    refetchInterval: (query) => (query.state.data?.status === "RUNNING" ? 3000 : false),
+    refetchInterval: (query) => {
+      const saved = query.state.data;
+      return saved && (["RUNNING", "PAUSED"].includes(saved.status) || saved.recipients.some(row => row.status === "PROCESSING")) ? 3000 : false;
+    },
   });
 };
 
@@ -60,6 +64,8 @@ export const useCreateBroadcast = () => {
       filters: BroadcastFilters;
       dealIds: string[];
       text: string;
+      idempotencyKey?: string;
+      importedAudience?: ImportedAudience;
     }) => {
       const { data } = await api.post<BroadcastDetail>("/broadcasts", input);
       return data;
@@ -72,9 +78,14 @@ export const useCancelBroadcast = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data } = await api.post<Broadcast>(`/broadcasts/${id}/cancel`);
+      const { data } = await api.post<Broadcast>(`/broadcasts/${id}/cancel`, {});
       return data;
     },
     onSuccess: () => invalidate(qc),
   });
+};
+
+export const useBroadcastAction = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: async ({ id, action }: { id: string; action: "pause" | "resume" | "cancel" }) => (await api.post<Broadcast>(`/broadcasts/${id}/${action}`, {})).data, onSuccess: () => invalidate(qc) });
 };

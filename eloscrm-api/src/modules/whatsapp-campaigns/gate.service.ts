@@ -7,16 +7,19 @@ import * as repo from "./campaigns.repo.js";
 import { requireManager } from "../whatsapp-costs/costs.service.js";
 import { phoneKey } from "../../lib/phone.js";
 import { identity } from "../whatsapp-outbound/outbound.repo.js";
+import { importAllowed } from "../campaign-imports/imports.repo.js";
 
 export const checkCampaign = async (orgId: string, recipientId: string) => {
   const row = await repo.recipient(orgId, recipientId);
-  if (!row || row.campaign.status !== "running" || row.status !== "preparing" || !row.leaseExpiresAt || row.leaseExpiresAt <= new Date()) throw httpError(422, "CAMPAIGN_STOPPED", "Campanha cancelada, pausada ou com execução expirada");
+  if (!row || !["running", "paused"].includes(row.campaign.status) || row.status !== "preparing" || !row.leaseExpiresAt || row.leaseExpiresAt <= new Date()) throw httpError(422, "CAMPAIGN_STOPPED", "Campanha cancelada ou com execução expirada");
   await requireManager(orgId, row.campaign.actorUserId);
   const destination = await identity(orgId, row.identityId);
-  if (!await permissions.allowed(orgId, row.clientId, destination && ["wa_id", "phone"].includes(destination.kind) ? phoneKey(destination.value) : null)) throw httpError(422, "CAMPAIGN_SUPPRESSED", "Permissão ausente ou comunicação descadastrada");
   const input = campaignInputSchema.parse(row.campaign.input);
+  const imported = input.importedAudience?.recipients.find(value => `import:${value.phone}` === row.dealId);
+  const permission = imported ? destination?.value === imported.phone && await importAllowed(orgId, imported.phone) : await permissions.allowed(orgId, row.clientId, destination && ["wa_id", "phone"].includes(destination.kind) ? phoneKey(destination.value) : null);
+  if (!permission) throw httpError(422, "CAMPAIGN_SUPPRESSED", "Permissão ausente ou comunicação descadastrada");
   let current: Awaited<ReturnType<typeof preview>>;
-  try { current = await preview(orgId, { ...input, dealIds: [row.dealId] }); }
+  try { current = await preview(orgId, imported ? { ...input, importedAudience: { ...input.importedAudience!, recipients: [imported] } } : { ...input, dealIds: [row.dealId] }); }
   catch (error) {
     if (!input.headerUploadId) throw error;
     await repo.pause(orgId, row.campaignId);

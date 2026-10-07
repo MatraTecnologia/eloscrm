@@ -42,7 +42,7 @@ beforeEach(async () => {
   const phone = `5543${randomInt(100000000, 999999999)}`; clientPhoneKey = phone.slice(2, 4) + phone.slice(-8);
   const client = await prisma.client.create({ data: { organizationId: orgId, name: "Pessoa fictícia", phone, phoneKey: clientPhoneKey } }); clientId = client.id;
   const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, clientId } });
-  await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider" } });
+  await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider", validFrom: new Date(Date.now() - 60000) } });
   const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId, pipelineId: pipeline.id, stageId: pipeline.stages[0]!.id, title: "Negócio fictício" } });
   const second = await prisma.deal.create({ data: { organizationId: orgId, clientId, pipelineId: pipeline.id, stageId: pipeline.stages[0]!.id, title: "Outro negócio fictício" } }); secondDealId = second.id;
   definition = { id: String(Math.floor(Math.random() * 1e9)), name: "campaign_fixture", status: "APPROVED", category: "MARKETING", language: "pt_BR", components: [{ type: "BODY", text: "Informação fictícia {{1}}" }] };
@@ -58,11 +58,62 @@ const start = async () => { const saved = await draft(); const snapshot = saved.
 const releaseSlot = (id: string) => prisma.officialCampaign.update({ where: { id }, data: { nextAt: new Date(Date.now() - 1000) } });
 
 describe("campanhas oficiais sem envio real", () => {
+  it("pausa sem enviar e retoma uma única vez; encerramento bloqueia retomada", async () => {
+    const id = await start();
+    await service.changeState(orgId, id, "paused", actor());
+    await processCampaign({ orgId, campaignId: id });
+    expect(graph.sendMessage).not.toHaveBeenCalled();
+    expect((await service.get(orgId, id)).recipients[0]!.status).toBe("pending");
+    await service.changeState(orgId, id, "running", actor());
+    await processCampaign({ orgId, campaignId: id });
+    await releaseSlot(id); await processCampaign({ orgId, campaignId: id });
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1);
+    expect((await service.get(orgId, id)).status).toBe("done");
+    await expect(service.changeState(orgId, id, "running", actor())).rejects.toMatchObject({ code: "CAMPAIGN_STATE" });
+    const canceled = await start(); await service.cancel(orgId, canceled, actor());
+    await expect(service.changeState(orgId, canceled, "running", actor())).rejects.toMatchObject({ code: "CAMPAIGN_STATE" });
+  });
+  it("falha em um destino não interrompe o seguinte e preserva o código do provedor", async () => {
+    const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
+    const phone = `5543${randomInt(100000000, 999999999)}`;
+    const client = await prisma.client.create({ data: { organizationId: orgId, name: "Outra pessoa fictícia", phone, phoneKey: phone.slice(2, 4) + phone.slice(-8) } });
+    const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, clientId: client.id } });
+    await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider", validFrom: new Date(Date.now() - 60000) } });
+    await permissions.save(orgId, client.id, { state: "allowed", evidence: "Permissão fictícia individual" }, actor());
+    const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: client.id, pipelineId: input.pipelineId, stageId: original.stageId, title: "Outro negócio fictício" } });
+    input = { ...input, dealIds: [...input.dealIds, deal.id] };
+    const id = await start();
+    vi.mocked(graph.sendMessage).mockRejectedValueOnce(new graph.OfficialGraphError(131026, false));
+    await processCampaign({ orgId, campaignId: id }); await releaseSlot(id);
+    await processCampaign({ orgId, campaignId: id }); await releaseSlot(id);
+    await processCampaign({ orgId, campaignId: id });
+    const saved = await service.get(orgId, id);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(2);
+    expect(saved.status).toBe("done");
+    expect(saved.recipients.filter(row => row.status === "sent")).toHaveLength(1);
+    expect(saved.recipients.find(row => row.status === "failed")).toMatchObject({ errorCode: "131026", errorStage: "provider", attempts: 1 });
+  });
+  it("exibe destino e código quando a mensagem aceita falha posteriormente na entrega", async () => {
+    const id = await start(); await processCampaign({ orgId, campaignId: id });
+    const current = await service.get(orgId, id);
+    const command = await outbound.command(orgId, current.recipients[0]!.commandId!);
+    await ingestReceipt(channel, { id: command!.externalMessageId!, status: "failed", timestamp: String(Math.floor(Date.now() / 1000)), errors: [{ code: 131026, title: "Conteúdo privado ignorado" }] }, new Date());
+    const saved = await service.get(orgId, id);
+    expect(saved.recipients[0]).toMatchObject({ status: "sent", deliveryStatus: "failed", errorCode: "131026", errorStage: "delivery", destination: expect.stringMatching(/^55/) });
+    expect(JSON.stringify(saved)).not.toContain("Conteúdo privado");
+  });
+  it("protege pausa contra outra organização e origem não autorizada", async () => {
+    const id = await start();
+    expect((await app.inject({ method: "POST", url: `/v1/whatsapp/campaigns/${id}/pause`, headers: { cookie: foreignCookie, origin: env.WEB_ORIGIN }, payload: {} })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: `/v1/whatsapp/campaigns/${id}/pause`, headers: { cookie, origin: "https://example.invalid" }, payload: {} })).statusCode).toBe(403);
+    expect((await service.get(orgId, id)).status).toBe("running");
+  });
+
   it("mantém mensagens distintas para duas pessoas, incluindo cabeçalho e rodapé na prévia", async () => {
     const phone = `5543${randomInt(100000000, 999999999)}`;
     const client = await prisma.client.create({ data: { organizationId: orgId, name: "Isabela Fictícia", phone, phoneKey: phone.slice(2, 4) + phone.slice(-8) } });
     const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, clientId: client.id } });
-    await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider" } });
+    await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider", validFrom: new Date(Date.now() - 60000) } });
     const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
     const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: client.id, pipelineId: input.pipelineId, stageId: original.stageId, title: "Segundo imóvel fictício" } });
     await permissions.save(orgId, client.id, { state: "allowed", evidence: "Autorização fictícia individual" }, actor());
@@ -210,6 +261,7 @@ describe("campanhas oficiais sem envio real", () => {
     await permissions.save(orgId, duplicate.id, { state: "allowed", evidence: "Autorização para o novo número" }, actor());
     expect(await permissions.suppressed(orgId, clientId, clientPhoneKey)).toBe(true);
     expect(await permissions.allowed(orgId, clientId)).toBe(false);
+    await prisma.broadcast.updateMany({ where: { organizationId: orgId }, data: { nextAt: new Date(Date.now() - 1000) } });
     await processLegacyRecipient({ recipientId: recipient.id });
     expect((await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: recipient.id } })).status).toBe("SKIPPED");
   });
@@ -236,4 +288,36 @@ describe("campanhas oficiais sem envio real", () => {
     await processCampaign({ orgId, campaignId: id }); expect(graph.sendMessage).not.toHaveBeenCalled();
     expect((await service.get(orgId, id)).recipients[0]!.safeError).toMatch(/descadastrada/);
   });
+  it("dispara template para telefone importado sem criar lead ou card e preserva a identidade na resposta", async () => {
+    const phone = "5543999990001";
+    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone, name: "Pessoa importada" }], consent: { confirmed: true, evidence: "Autorização fictícia da lista" } }, parameters: { header: {}, body: {} }, parameterSources: { header: {}, body: { "1": "firstName" } } };
+    const counts = [await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })];
+    const snapshot = await preview(orgId, request);
+    expect(snapshot.eligible).toBe(1); expect(snapshot.rows[0]?.text).toContain("Pessoa"); expect(snapshot.estimate.amount).not.toBeNull();
+    const saved = await service.create(orgId, { ...request, name: "Lista importada", idempotencyKey: randomUUID(), previewHash: snapshot.previewHash }, actor());
+    const identityId = snapshot.rows[0]!.identityId!;
+    await expect(sends.createSend(orgId, channel.id, { type: "template", templateId: input.templateId, identityId, idempotencyKey: randomUUID(), parameters: { header: {}, body: { "1": "Pessoa" } } }, actor())).rejects.toMatchObject({ code: "OFFICIAL_RECIPIENT_INVALID" });
+    await service.approve(orgId, saved.id, snapshot.previewHash, true, actor());
+    await processCampaign({ orgId, campaignId: saved.id });
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1); expect(vi.mocked(graph.sendMessage).mock.calls[0]![2].to).toBe(phone);
+    expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("sent");
+    expect([await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })]).toEqual(counts);
+    const imported = await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, id: identityId } });
+    expect(imported.source).toBe("campaign_import");
+    const { withConnectionLock, resolveAliases } = await import("../src/modules/whatsapp-official/identity.repo.js");
+    const received = await withConnectionLock(channel, tx => resolveAliases(tx, channel, [{ kind: "wa_id", value: phone }], "Nome confirmado"));
+    expect(received.id).toBe(imported.contactId);
+    expect((await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, id: identityId } })).source).toBe("campaign_import");
+  });
+  it("reconfere descadastro de telefone importado antes do worker submeter à Meta", async () => {
+    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990002", name: "Pessoa importada" }], consent: { confirmed: true, evidence: "Autorização fictícia da lista" } } };
+    const snapshot = await preview(orgId, request);
+    const saved = await service.create(orgId, { ...request, name: "Lista importada", idempotencyKey: randomUUID(), previewHash: snapshot.previewHash }, actor());
+    await service.approve(orgId, saved.id, snapshot.previewHash, true, actor());
+    const client = await prisma.client.create({ data: { organizationId: orgId, name: "Pessoa descadastrada", phone: "5543999990002", phoneKey: "4399990002" } });
+    await permissions.save(orgId, client.id, { state: "suppressed", evidence: "Descadastro fictício posterior" }, actor());
+    await processCampaign({ orgId, campaignId: saved.id });
+    expect(graph.sendMessage).not.toHaveBeenCalled(); expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("skipped");
+  });
+
 });

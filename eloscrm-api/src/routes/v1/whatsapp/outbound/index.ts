@@ -1,4 +1,6 @@
 import * as z from "zod";
+import * as templates from "../../../../modules/whatsapp-templates/templates.service.js";
+import { templateParamsSchema } from "../../../../modules/whatsapp-templates/templates.schema.js";
 import type { FastifyInstance } from "fastify";
 import { authGuard } from "../../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../../plugins/org-guard.js";
@@ -33,6 +35,11 @@ const outboundRoutes = async (app: FastifyInstance) => {
   app.post("/connections/:connectionId/messages", options, async request => service.createSend(request.orgId!, schema.paramsSchema.parse(request.params).connectionId, request.body, actorOf(request)));
   app.get("/commands/:id", async request => service.getCommand(request.orgId!, schema.commandParamsSchema.parse(request.params).id));
   app.get("/connections/:connectionId/templates", async request => service.listTemplates(request.orgId!, schema.paramsSchema.parse(request.params).connectionId));
+  app.post("/connections/:connectionId/templates", options, async request => templates.create(request.orgId!, schema.paramsSchema.parse(request.params).connectionId, request.user!.id, request.body));
+  app.delete("/connections/:connectionId/templates/:id", options, async request => {
+    const { connectionId, id } = templateParamsSchema.parse(request.params);
+    return templates.remove(request.orgId!, connectionId, id, request.user!.id);
+  });
   app.post("/connections/:connectionId/templates/sync", options, async request => { z.strictObject({}).parse(request.body); return service.syncTemplates(request.orgId!, schema.paramsSchema.parse(request.params).connectionId); });
   app.post("/connections/:connectionId/uploads", { bodyLimit: 16 * 1024 * 1024, logLevel: "silent" }, async request => {
     const { filename } = z.strictObject({ filename: z.string().min(1).max(200) }).parse(request.query);

@@ -70,3 +70,16 @@ describe("cliente oficial da Graph API", () => {
     expect(JSON.parse(fetch.mock.calls[1][1]!.body as string)).toHaveProperty("text.body", "Mensagem fictícia");
   });
 });
+
+it("cria e exclui templates por ID sem colocar token na URL", async () => {
+  const token = randomBytes(24).toString("base64url");
+  const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response({ id: "789", status: "PENDING" })).mockResolvedValueOnce(response({ success: true }));
+  await graph.createTemplate(token, "123", { name: "visita", language: "pt_BR", category: "UTILITY", components: [{ type: "BODY", text: "Olá" }] });
+  expect(fetch.mock.calls[0][1]?.method).toBe("POST");
+  await graph.deleteTemplate(token, "123", "789", "visita");
+  expect(fetch.mock.calls[1][1]?.method).toBe("DELETE");
+  const url = new URL(String(fetch.mock.calls[1][0]));
+  expect(url.searchParams.get("hsm_id")).toBe("789");
+  expect(url.searchParams.get("name")).toBe("visita");
+  expect(String(url)).not.toContain(token);
+});

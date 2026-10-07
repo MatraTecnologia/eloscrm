@@ -3,6 +3,7 @@ export type OfficialSendStatus = "pending" | "preparing" | "sending" | "accepted
 export type InboxChannel = {
   conversationId: string; provider: ChannelProvider; connectionId: string | null; label: string; number: string | null;
   status: string; credentialExpired: boolean; serviceWindowExpiresAt: string | null; phone: string | null; isGroup: boolean;
+  uazapiManual: { allowed: boolean; reason: string | null; number: string | null } | null;
   identities: { id: string; kind: "phone" | "wa_id" | "bsuid" | "parent_bsuid" }[];
 };
 export type InboxGroup = {
@@ -10,11 +11,12 @@ export type InboxGroup = {
 };
 export type InboxMessage = WhatsappMessage & {
   conversationId: string; connectionId: string | null; origin: "uazapi" | "cloud_api" | "business_app" | "history";
+  uazapiManual: { id: string; status: string; safeError: string | null } | null;
   authorName: string | null; command: { id: string; status: OfficialSendStatus; safeError: string | null } | null;
 };
 export type OfficialTemplate = {
   id: string; name: string; language: string; category: string; status: string; syncedAt: string;
-  definition: { parameter_format?: "NAMED" | "POSITIONAL"; components: { type: string; format?: string; text?: string; buttons?: { type: string; url?: string }[] }[] };
+  definition: { parameter_format?: "NAMED" | "POSITIONAL"; components: { type: string; format?: string; text?: string; buttons?: { type: string; url?: string; text?: string }[] }[] };
 };
 export type OfficialSendInput = { idempotencyKey: string; identityId: string; quotedMessageId?: string } & (
   { type: "text"; text: string } | { type: "template"; templateId: string; headerUploadId?: string; parameters: { header: Record<string, string>; body: Record<string, string>; buttons?: Record<string, string> } } |

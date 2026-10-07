@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+import { useQueryState } from "nuqs";
 
 import { Plus, TriangleAlert } from "lucide-react";
 import { WhatsappIcon } from "@/components/icons/whatsapp";
@@ -22,9 +24,11 @@ import { useAutoSyncProfile } from "./use-auto-sync-profile";
 import { WebhookTab } from "./webhook-tab";
 import { OfficialTab } from "@/components/whatsapp-official/official-tab";
 import { CostDashboard } from "@/components/whatsapp-official/cost-dashboard";
+import { TemplateManager } from "@/components/whatsapp-official/template-manager";
 import { AutomationPanel } from "@/components/whatsapp-official/automation-panel";
 
-export default function WhatsappIntegrationPage() {
+const WhatsappIntegrationContent = () => {
+  const [tab, setTab] = useQueryState("tab", { defaultValue: "official" });
   const { data: org, isPending: loadingOrg } = useActiveOrganization();
   const { data: session } = useSession();
   const { data: members } = useMembers();
@@ -48,9 +52,10 @@ export default function WhatsappIntegrationPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="official" className="min-w-0">
+      <Tabs value={tab} onValueChange={value => { void setTab(String(value)); }} className="min-w-0">
         <TabsList className="max-w-full flex-wrap group-data-horizontal/tabs:h-auto">
           <TabsTrigger value="official">WhatsApp oficial</TabsTrigger>
+          {canManage && <TabsTrigger value="templates">Templates</TabsTrigger>}
           <TabsTrigger value="uazapi">uazapi</TabsTrigger>
           {canManage && <TabsTrigger value="costs">Custos e consumo</TabsTrigger>}
           {canManage && <TabsTrigger value="automations">Automações</TabsTrigger>}
@@ -58,6 +63,7 @@ export default function WhatsappIntegrationPage() {
         <TabsContent value="official">
           {org && <OfficialTab key={org.id} canManage={canManage} />}
         </TabsContent>
+        {canManage && <TabsContent value="templates" className="min-w-0">{org && <TemplateManager key={org.id} />}</TabsContent>}
         {canManage && <TabsContent value="costs" className="min-w-0"><CostDashboard /></TabsContent>}
         {canManage && <TabsContent value="automations" className="min-w-0">{org && <AutomationPanel key={org.id} />}</TabsContent>}
         <TabsContent value="uazapi">
@@ -172,3 +178,6 @@ export default function WhatsappIntegrationPage() {
     </div>
   );
 }
+
+const WhatsappIntegrationPage = () => <Suspense fallback={<Skeleton className="h-64 w-full" />}><WhatsappIntegrationContent /></Suspense>;
+export default WhatsappIntegrationPage;

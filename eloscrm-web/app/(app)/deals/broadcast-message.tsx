@@ -15,10 +15,12 @@ export const BroadcastMessage = ({
   text,
   onChange,
   sample,
+  nameOnly = false,
 }: {
   text: string;
   onChange: (next: string) => void;
   sample: BroadcastPreviewRow | null;
+  nameOnly?: boolean;
 }) => {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -46,12 +48,12 @@ export const BroadcastMessage = ({
           id="bc-text"
           ref={ref}
           rows={6}
-          placeholder="Olá {{nome}}, tudo bem? Passando para falar sobre {{titulo}}…"
+          placeholder={nameOnly ? "Olá {{nome}}, tudo bem?" : "Olá {{nome}}, tudo bem? Passando para falar sobre {{titulo}}…"}
           value={text}
           onChange={(e) => onChange(e.target.value)}
         />
         <div className="flex flex-wrap gap-1.5">
-          {TEMPLATE_VARIABLES.map((v) => (
+          {TEMPLATE_VARIABLES.filter(variable => !nameOnly || ["nome", "nome_completo"].includes(variable.key)).map((v) => (
             <Button
               key={v.key}
               type="button"

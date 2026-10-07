@@ -6,12 +6,24 @@ import { syncTemplates } from "../whatsapp-outbound/outbound.service.js";
 import { campaignInputSchema, type CreateInput } from "./campaigns.schema.js";
 import { preview } from "./preview.service.js";
 import * as repo from "./campaigns.repo.js";
+import { getOfficialCredentials } from "../channel-connections/channel-connections.service.js";
 
 export const get = async (orgId: string, id: string) => {
   const saved = await repo.campaign(orgId, id);
   if (!saved) throw notFound("Campanha não encontrada nesta imobiliária");
+  const [identities, receipts] = await Promise.all([
+    repo.recipientIdentities(orgId, saved.recipients.map(row => row.identityId)),
+    repo.failedReceipts(orgId, saved.connectionId, saved.recipients.flatMap(row => row.command?.externalMessageId ? [row.command.externalMessageId] : [])),
+  ]);
+  const destinations = new Map(identities.map(identity => [identity.id, identity.value]));
+  const deliveryCodes = new Map<string, string>();
+  for (const receipt of receipts) {
+    if (deliveryCodes.has(receipt.externalMessageId) || !Array.isArray(receipt.errorCodes)) continue;
+    const codes = receipt.errorCodes.filter((code): code is number => typeof code === "number" && Number.isSafeInteger(code));
+    if (codes.length) deliveryCodes.set(receipt.externalMessageId, codes.join(", "));
+  }
   return { id: saved.id, name: saved.name, connectionId: saved.connectionId, pipelineId: saved.pipelineId, status: saved.status, createdAt: saved.createdAt, snapshot: saved.snapshot,
-    recipients: saved.recipients.map(row => ({ id: row.id, clientId: row.clientId, clientName: row.clientName, dealId: row.dealId, status: row.command?.status === "accepted" ? "sent" : row.command?.status === "uncertain" ? "unknown" : row.status === "skipped" ? "skipped" : row.command?.status === "failed" ? "failed" : row.status, safeError: row.command?.safeError ?? row.safeError, commandId: row.command?.id ?? null, messageId: row.command?.messageId ?? null, deliveryStatus: row.command?.message.status ?? null, cost: row.command?.message.cost ? { ...row.command.message.cost, amount: row.command.message.cost.amount?.toFixed() ?? null } : null })) };
+    recipients: saved.recipients.map(row => ({ id: row.id, destination: destinations.get(row.identityId) ?? null, clientId: row.clientId, clientName: row.clientName, dealId: row.dealId, status: row.command?.status === "accepted" ? "sent" : row.command?.status === "uncertain" ? "unknown" : row.status === "skipped" ? "skipped" : row.command?.status === "failed" ? "failed" : row.status, safeError: row.command?.safeError ?? row.safeError ?? ((row.command?.status === "accepted" && row.command.message.status === "failed") ? "A Meta informou falha na entrega para este destinatário" : null), errorCode: ((row.command?.status === "accepted" && row.command.message.status === "failed") ? deliveryCodes.get(row.command.externalMessageId ?? "") : undefined) ?? row.errorCode ?? (row.command?.providerErrorCode === null || row.command?.providerErrorCode === undefined ? null : String(row.command.providerErrorCode)), errorStage: (row.command?.status === "accepted" && row.command.message.status === "failed") ? "delivery" : row.errorStage, attempts: row.attempts, startedAt: row.startedAt, completedAt: row.completedAt, commandId: row.command?.id ?? null, messageId: row.command?.messageId ?? null, deliveryStatus: row.command?.status === "accepted" ? row.command.message.status : null, cost: row.command?.message.cost ? { ...row.command.message.cost, amount: row.command.message.cost.amount?.toFixed() ?? null } : null })) };
 };
 export const create = async (orgId: string, raw: CreateInput, actor: Actor) => {
   const { name, idempotencyKey, previewHash, ...input } = raw;
@@ -46,3 +58,13 @@ export const approve = async (orgId: string, id: string, hash: string, start: bo
   return get(orgId, id);
 };
 export const cancel = async (orgId: string, id: string, actor: Actor) => { await repo.cancel(orgId, id, actor); return get(orgId, id); };
+export const changeState = async (orgId: string, id: string, status: "paused" | "running", actor: Actor) => {
+  if (status === "running") {
+    if (!queueEnabled()) throw httpError(503, "CAMPAIGN_REDIS_REQUIRED", "Configure Redis para retomar as campanhas");
+    const saved = await get(orgId, id);
+    await getOfficialCredentials(orgId, saved.connectionId);
+    await syncTemplates(orgId, saved.connectionId);
+  }
+  await repo.transition(orgId, id, status, actor);
+  return get(orgId, id);
+};

@@ -5,12 +5,15 @@ import {
   BroadcastRecipientStatus,
   BroadcastStatus,
   UazapiInstanceStatus,
+  Prisma,
 } from "../../generated/prisma/client.js";
 import type { Actor } from "../../lib/actor.js";
 import { recordAudit } from "../../lib/audit.js";
 import { conflict, httpError, notFound } from "../../lib/http-error.js";
 import { phoneKey, toWaNumber } from "../../lib/phone.js";
-import { createWorker, enqueue } from "../../lib/queue.js";
+import { createWorker, enqueue, queueEnabled } from "../../lib/queue.js";
+import { env } from "../../env.js";
+import { eventHash } from "../whatsapp-official/webhook.schema.js";
 import * as conversationsRepo from "../whatsapp/conversations.repo.js";
 import { sendText } from "../whatsapp/conversations.service.js";
 import * as whatsappRepo from "../whatsapp/whatsapp.repo.js";
@@ -23,6 +26,9 @@ import type {
 import { applyReplyFilter } from "./reply-filter.js";
 import { renderTemplate, templateVarsOf } from "./template.js";
 import { allowed } from "../communication-permissions/permissions.repo.js";
+import { importBroadcastRecipients } from "../campaign-imports/broadcast-audience.service.js";
+import { importedAudienceSchema } from "../campaign-imports/imports.schema.js";
+import { importAllowed } from "../campaign-imports/imports.repo.js";
 
 export const BROADCAST_QUEUE = "broadcast-send";
 
@@ -80,50 +86,75 @@ export const preview = async (orgId: string, input: PreviewBroadcastInput) => {
 };
 
 export const create = async (orgId: string, input: CreateBroadcastInput, actor: Actor) => {
+  const requestHash = eventHash({ ...input, idempotencyKey: undefined });
+  if (input.idempotencyKey) {
+    const previous = await repo.existing(orgId, input.idempotencyKey);
+    if (previous) {
+      if (previous.requestHash !== requestHash) throw conflict("BROADCAST_IDEMPOTENCY", "Esta solicitação já foi usada com outro disparo");
+      return previous;
+    }
+  }
   await requireConnectedInstance(orgId);
+  if (env.NODE_ENV !== "test" && !queueEnabled()) throw httpError(503, "BROADCAST_REDIS_REQUIRED", "Configure Redis para executar disparos em segundo plano");
   const pipeline = await requirePipeline(orgId, input.pipelineId);
 
   // o filtro roda de novo aqui, e só quem ele devolve pode entrar: um id marcado na tela que não
   // passa mais na condição (o negócio mudou de estágio nesse meio-tempo) fica de fora em silêncio
-  const targets = await resolveTargets(orgId, input.pipelineId, input.filters);
+  const targets = input.importedAudience ? [] : await resolveTargets(orgId, input.pipelineId, input.filters);
   const selectedDeals = new Set(input.dealIds);
   const selectedTargets = targets.filter(({ deal }) => selectedDeals.has(deal.id));
-  if (selectedTargets.length === 0) throw httpError(422, "NO_RECIPIENTS", "Nenhum destinatário selecionado");
+  if (selectedTargets.length === 0 && !input.importedAudience) throw httpError(422, "NO_RECIPIENTS", "Nenhum destinatário selecionado");
 
   const excludedClients = new Set<string>();
   for (const target of selectedTargets) if (!await allowed(orgId, target.deal.client.id, phoneKey(target.number))) excludedClients.add(target.deal.client.id);
 
-  const recipients = selectedTargets.map(({ deal, ownerName, number }) => ({
+  const seen = new Set<string>();
+  const recipients = input.importedAudience ? await importBroadcastRecipients(orgId, input.importedAudience, input.text) : selectedTargets.map(({ deal, ownerName, number }) => {
+    const key = phoneKey(number);
+    const duplicate = !!key && seen.has(key);
+    if (key) seen.add(key);
+    const text = renderTemplate(input.text, templateVarsOf({ ...deal, ownerName }));
+    if (text.length > 2000 || /\{\{|\}\}/.test(text)) throw httpError(422, "BROADCAST_MESSAGE_INVALID", "A mensagem personalizada contém variável desconhecida ou excede 2000 caracteres");
+    return {
     dealId: deal.id,
     clientId: deal.client.id,
     clientName: deal.client.name,
     number,
-    text: renderTemplate(input.text, templateVarsOf({ ...deal, ownerName })),
-    ...(excludedClients.has(deal.client.id)
-      ? { status: BroadcastRecipientStatus.SKIPPED, error: "Permissão ausente ou comunicação descadastrada" }
+    text,
+    ...(duplicate ? { status: BroadcastRecipientStatus.SKIPPED, error: "Telefone repetido neste disparo", errorCode: "DUPLICATE_DESTINATION", errorStage: "selection" } : excludedClients.has(deal.client.id)
+      ? { status: BroadcastRecipientStatus.SKIPPED, error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" }
       : number
-      ? {}
-      : { status: BroadcastRecipientStatus.SKIPPED, error: "Lead sem telefone válido" }),
-  }));
+      ? { status: BroadcastRecipientStatus.PENDING }
+      : { status: BroadcastRecipientStatus.SKIPPED, error: "Lead sem telefone válido", errorCode: "INVALID_DESTINATION", errorStage: "selection" }),
+  }; });
   const skipped = recipients.filter((r) => r.status === BroadcastRecipientStatus.SKIPPED).length;
 
-  const broadcast = await repo.createBroadcast(
+  let broadcast;
+  try { broadcast = await repo.createBroadcast(
     {
       organizationId: orgId,
       pipelineId: pipeline.id,
       pipelineName: pipeline.name,
       text: input.text,
-      filters: input.filters,
+      filters: input.importedAudience ? { ...input.filters, importedAudience: input.importedAudience } : input.filters,
       createdById: actor.id || null,
       createdByName: actor.name,
       total: recipients.length,
       skipped,
+      id: input.idempotencyKey,
+      requestHash,
       ...(skipped === recipients.length
         ? { status: BroadcastStatus.DONE, finishedAt: new Date() }
         : {}),
     },
     recipients,
-  );
+  ); } catch (error) {
+    if (input.idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const previous = await repo.existing(orgId, input.idempotencyKey);
+      if (previous?.requestHash === requestHash) return previous;
+    }
+    throw error;
+  }
 
   await recordAudit({
     orgId,
@@ -159,7 +190,7 @@ export const getById = async (orgId: string, id: string) => {
 
 export const cancel = async (orgId: string, id: string, actor: Actor) => {
   const broadcast = await getById(orgId, id);
-  if (broadcast.status !== BroadcastStatus.RUNNING) {
+  if (broadcast.status !== BroadcastStatus.RUNNING && broadcast.status !== BroadcastStatus.PAUSED) {
     throw conflict("BROADCAST_NOT_RUNNING", "Este disparo já terminou");
   }
   const updated = await repo.cancelBroadcast(id);
@@ -175,8 +206,10 @@ export const cancel = async (orgId: string, id: string, actor: Actor) => {
   return updated;
 };
 
-const errorMessage = (err: unknown) =>
-  err instanceof Error ? err.message : "Falha ao enviar";
+export const changeState = async (orgId: string, id: string, status: "RUNNING" | "PAUSED", actor: Actor) => {
+  if (status === "RUNNING") { await requireConnectedInstance(orgId); if (env.NODE_ENV !== "test" && !queueEnabled()) throw httpError(503, "BROADCAST_REDIS_REQUIRED", "Configure Redis para retomar os disparos"); }
+  return repo.transition(orgId, id, status, actor);
+};
 
 /**
  * Envia para um destinatário. Nunca lança: o resultado, bom ou ruim, vai para a linha do
@@ -184,23 +217,23 @@ const errorMessage = (err: unknown) =>
  * deixaria o job "falho" no Redis sem nada na tela.
  */
 export const processRecipient = async ({ recipientId }: { recipientId: string }) => {
-  const recipient = await repo.findRecipient(recipientId);
-  if (!recipient || recipient.status !== BroadcastRecipientStatus.PENDING) return;
+  const recipient = await repo.claimRecipient(recipientId, queueEnabled());
+  if (!recipient) return;
   const { broadcast } = recipient;
   const settle = (outcome: Parameters<typeof repo.settleRecipient>[2]) =>
     repo.settleRecipient(recipient.id, broadcast.id, outcome);
 
-  if (broadcast.status !== BroadcastStatus.RUNNING) {
-    return settle({ status: "SKIPPED", error: "Disparo cancelado" });
-  }
-  if (!await allowed(broadcast.organizationId, recipient.clientId, phoneKey(recipient.number))) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada" });
+  let submitting = false;
+  try {
+  const imported = typeof broadcast.filters === "object" && broadcast.filters && "importedAudience" in broadcast.filters ? importedAudienceSchema.parse(broadcast.filters.importedAudience) : null;
+  const permitted = () => imported ? imported.recipients.some(value => value.phone === recipient.number && `import:${value.phone}` === recipient.dealId) && importAllowed(broadcast.organizationId, recipient.number) : allowed(broadcast.organizationId, recipient.clientId, phoneKey(recipient.number));
+  if (!await permitted()) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" });
   const instance = await whatsappRepo.findByOrg(broadcast.organizationId);
   if (!instance || instance.status !== UazapiInstanceStatus.connected) {
-    return settle({ status: "FAILED", error: "WhatsApp desconectado" });
+    return settle({ status: "FAILED", error: "WhatsApp desconectado", errorCode: "INSTANCE_NOT_CONNECTED", errorStage: "connection" });
   }
   const number = recipient.number!;
 
-  try {
     // a conversa é a mesma que a caixa de entrada usa: procurada pela chave do telefone (o nono
     // dígito varia entre o cadastro e o JID) e criada só quando o lead nunca falou com o número
     const key = phoneKey(number);
@@ -228,7 +261,11 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
       name: broadcast.createdByName,
       source: AuditSource.AUTOMATION,
     };
-    if (!await allowed(broadcast.organizationId, recipient.clientId, phoneKey(number))) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada" });
+    if (!await permitted()) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" });
+    const current = await repo.findBroadcast(broadcast.organizationId, broadcast.id);
+    if (current?.status === "PAUSED") return repo.releaseRecipient(recipient.id);
+    if (current?.status !== "RUNNING") return settle({ status: "SKIPPED", error: "Disparo encerrado", errorCode: "BROADCAST_STOPPED", errorStage: "validation" });
+    submitting = true;
     const message = await sendText(
       broadcast.organizationId,
       conversation.id,
@@ -237,7 +274,9 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
     );
     await settle({ status: "SENT", messageId: message.id });
   } catch (err) {
-    await settle({ status: "FAILED", error: errorMessage(err) });
+    const code = err instanceof Error && "code" in err && typeof err.code === "string" && /^[A-Z0-9_]{1,80}$/.test(err.code) ? err.code : "SEND_ERROR";
+    const ambiguous = submitting && !["WHATSAPP_BLOCKED", "UAZAPI_ERROR", "INSTANCE_NOT_CONNECTED"].includes(code);
+    await settle({ status: ambiguous ? "UNKNOWN" : "FAILED", error: ambiguous ? "O provedor pode ter recebido a mensagem. Resultado incerto; confira o destino antes de repetir." : code === "WHATSAPP_BLOCKED" ? "O WhatsApp recusou o envio por restrição da plataforma" : "Não foi possível enviar para este destinatário", errorCode: code, errorStage: submitting ? "provider" : "preparation" });
   }
 };
 
@@ -249,3 +288,19 @@ createWorker<{ recipientId: string }>(
   // um de cada vez: a concorrência anularia o espaçamento entre mensagens
   1,
 );
+
+export const recoverBroadcasts = async () => {
+  if (!queueEnabled()) return;
+  for (const row of await repo.recoverable()) {
+    if (row.status === "PROCESSING") await repo.settleRecipient(row.id, row.broadcastId, { status: "UNKNOWN", error: "A execução foi interrompida sem confirmação. O envio não será repetido automaticamente.", errorCode: "WORKER_INTERRUPTED", errorStage: "recovery" });
+    else await enqueue(BROADCAST_QUEUE, { recipientId: row.id }, { attempts: 1, jobId: `broadcast-${row.id}-${Math.floor(Date.now() / 10000)}` });
+  }
+};
+
+export const scheduleBroadcastRecovery = () => {
+  let running = false;
+  const tick = async () => { if (running) return; running = true; try { await recoverBroadcasts(); } catch { /* A intenção permanece no banco para o próximo ciclo. */ } finally { running = false; } };
+  const timer = setInterval(() => { void tick(); }, 10000);
+  timer.unref(); void tick();
+  return () => clearInterval(timer);
+};

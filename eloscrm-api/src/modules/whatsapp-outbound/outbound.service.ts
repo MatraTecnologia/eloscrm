@@ -10,12 +10,12 @@ import { buildTemplate } from "./template.js";
 import { mediaTypes, readMedia, type MediaMime } from "./media.service.js";
 import { checkCampaign } from "../whatsapp-campaigns/gate.service.js";
 
-const prepare = async (orgId: string, connectionId: string, input: SendInput, userId: string) => {
+const prepare = async (orgId: string, connectionId: string, input: SendInput, userId: string, campaignRecipientId?: string | null) => {
   const credentials = await getOfficialCredentials(orgId, connectionId);
   const channel = await repo.connection(orgId, connectionId);
   if (!channel || !await repo.membership(orgId, userId)) throw notFound("Conexão ou usuário indisponível nesta imobiliária");
   const identity = await repo.identity(orgId, input.identityId);
-  if (!identity || identity.source !== "provider" || identity.scope !== `business:${channel.businessPortfolioId}` || identity.validUntil || identity.validFrom > new Date() || !["wa_id", "phone", "bsuid", "parent_bsuid"].includes(identity.kind)) throw httpError(422, "OFFICIAL_RECIPIENT_INVALID", "O destinatário exige uma identidade oficial válida nesta conexão");
+  if (!identity || (identity.source !== "provider" && !(campaignRecipientId && input.type === "template" && identity.source === "campaign_import" && identity.kind === "phone")) || identity.scope !== `business:${channel.businessPortfolioId}` || identity.validUntil || identity.validFrom > new Date() || !["wa_id", "phone", "bsuid", "parent_bsuid"].includes(identity.kind)) throw httpError(422, "OFFICIAL_RECIPIENT_INVALID", "O destinatário exige uma identidade oficial válida nesta conexão");
   const thread = await repo.conversation(orgId, connectionId, identity.contactId);
   if (input.type !== "template" && (!thread?.serviceWindowExpiresAt || thread.serviceWindowExpiresAt <= new Date())) throw httpError(422, "OFFICIAL_WINDOW_CLOSED", "A janela de 24h expirou; selecione um template aprovado");
   let context: { message_id: string } | undefined;
@@ -68,7 +68,7 @@ export const createSend = async (orgId: string, connectionId: string, raw: unkno
     return getCommand(orgId, previous.id);
   }
   if (campaignRecipientId) await checkCampaign(orgId, campaignRecipientId);
-  const prepared = await prepare(orgId, connectionId, input, actor.id);
+  const prepared = await prepare(orgId, connectionId, input, actor.id, campaignRecipientId);
   try {
     const id = await repo.createCommand(prepared.channel, input, requestHash, prepared.payload as Prisma.InputJsonObject, prepared.text, prepared.type, actor, prepared.contactId, prepared.upload ?? undefined, campaignRecipientId);
     return getCommand(orgId, id);
@@ -103,7 +103,7 @@ export const executeSend = async (orgId: string, id: string) => {
     if (!command) return;
     if (command.campaignRecipientId) await checkCampaign(orgId, command.campaignRecipientId);
     const input = sendSchema.parse(command.request);
-    const prepared = await prepare(orgId, command.connectionId, input, command.actorUserId);
+    const prepared = await prepare(orgId, command.connectionId, input, command.actorUserId, command.campaignRecipientId);
     if (eventHash(prepared.payload) !== eventHash(command.payload)) throw httpError(422, "OFFICIAL_SEND_CHANGED", "O destinatário ou template mudou; prepare um novo envio");
     if (input.type === "template") {
       const snapshot = templateSchema.parse(prepared.payload.templateSnapshot);
@@ -124,7 +124,7 @@ export const executeSend = async (orgId: string, id: string) => {
       } else payload[prepared.type] = { ...(payload[prepared.type] as Record<string, unknown>), id: mediaId };
     }
     // Upload/consulta podem levar tempo: a janela e o estado local são verificados no instante da submissão.
-    const finalCheck = await prepare(orgId, command.connectionId, input, command.actorUserId);
+    const finalCheck = await prepare(orgId, command.connectionId, input, command.actorUserId, command.campaignRecipientId);
     if (command.campaignRecipientId) await checkCampaign(orgId, command.campaignRecipientId);
     if (eventHash(finalCheck.payload) !== eventHash(command.payload)) throw httpError(422, "OFFICIAL_SEND_CHANGED", "O envio mudou antes da submissão");
     if (!await repo.markSending(orgId, id, leaseToken)) return;

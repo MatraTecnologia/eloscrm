@@ -12,6 +12,7 @@ import {
   sendMediaSchema,
   sendMessageSchema,
 } from "../../../../modules/whatsapp/conversations.schema.js";
+import { requireLegacyEligibility } from "../../../../modules/whatsapp-inbox/uazapi-policy.repo.js";
 import * as service from "../../../../modules/whatsapp/conversations.service.js";
 import * as actions from "../../../../modules/whatsapp/message-actions.service.js";
 import * as reactions from "../../../../modules/whatsapp/reactions.service.js";
@@ -49,6 +50,7 @@ const conversationsRoutes = async (app: FastifyInstance) => {
   app.post("/:id/messages", async (request, reply) => {
     const { id } = request.params as { id: string };
     const data = sendMessageSchema.parse(request.body);
+    await requireLegacyEligibility(request.orgId!, id);
     const message = await service.sendText(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(message);
   });
@@ -65,6 +67,7 @@ const conversationsRoutes = async (app: FastifyInstance) => {
   app.post("/:id/messages/media", async (request, reply) => {
     const { id } = request.params as { id: string };
     const data = sendMediaSchema.parse(request.body);
+    await requireLegacyEligibility(request.orgId!, id);
     const message = await service.sendMedia(request.orgId!, id, data, actorOf(request));
     return reply.status(201).send(message);
   });

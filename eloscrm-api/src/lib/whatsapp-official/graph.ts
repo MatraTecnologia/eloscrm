@@ -5,13 +5,13 @@ export class OfficialGraphError extends Error {
   constructor(readonly code: number | null, readonly uncertain: boolean) { super("Não foi possível concluir a operação na Meta"); }
 }
 
-export const requestGraph = async (path: string, token: string | null, params: Record<string, string> = {}, body?: Record<string, unknown>) => {
+export const requestGraph = async (path: string, token: string | null, params: Record<string, string> = {}, body?: Record<string, unknown>, method?: "DELETE") => {
   const url = new URL(`https://graph.facebook.com/${env.META_WHATSAPP_GRAPH_VERSION}/${path}`);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   let response: Response;
   try {
     response = await fetch(url, {
-      method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(15_000),
+      method: method ?? (body ? "POST" : "GET"), redirect: "error", signal: AbortSignal.timeout(15_000),
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { "Content-Type": "application/json" } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -91,3 +91,6 @@ export const readMediaMetadata = (token: string, mediaId: string, phoneNumberId:
   if (!/^\d{1,128}$/.test(mediaId) || !/^\d{1,128}$/.test(phoneNumberId)) throw new OfficialGraphError(null, false);
   return requestGraph(mediaId, token, { phone_number_id: phoneNumberId });
 };
+
+export const createTemplate = (token: string, wabaId: string, definition: Record<string, unknown>) => requestGraph(`${wabaId}/message_templates`, token, {}, definition);
+export const deleteTemplate = (token: string, wabaId: string, id: string, name: string) => requestGraph(`${wabaId}/message_templates`, token, { hsm_id: id, name }, undefined, "DELETE");

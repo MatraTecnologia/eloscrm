@@ -26,7 +26,7 @@ const campaignRoutes = async (app: FastifyInstance) => {
     if (!bucket || now - bucket.at >= 60000) { if (requests.size > 2000) requests.clear(); requests.set(key, { at: now, count: 1 }); }
     else if (++bucket.count > 30) throw httpError(429, "CAMPAIGN_RATE_LIMIT", "Aguarde um minuto antes de tentar novamente");
   });
-  const options = { bodyLimit: 32768, logLevel: "silent" as const };
+  const options = { bodyLimit: 131072, logLevel: "silent" as const };
   app.get("/", async request => list(request.orgId!, z.strictObject({ pipelineId: z.string().min(1).max(128) }).parse(request.query).pipelineId));
   app.post("/preview", options, async request => preview(request.orgId!, schema.campaignInputSchema.parse(request.body)));
   app.post("/targets", options, async request => { const input = z.strictObject({ pipelineId: z.string().min(1).max(128), filters: broadcastFiltersSchema.safeExtend({}).strict() }).parse(request.body); return targets(request.orgId!, input.pipelineId, input.filters); });
@@ -36,6 +36,7 @@ const campaignRoutes = async (app: FastifyInstance) => {
   app.post("/:id/refresh", options, async request => service.approve(request.orgId!, schema.idSchema.parse(request.params).id, schema.approvalSchema.parse(request.body).previewHash, false, actorOf(request)));
   app.post("/:id/start", options, async request => service.approve(request.orgId!, schema.idSchema.parse(request.params).id, schema.approvalSchema.parse(request.body).previewHash, true, actorOf(request)));
   app.post("/:id/cancel", options, async request => { z.strictObject({}).parse(request.body); return service.cancel(request.orgId!, schema.idSchema.parse(request.params).id, actorOf(request)); });
+  for (const action of ["pause", "resume"] as const) app.post(`/:id/${action}`, options, async request => { z.strictObject({}).parse(request.body); return service.changeState(request.orgId!, schema.idSchema.parse(request.params).id, action === "pause" ? "paused" : "running", actorOf(request)); });
   const clientParams = z.strictObject({ clientId: z.string().min(1).max(128) });
   app.get("/permissions/:clientId", async request => {
     const { clientId } = clientParams.parse(request.params);

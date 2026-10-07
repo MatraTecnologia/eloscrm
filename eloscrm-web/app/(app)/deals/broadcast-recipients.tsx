@@ -1,6 +1,8 @@
 "use client";
 
 import { PhoneOff } from "lucide-react";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency, formatPhone } from "@/lib/labels";
@@ -23,28 +25,32 @@ export const BroadcastRecipients = ({
   selected: string[];
   onChange: (next: string[]) => void;
 }) => {
-  const enviaveis = rows.filter((r) => r.sendable);
-  const todos = enviaveis.length > 0 && enviaveis.every((r) => selected.includes(r.dealId));
+  const [search, setSearch] = useState("");
+  const eligible = rows.filter(row => row.sendable);
+  const batch = eligible.slice(0, 200);
+  const allSelected = batch.length > 0 && batch.every(row => selected.includes(row.dealId));
+  const visible = rows.filter(row => `${row.client.name} ${row.client.phone ?? ""} ${row.title}`.toLowerCase().includes(search.toLowerCase()));
   const stageName = new Map(stages.map((s) => [s.id, s.name]));
 
   const toggle = (id: string) =>
-    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : selected.length < 200 ? [...selected, id] : selected);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <Input aria-label="Buscar destinatário" placeholder="Buscar pessoa, telefone ou negócio" value={search} onChange={event => setSearch(event.target.value)} />
       <label className="flex items-center gap-2 text-sm">
         <Checkbox
-          checked={todos}
-          indeterminate={!todos && selected.length > 0}
-          onCheckedChange={() => onChange(todos ? [] : enviaveis.map((r) => r.dealId))}
-          aria-label="Selecionar todos"
+          checked={allSelected}
+          indeterminate={!allSelected && selected.length > 0}
+          onCheckedChange={() => onChange(allSelected ? [] : batch.map(row => row.dealId))}
+          aria-label="Selecionar até 200 destinatários"
         />
         <span>
-          {selected.length} de {enviaveis.length} selecionados
-          {enviaveis.length < rows.length && (
+          {selected.length} de {eligible.length} selecionados · limite de 200
+          {eligible.length < rows.length && (
             <span className="text-muted-foreground">
               {" "}
-              · {rows.length - enviaveis.length} {rows.length - enviaveis.length === 1 ? "excluído" : "excluídos"}
+              · {rows.length - eligible.length} {rows.length - eligible.length === 1 ? "excluído" : "excluídos"}
             </span>
           )}
         </span>
@@ -56,7 +62,7 @@ export const BroadcastRecipients = ({
               Nenhum negócio passa nas condições
             </div>
           )}
-          {rows.map((row) => (
+          {visible.map((row) => (
             <label
               key={row.dealId}
               className={cn(
@@ -66,7 +72,7 @@ export const BroadcastRecipients = ({
               )}
             >
               <Checkbox
-                disabled={!row.sendable}
+                disabled={!row.sendable || (!selected.includes(row.dealId) && selected.length >= 200)}
                 checked={selected.includes(row.dealId)}
                 onCheckedChange={() => toggle(row.dealId)}
                 className="mt-0.5"
