@@ -24,14 +24,14 @@ const load = async (orgId: string, conversationId: string, messageId: string) =>
     where: { id: conversationId, organizationId: orgId },
     include: { instance: true, client: { select: { name: true } } },
   });
-  if (!conversation) throw notFound("Conversa não encontrada");
+  if (!conversation?.instance) throw notFound("Conversa uazapi não encontrada");
 
   const message = await prisma.whatsappMessage.findFirst({
     where: { id: messageId, conversationId },
   });
   if (!message) throw notFound("Mensagem não encontrada");
 
-  return { conversation, message };
+  return { conversation: { ...conversation, instance: conversation.instance }, message };
 };
 
 const requireConnected = (status: UazapiInstanceStatus) => {

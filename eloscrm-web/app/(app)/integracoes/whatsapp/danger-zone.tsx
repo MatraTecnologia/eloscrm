@@ -29,10 +29,10 @@ import { toast } from "sonner";
 
 const plural = (n: number, um: string, muitos: string) => `${n} ${n === 1 ? um : muitos}`;
 
-const Inventario = ({ preview }: { preview: WhatsappDeletionPreview }) => (
+const DeletionInventory = ({ preview }: { preview: WhatsappDeletionPreview }) => (
   <div className="space-y-3 text-sm">
     <div>
-      <p className="font-medium">Isto será apagado agora:</p>
+      <p className="font-medium">A instância será removida do provedor:</p>
       <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-5">
         <li>
           a conexão <span className="text-foreground font-medium">{preview.instance.name}</span> no
@@ -41,7 +41,7 @@ const Inventario = ({ preview }: { preview: WhatsappDeletionPreview }) => (
         {preview.conversations > 0 ? (
           <li>
             {plural(preview.conversations, "conversa", "conversas")} e{" "}
-            {plural(preview.messages, "mensagem", "mensagens")} do atendimento
+            {plural(preview.messages, "mensagem", "mensagens")} do atendimento serão preservadas
           </li>
         ) : (
           <li>nenhuma conversa (nada foi recebido nesta conexão ainda)</li>
@@ -49,7 +49,7 @@ const Inventario = ({ preview }: { preview: WhatsappDeletionPreview }) => (
         {preview.storage.objects > 0 && (
           <li>
             {plural(preview.storage.objects, "mídia", "mídias")} ({formatFileSize(preview.storage.bytes)})
-            — fotos, áudios e documentos das conversas
+            de fotos, áudios e documentos das conversas serão preservadas
           </li>
         )}
         <li>o histórico de conexão desta imobiliária</li>
@@ -57,8 +57,8 @@ const Inventario = ({ preview }: { preview: WhatsappDeletionPreview }) => (
     </div>
 
     <p className="text-muted-foreground">
-      Os leads e negócios <span className="text-foreground font-medium">continuam</span> — o que sai é o
-      atendimento de WhatsApp. {preview.instance.connected ? "O número será desconectado e " : ""}
+      Leads, negócios e atendimento <span className="text-foreground font-medium">continuam no histórico</span>.
+      {preview.instance.connected ? " O número será desconectado e " : " "}
       será preciso ler o QR Code de novo para voltar a usar.
     </p>
   </div>
@@ -97,7 +97,7 @@ export const DangerZone = ({ removeOnly = false }: { removeOnly?: boolean }) => 
           Zona de risco
         </CardTitle>
         <CardDescription>
-          Reiniciar mantém o número conectado. Remover apaga a conexão no servidor de WhatsApp e leva
+          Reiniciar mantém o número conectado. Remover apaga a instância no servidor de WhatsApp e preserva
           as conversas desta imobiliária.
         </CardDescription>
       </CardHeader>
@@ -131,8 +131,8 @@ export const DangerZone = ({ removeOnly = false }: { removeOnly?: boolean }) => 
             <DialogHeader>
               <DialogTitle>Remover a conexão de WhatsApp?</DialogTitle>
               <DialogDescription>
-                Esta ação é permanente: o atendimento apagado aqui não volta, e não há backup no
-                aplicativo.
+                A instância no provedor será apagada. Conversas e mídias permanecem no elosCRM; para
+                voltar a enviar mensagens, crie uma conexão novamente.
               </DialogDescription>
             </DialogHeader>
 
@@ -142,7 +142,7 @@ export const DangerZone = ({ removeOnly = false }: { removeOnly?: boolean }) => 
                 <Skeleton className="h-20 w-full" />
               </div>
             ) : (
-              <Inventario preview={preview} />
+              <DeletionInventory preview={preview} />
             )}
 
             {exigeNome && (
@@ -162,8 +162,8 @@ export const DangerZone = ({ removeOnly = false }: { removeOnly?: boolean }) => 
             <Label className="flex items-start gap-2 text-sm font-normal">
               <Checkbox checked={ciente} onCheckedChange={(value) => setCiente(value === true)} />
               <span>
-                Entendo que as conversas e mídias desta conexão serão apagadas e que não é possível
-                desfazer.
+                Entendo que a instância no provedor será apagada e que precisarei conectar novamente
+                para enviar mensagens. Conversas e mídias serão preservadas.
               </span>
             </Label>
 

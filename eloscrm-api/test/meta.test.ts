@@ -4,6 +4,9 @@ import { makeApp } from "./helpers/app.js";
 import { signIn, signUp, signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { MetaGraphError } from "../src/lib/meta/graph.js";
+import { randomBytes } from "node:crypto";
+import { decryptToken, encryptToken } from "../src/lib/crypto.js";
+import * as metaRepo from "../src/modules/meta/meta.repo.js";
 
 // A Graph API é serviço de terceiro: mockar o client é a única forma de exercitar o fluxo sem token
 // real. O banco segue real, como no resto da suíte.
@@ -114,6 +117,110 @@ describe("integração com o Meta", () => {
   it("corretor não conecta", async () => {
     const res = await connect(memberCookie);
     expect(res.statusCode).toBe(403);
+  });
+
+  it("usa o token do sistema quando a página não retorna token próprio", async () => {
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página Imob" }]);
+    const res = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(res.statusCode).toBe(201);
+    expect(remote.leadForms).toHaveBeenCalledWith("p1", TOKEN);
+    const page = await prisma.metaPage.findFirstOrThrow({ where: { integration: { organizationId: orgId }, pageId: "p1" } });
+    expect(decryptToken(page.tokenEnc)).toBe(TOKEN);
+    expect(res.body).not.toContain(TOKEN);
+  });
+
+  it("preserva token próprio nas páginas que o retornam ao usuário do sistema", async () => {
+    const pageToken = randomBytes(24).toString("base64url");
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página Imob", access_token: pageToken }, { id: "p2", name: "Outra página" }]);
+    remote.leadForms.mockImplementation(async (pageId: string) => [{ id: `form-${pageId}`, name: "Formulário fictício" }]);
+    const res = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(res.statusCode).toBe(201);
+    expect(remote.leadForms).toHaveBeenCalledWith("p1", pageToken);
+    expect(remote.leadForms).toHaveBeenCalledWith("p2", TOKEN);
+    expect(res.json().forms).toHaveLength(2);
+  });
+
+  it("recusa token de usuário sem token de página e não grava integração parcial", async () => {
+    const pageToken = randomBytes(24).toString("base64url");
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página Imob", access_token: pageToken }, { id: "p2", name: "Outra página" }]);
+    const res = await connect();
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("META_PAGE_TOKEN_MISSING");
+    expect((await get()).json()).toBeNull();
+    expect(res.body).not.toContain(TOKEN);
+    expect(res.body).not.toContain(pageToken);
+  });
+
+  it("não troca a conexão existente quando o token novo não acessa formulários", async () => {
+    await connect();
+    const before = await prisma.metaIntegration.findUniqueOrThrow({ where: { organizationId: orgId }, include: { pages: true, forms: true } });
+    remote.pages.mockResolvedValue([{ id: "p2", name: "Outra página" }]);
+    remote.leadForms.mockRejectedValue(new MetaGraphError({ code: 200, message: "Permissão ausente" }, false));
+    const res = await connect(cookie, { token: randomBytes(24).toString("base64url"), tokenType: "system_user" });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("META_PAGE_ACCESS_DENIED");
+    const after = await prisma.metaIntegration.findUniqueOrThrow({ where: { organizationId: orgId }, include: { pages: true, forms: true } });
+    expect(after.tokenEnc).toBe(before.tokenEnc);
+    expect(after.pages).toEqual(before.pages);
+    expect(after.forms).toEqual(before.forms);
+  });
+
+  it("conecta páginas autorizadas e mantém aviso das páginas recusadas sem expor o token", async () => {
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página autorizada" }, { id: "p2", name: "Página sem acesso" }]);
+    remote.leadForms.mockImplementation(async (pageId: string) => {
+      if (pageId === "p2") throw new MetaGraphError({ code: 10, message: "User has insufficient privileges on the page." }, false);
+      return [{ id: "f1", name: "Formulário fictício" }];
+    });
+    const res = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().pages).toEqual([expect.objectContaining({ pageId: "p1" })]);
+    expect(res.json().forms).toHaveLength(1);
+    expect(res.json().connectionWarning).toContain('"Página sem acesso" (ID p2)');
+    expect(res.body).not.toContain(TOKEN);
+    expect((await get()).json().connectionWarning).toBe(res.json().connectionWarning);
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página autorizada" }, { id: "p2", name: "Página sem acesso" }]);
+    remote.leadForms.mockImplementation(async (pageId: string) => [{ id: `form-${pageId}`, name: "Formulário fictício" }]);
+    const restored = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(restored.statusCode).toBe(201);
+    expect(restored.json().connectionWarning).toBeNull();
+    expect(restored.json().pages).toHaveLength(2);
+  });
+
+  it("recusa conexão quando nenhuma página permite acesso aos formulários", async () => {
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página sem acesso" }]);
+    remote.leadForms.mockRejectedValue(new MetaGraphError({ code: 10, message: "User has insufficient privileges on the page." }, false));
+    const res = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("META_PAGE_ACCESS_DENIED");
+    expect(res.json().error.message).toContain('"Página sem acesso" (ID p1)');
+    expect(res.body).not.toContain(TOKEN);
+    expect((await get()).json()).toBeNull();
+  });
+
+  it("não ignora falhas de rede como se fossem falta de permissão", async () => {
+    remote.pages.mockResolvedValue([{ id: "p1", name: "Página autorizada" }, { id: "p2", name: "Página indisponível" }]);
+    remote.leadForms.mockImplementation(async (pageId: string) => {
+      if (pageId === "p2") throw new MetaGraphError(null, true);
+      return [{ id: "f1", name: "Formulário fictício" }];
+    });
+    const res = await connect(cookie, { token: TOKEN, tokenType: "system_user" });
+    expect(res.statusCode).toBe(504);
+    expect(res.json().error.code).toBe("META_UNAVAILABLE");
+    expect((await get()).json()).toBeNull();
+  });
+
+  it("recusa resposta de formulário inválida sem salvar a conexão", async () => {
+    remote.leadForms.mockResolvedValue([{ id: "f1", name: null }]);
+    const res = await connect();
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error.code).toBe("META_RESPONSE_INVALID");
+    expect((await get()).json()).toBeNull();
+  });
+
+  it("reverte integração e páginas quando a gravação de formulário falha", async () => {
+    await expect(metaRepo.saveConnection(orgId, { tokenType: "system_user", tokenEnc: encryptToken(TOKEN), tokenLast4: TOKEN.slice(-4), metaUserId: "fixture-user", metaUserName: "Usuário fictício" }, [{ pageId: "p1", name: "Página fictícia", tokenEnc: encryptToken(TOKEN), forms: [{ id: "f1", name: null as unknown as string }] }])).rejects.toThrow();
+    expect((await get()).json()).toBeNull();
+    expect(await prisma.metaPage.count({ where: { integration: { organizationId: orgId } } })).toBe(0);
   });
 
   it("token recusado pelo Meta é 422", async () => {

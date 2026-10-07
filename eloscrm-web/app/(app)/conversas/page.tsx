@@ -15,8 +15,9 @@ import { ConversationList } from "./conversation-list";
 import { MessageComposer } from "./message-composer";
 import { MessageThread } from "./message-thread";
 import { CONVERSA_PARAM } from "./params";
+import { UnifiedInbox } from "@/components/whatsapp-official/unified-inbox";
 
-const Inbox = () => {
+const Inbox = ({ onUnified }: { onUnified: () => void }) => {
   const { data: org } = useActiveOrganization();
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
@@ -65,6 +66,7 @@ const Inbox = () => {
   return (
     <div className="-m-6 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden">
       <div className="border-b px-6 py-4">
+        <Button className="float-right" variant="outline" size="sm" onClick={onUnified}>Atendimento por contato</Button>
         <h1 className="text-2xl font-semibold">Conversas</h1>
         <p className="text-muted-foreground text-sm">
           Mensagens do WhatsApp da imobiliária, ligadas aos leads do funil.
@@ -162,12 +164,21 @@ const Inbox = () => {
   );
 };
 
-export default function ConversasPage() {
+const InboxWorkspace = () => {
+  const { data: org } = useActiveOrganization();
+  const [view, setView] = useQueryState("view");
+  const [legacySelected] = useQueryState(CONVERSA_PARAM);
+  if (view === "legacy" || (legacySelected && view !== "unified")) return <Inbox key={org?.id} onUnified={() => setView("unified")} />;
+  return <div className="-m-6 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden"><div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3"><div><h1 className="text-xl font-semibold">Conversas</h1><p className="text-sm text-muted-foreground">Histórico do contato nos números da imobiliária.</p></div><Button variant="outline" size="sm" onClick={() => setView("legacy")}>Ações uazapi</Button></div><UnifiedInbox key={org?.id} /></div>;
+};
+
+const ConversationsPage = () => {
   // `useQueryState` lê o query string via `useSearchParams`, que empurra a árvore para
   // client-side rendering: sem o boundary o build falha.
   return (
     <Suspense fallback={<div className="-m-6 h-[calc(100dvh-3.5rem)]" />}>
-      <Inbox />
+      <InboxWorkspace />
     </Suspense>
   );
-}
+};
+export default ConversationsPage;

@@ -15,7 +15,7 @@ const dealInclude = {
 export type MatchedDeal = Prisma.DealGetPayload<{ include: typeof dealInclude }>;
 
 /** Traduz as condições para o `where`. Cada uma só entra quando veio — omitida não restringe. */
-export const matchDeals = (orgId: string, pipelineId: string, f: BroadcastFilters) => {
+export const matchDeals = (orgId: string, pipelineId: string, f: BroadcastFilters, options?: { dealIds?: string[]; limit?: number }) => {
   const where: Prisma.DealWhereInput = { organizationId: orgId, pipelineId };
   if (f.stageIds?.length) where.stageId = { in: f.stageIds };
   if (f.ownerIds?.length) where.ownerId = { in: f.ownerIds };
@@ -30,7 +30,8 @@ export const matchDeals = (orgId: string, pipelineId: string, f: BroadcastFilter
     };
   }
   if (f.temperatures?.length) where.client = { temperature: { in: f.temperatures } };
-  return prisma.deal.findMany({ where, include: dealInclude, orderBy: { createdAt: "desc" } });
+  if (options?.dealIds) where.id = { in: options.dealIds };
+  return prisma.deal.findMany({ where, include: dealInclude, orderBy: { createdAt: "desc" }, ...(options?.limit ? { take: options.limit } : {}) });
 };
 
 export const findPipeline = (orgId: string, id: string) =>

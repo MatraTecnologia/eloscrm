@@ -1,7 +1,8 @@
 import { WhatsappDirection, WhatsappMessageType } from "../../generated/prisma/client.js";
 import { createWorker, enqueue } from "../../lib/queue.js";
 import { findClientsByPhoneKey } from "../clients/clients.repo.js";
-import { applyToConversation } from "../lead-automation/apply.service.js";
+import { enqueueInboundAutomation } from "../lead-automation/inbound-automation.service.js";
+import { linkUazapiConversation } from "../whatsapp-maintenance/history.repo.js";
 import * as repo from "./conversations.repo.js";
 import { enqueueMediaJob } from "./media.service.js";
 import { parseConversation, parseMessage } from "./message-envelope.js";
@@ -65,7 +66,7 @@ export const processMessageEvent = async (job: MessageJob) => {
     return applyVote(job.organizationId, conversation.id, parsedMessage);
   }
 
-  const message = await repo.createMessageIfNew(job.organizationId, conversation.id, parsedMessage);
+  const message = await repo.createMessageIfNew(job.organizationId, conversation.id, parsedMessage, parsedChat.suggestedName);
 
   // reentrega: a conversa já foi atualizada por esta mensagem, e contar de novo inflaria o não lido
   if (!message) return { duplicated: true as const };
@@ -76,25 +77,10 @@ export const processMessageEvent = async (job: MessageJob) => {
     incrementUnread: parsedMessage.direction === WhatsappDirection.inbound,
   });
 
-  const vinculo = await linkClientIfUnambiguous(
-    job.organizationId,
-    conversation.id,
-    parsedChat.phoneKey,
-    conversation.clientId,
-  );
-
-  // Criar lead, pôr no funil e escolher o dono, se a imobiliária tiver pedido. O catch segue a
-  // mesma regra do enqueue de mídia: automação que falha não pode virar 5xx no webhook, senão a
-  // uazapi reentrega uma mensagem já gravada — e é a mensagem que importa.
-  await applyToConversation({
-    orgId: job.organizationId,
-    conversationId: conversation.id,
-    clientId: vinculo.clientId,
-    ambiguous: vinculo.ambiguous,
-    isGroup: parsedChat.isGroup,
-    suggestedName: parsedChat.suggestedName,
-    phone: parsedChat.phone,
-  }).catch(() => undefined);
+  await linkClientIfUnambiguous(job.organizationId, conversation.id, parsedChat.phoneKey, conversation.clientId);
+  // O registro da intenção está na mensagem: falhas de fila/automação serão recuperadas.
+  await enqueueInboundAutomation({ organizationId: job.organizationId, messageId: message.id }).catch(() => undefined);
+  await linkUazapiConversation(job.organizationId, conversation.id).catch(() => undefined);
 
   // fila separada: a uazapi apaga a mídia em 2 dias, então o download é urgente — mas não pode
   // atrasar nem derrubar o registro da mensagem, que já está salva.

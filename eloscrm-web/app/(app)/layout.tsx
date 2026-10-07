@@ -7,6 +7,7 @@ import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app/app-sidebar";
+import { WorkspaceGate } from "@/components/app/workspace-gate";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -42,14 +43,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="min-w-0">
-        <header className="flex h-14 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-        </header>
-        <main className="min-h-0 min-w-0 flex-1 p-6">{children}</main>
-      </SidebarInset>
-    </SidebarProvider>
+    <WorkspaceGate key={session.user.id}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="min-w-0">
+          <header className="flex h-14 items-center gap-2 border-b px-4">
+            <SidebarTrigger />
+          </header>
+          <main className="min-h-0 min-w-0 flex-1 p-6">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+    </WorkspaceGate>
   );
 }

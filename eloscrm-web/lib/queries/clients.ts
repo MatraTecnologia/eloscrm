@@ -29,7 +29,7 @@ export type ClientInput = {
   nurtureUntil?: string | null;
 };
 
-export const useClients = (filters?: ClientFilters) => {
+export const useClients = (filters?: ClientFilters, enabled = true) => {
   const { data: org } = useActiveOrganization();
   return useQuery({
     queryKey: ["clients", org?.id, filters ?? {}],
@@ -37,7 +37,7 @@ export const useClients = (filters?: ClientFilters) => {
       const { data } = await api.get<Client[]>("/clients", { params: filters });
       return data;
     },
-    enabled: !!org?.id,
+    enabled: !!org?.id && enabled,
   });
 };
 

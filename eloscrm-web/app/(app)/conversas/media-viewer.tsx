@@ -55,7 +55,7 @@ export const MediaViewer = ({
   // uma tentativa só: se a URL nova também falhar, o arquivo é que não está lá
   const renovar = async () => {
     if (renovada?.id === message.id) return;
-    await fetchMediaUrl(message.id)
+    await fetchMediaUrl(message.id, "connectionId" in message && !!message.connectionId && "origin" in message && message.origin !== "uazapi")
       .then((url) => setRenovada({ id: message.id, url }))
       .catch(() => toast.error("Não foi possível carregar a mídia"));
   };
@@ -63,7 +63,7 @@ export const MediaViewer = ({
   const baixar = async () => {
     setBaixando(true);
     try {
-      window.location.href = await fetchDownloadUrl(message.id);
+      window.location.href = await fetchDownloadUrl(message.id, "connectionId" in message && !!message.connectionId && "origin" in message && message.origin !== "uazapi");
     } catch {
       toast.error("Não foi possível baixar o arquivo");
     } finally {

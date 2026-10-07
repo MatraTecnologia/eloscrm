@@ -57,7 +57,7 @@ const MediaContent = ({
   const imagem = renovada ?? message.mediaUrl;
   const onMediaError = () => {
     if (renovada) return;
-    fetchMediaUrl(message.id).then(setRenovada).catch(() => undefined);
+    fetchMediaUrl(message.id, "connectionId" in message && !!message.connectionId && "origin" in message && message.origin !== "uazapi").then(setRenovada).catch(() => undefined);
   };
 
   const proporcao =
@@ -227,6 +227,7 @@ export const MessageBubble = ({
   onReact,
   onOpenMedia,
   highlight,
+  allowActions = true,
 }: {
   message: WhatsappMessage;
   conversationId: string;
@@ -237,20 +238,21 @@ export const MessageBubble = ({
   /** abre foto e vídeo em tela cheia; ausente, a bolha só exibe */
   onOpenMedia?: () => void;
   highlight?: boolean;
+  allowActions?: boolean;
 }) => {
   const mine = message.direction === "outbound";
-  const apagada = !!message.deletedAt;
-  const contatos = !apagada && message.type === "contact" ? message.contacts : null;
+  const isDeleted = !!message.deletedAt;
+  const contatos = !isDeleted && message.type === "contact" ? message.contacts : null;
   // o tipo manda, não o conteúdo: localização ingerida antes do parser ficou sem coordenadas,
   // e o cartão sabe mostrar só o mapa
-  const ehLocal = !apagada && message.type === "location";
+  const ehLocal = !isDeleted && message.type === "location";
   // enquete antiga (ingerida antes do parser) não tem opções: sem cartão, a bolha segue no texto,
   // que já é a pergunta
-  const enquete = !apagada && message.type === "poll" ? message.poll : null;
+  const enquete = !isDeleted && message.type === "poll" ? message.poll : null;
   // contato e localização não passam pelo MediaContent: chegam com `mediaType` (vcard, location)
   // mas não têm arquivo do outro lado
   const temMidia =
-    !apagada &&
+    !isDeleted &&
     !contatos &&
     !ehLocal &&
     // mesmo sem opções guardadas: uma enquete não tem arquivo, e cair no MediaContent a
@@ -266,15 +268,15 @@ export const MessageBubble = ({
 
   // Vale para bolha própria também: a spec da uazapi diz que só dá para reagir a mensagem de
   // outros, mas o WhatsApp aceita. Mensagem sem id no provedor é que não tem como ser endereçada.
-  const reagir = onReact && !apagada && message.providerMessageId && (
+  const reagir = onReact && !isDeleted && message.providerMessageId && (
     <ReactionPicker atual={minhaReacao} onPick={(emoji) => onReact(message.id, emoji)} />
   );
 
   // sem id no provedor não há o que mandar como `replyid` — é o caso de um envio ainda pendente
   // ou que falhou, e a API recusaria de qualquer forma
-  const acoes = !apagada && <MessageActions conversationId={conversationId} message={message} />;
+  const actions = allowActions && !isDeleted && <MessageActions conversationId={conversationId} message={message} />;
 
-  const responder = onReply && !apagada && message.providerMessageId && (
+  const responder = onReply && !isDeleted && message.providerMessageId && (
     <Button
       variant="ghost"
       size="icon"
@@ -290,7 +292,7 @@ export const MessageBubble = ({
 
   return (
     <div className={cn("group flex items-center gap-1", mine ? "justify-end" : "justify-start")}>
-      {mine && acoes}
+      {mine && actions}
       {mine && responder}
       {mine && reagir}
       <div className={cn("flex max-w-[75%] flex-col", mine && "items-end")}>
@@ -301,7 +303,7 @@ export const MessageBubble = ({
           highlight && "ring-primary ring-offset-background ring-2 ring-offset-2",
         )}
       >
-        {apagada ? (
+        {isDeleted ? (
           // a linha fica para a thread não abrir buraco, mas nada do conteúdo chega aqui: a API
           // deixa de servi-lo quando o remetente apaga para todos
           <span className="flex items-center gap-1.5 italic opacity-70">
@@ -379,7 +381,7 @@ export const MessageBubble = ({
       </div>
       {!mine && responder}
       {!mine && reagir}
-      {!mine && acoes}
+      {!mine && actions}
     </div>
   );
 };

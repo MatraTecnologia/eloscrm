@@ -321,17 +321,17 @@ export const useDeleteMessage = () =>
  * vencidos. Em vez de recarregar tudo, a bolha pede uma nova quando o `<img>`/`<video>` falha — é
  * para isso que a rota existe.
  */
-export const fetchMediaUrl = async (messageId: string) => {
+export const fetchMediaUrl = async (messageId: string, official = false) => {
   const { data } = await api.get<{ url: string }>(
-    `/whatsapp/conversations/messages/${messageId}/media`,
+    official ? `/whatsapp/official-media/${encodeURIComponent(messageId)}` : `/whatsapp/conversations/messages/${messageId}/media`,
   );
   return data.url;
 };
 
 /** URL de download com `Content-Disposition: attachment` — a da bolha abre no navegador. */
-export const fetchDownloadUrl = async (messageId: string) => {
+export const fetchDownloadUrl = async (messageId: string, official = false) => {
   const { data } = await api.get<{ url: string }>(
-    `/whatsapp/conversations/messages/${messageId}/media`,
+    official ? `/whatsapp/official-media/${encodeURIComponent(messageId)}` : `/whatsapp/conversations/messages/${messageId}/media`,
     { params: { download: 1 } },
   );
   return data.url;

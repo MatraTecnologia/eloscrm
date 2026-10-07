@@ -46,6 +46,7 @@ export const createMessageIfNew = async (
   orgId: string,
   conversationId: string,
   parsed: ParsedMessage,
+  suggestedName?: string | null,
 ): Promise<WhatsappMessage | null> => {
   const existing = await prisma.whatsappMessage.findUnique({
     where: { conversationId_providerId: { conversationId, providerId: parsed.providerId } },
@@ -70,6 +71,9 @@ export const createMessageIfNew = async (
     senderLid: parsed.senderLid,
     senderName: parsed.senderName,
     sentAt: parsed.sentAt,
+    automationStatus: "pending",
+    automationNextAttemptAt: new Date(),
+    automationSuggestedName: suggestedName ?? undefined,
     mediaStatus: parsed.hasMedia ? WhatsappMediaStatus.pending : WhatsappMediaStatus.none,
     mediaMime: parsed.mediaMime,
     mediaSize: parsed.mediaSize,

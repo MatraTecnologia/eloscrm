@@ -123,6 +123,10 @@ const runMediaJob = async (job: MediaJob, maxBytes = MAX_MEDIA_BYTES) => {
   }
 
   const instance = message.conversation.instance;
+  if (!instance) {
+    await fail(message.id, "A mídia não pertence à conexão uazapi");
+    return;
+  }
   if (!env.UAZAPI_BASE_URL) {
     await fail(message.id, "integração não configurada");
     return;

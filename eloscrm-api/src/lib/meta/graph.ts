@@ -17,7 +17,7 @@ export type GraphErrorPayload = {
 };
 
 export type MetaMe = { id: string; name: string };
-export type MetaPageNode = { id: string; name: string; access_token: string };
+export type MetaPageNode = { id: string; name: string; access_token?: string | null };
 export type MetaFormNode = { id: string; name: string; status?: string; leads_count?: number };
 export type MetaFieldDatum = { name: string; values: string[] };
 export type MetaLeadNode = {

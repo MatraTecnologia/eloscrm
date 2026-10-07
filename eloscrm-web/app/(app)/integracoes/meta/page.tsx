@@ -66,6 +66,13 @@ export default function MetaIntegrationPage() {
 
       {integration && (
         <>
+          {integration.connectionWarning && (
+            <Alert>
+              <TriangleAlert />
+              <AlertTitle>Conectado com páginas sem acesso</AlertTitle>
+              <AlertDescription>{integration.connectionWarning}</AlertDescription>
+            </Alert>
+          )}
           {integration.status === "token_invalid" && (
             <Alert variant="destructive">
               <TriangleAlert />

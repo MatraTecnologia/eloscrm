@@ -98,6 +98,7 @@ export type BroadcastPreviewRow = {
   tags: DealTag[];
   client: { id: string; name: string; phone: string | null; temperature: LeadTemperature };
   sendable: boolean;
+  exclusion?: string | null;
 };
 
 export type BroadcastStatus = "RUNNING" | "DONE" | "CANCELED";
@@ -647,6 +648,76 @@ export type WhatsappReaction = {
   authorName: string | null;
 };
 
+export type ChannelProvider = "cloud_api" | "uazapi";
+export type ChannelConnectionStatus = "pending" | "connected" | "disconnected" | "disabled";
+
+export type OfficialOnboarding = {
+  id: string;
+  status: "pending" | "exchanging" | "verified" | "completed" | "failed" | "uncertain";
+  expiresAt: string;
+  syncDeadlineAt: string;
+  connectionId: string | null;
+  lastErrorCode: string | null;
+  candidates: { id: string; displayPhoneNumber: string; verifiedName: string | null }[];
+};
+export type OfficialOnboardingConfig = { available: false } | { available: true; appId: string; configId: string; graphVersion: string };
+export type OfficialSyncRequest = {
+  id: string;
+  syncType: "history" | "smb_app_state_sync";
+  status: "pending" | "requesting" | "accepted" | "receiving" | "complete" | "declined" | "failed" | "uncertain" | "expired";
+  requestId: string | null;
+  deadlineAt: string;
+  requestedAt: string | null;
+  progress: number;
+  lastErrorCode: string | null;
+  updatedAt: string;
+};
+
+export type ChannelConnection = {
+  id: string;
+  organizationId: string;
+  provider: ChannelProvider;
+  status: ChannelConnectionStatus;
+  label: string;
+  businessPortfolioId: string | null;
+  wabaId: string | null;
+  phoneNumberId: string | null;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  currency: string | null;
+  timezoneId: string | null;
+  isOnBusinessApp: boolean;
+  uazapiInstanceId: string | null;
+  tokenExpiresAt: string | null;
+  disabledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MessagingContact = {
+  id: string;
+  organizationId: string;
+  displayName: string | null;
+  clientId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContactIdentityKind = "phone" | "wa_id" | "bsuid" | "parent_bsuid" | "jid" | "lid";
+export type ContactIdentity = {
+  id: string;
+  organizationId: string;
+  contactId: string;
+  connectionId: string;
+  kind: ContactIdentityKind;
+  scope: string;
+  value: string;
+  source: string;
+  validFrom: string;
+  validUntil: string | null;
+  createdAt: string;
+};
+
 export type WhatsappMessage = {
   id: string;
   providerId: string;
@@ -741,6 +812,7 @@ export type MetaIntegration = {
   metaUserName: string;
   status: MetaIntegrationStatus;
   lastError: string | null;
+  connectionWarning: string | null;
   pipelineId: string | null;
   stageId: string | null;
   lastSyncAt: string | null;

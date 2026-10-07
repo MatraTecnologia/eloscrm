@@ -44,19 +44,19 @@ export type AuditInput = {
   snapshot?: Record<string, unknown>;
 };
 
-export const recordAudit = async (input: AuditInput): Promise<void> => {
+export const recordAudit = async (input: AuditInput, db: Pick<Prisma.TransactionClient, "organization" | "auditEvent"> = prisma): Promise<void> => {
   // PATCH que não mudou nada não vira linha no histórico — senão a timeline enche de ruído. Só vale
   // quando `changes` foi passado: ARCHIVED, LINKED e afins não têm diff e precisam gravar mesmo assim.
   if (input.changes && Object.keys(input.changes).length === 0) return;
 
   // sem cache: renomear a imobiliária é caso real (e auditado), então um Map por processo devolveria
   // nome velho. Se aparecer em perfil de latência, o caminho é receber o nome de quem já carregou a org
-  const org = await prisma.organization.findUnique({
+  const org = await db.organization.findUnique({
     where: { id: input.orgId },
     select: { name: true },
   });
 
-  await prisma.auditEvent.create({
+  await db.auditEvent.create({
     data: {
       organizationId: input.orgId,
       organizationName: org?.name ?? null,

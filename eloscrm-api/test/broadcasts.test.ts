@@ -5,6 +5,7 @@ import { signUpWithOrg } from "./helpers/session.js";
 import { prisma } from "../src/lib/prisma.js";
 import { renderTemplate } from "../src/modules/broadcasts/template.js";
 import { toWaNumber } from "../src/lib/phone.js";
+import * as permissions from "../src/modules/communication-permissions/permissions.repo.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
 
 let app: FastifyInstance;
@@ -53,14 +54,16 @@ beforeAll(async () => {
     ((await post("/v1/clients", { name, ...extra })).json() as { id: string }).id;
   const quente = await client("Ana Quente", { phone: "(43) 99912-3456", temperature: "QUENTE" });
   const semFone = await client("Bruno Sem Fone", {});
-  const comValor = await client("Carla Valor", { phone: "43999887766", temperature: "FRIO" });
+  const valuedClient = await client("Carla Valor", { phone: "43999887766", temperature: "FRIO" });
   const comTag = await client("Dani Tag", { phone: "5543999776655" });
+  const actorId = (await app.inject({ method: "GET", url: "/api/auth/get-session", headers: headers() })).json().user.id;
+  for (const clientId of [quente, valuedClient, comTag]) await permissions.save(orgId, clientId, { state: "allowed", evidence: "Autorização fictícia para teste" }, { id: actorId, name: "Gestor fictício" });
 
   const deal = async (clientId: string, extra: Record<string, unknown>) =>
     ((await post("/v1/deals", { clientId, title: `D ${stamp}`, pipelineId, stageId: stageA, ...extra })).json() as { id: string }).id;
   quenteId = await deal(quente, {});
   semFoneId = await deal(semFone, { stageId: stageB });
-  comValorId = await deal(comValor, { value: 350000 });
+  comValorId = await deal(valuedClient, { value: 350000 });
   comTagId = await deal(comTag, { tagIds: [tagId] });
 
   // conversas para o filtro de retorno: Ana recebeu a nossa e não respondeu; Carla respondeu
@@ -94,7 +97,7 @@ beforeAll(async () => {
   };
   const dias = (n: number) => new Date(Date.now() - n * 86_400_000);
   await conversa(quente, "5543999123456", [["inbound", dias(10)], ["outbound", dias(5)]]);
-  await conversa(comValor, "5543999887766", [["outbound", dias(3)], ["inbound", dias(2)]]);
+  await conversa(valuedClient, "5543999887766", [["outbound", dias(3)], ["inbound", dias(2)]]);
 });
 
 afterAll(async () => {
@@ -186,7 +189,8 @@ describe("broadcasts", () => {
       dealIds: [quenteId],
       text: "Oi {{nome}}",
     });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("INSTANCE_NOT_CONNECTED");
     const list = await app.inject({ method: "GET", url: "/v1/broadcasts", headers: headers() });
     expect(list.json()).toEqual([]);
   });

@@ -8,6 +8,7 @@ export const serializeIntegration = (integration: IntegrationWithRelations) => (
   metaUserName: integration.metaUserName,
   status: integration.status,
   lastError: integration.lastError,
+  connectionWarning: integration.connectionWarning,
   pipelineId: integration.pipelineId,
   stageId: integration.stageId,
   lastSyncAt: integration.lastSyncAt,

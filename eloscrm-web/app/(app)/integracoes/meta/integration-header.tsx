@@ -24,7 +24,7 @@ import { useDisconnectMeta, useSyncMetaLeads } from "@/lib/queries/meta";
 import type { MetaIntegration } from "@/lib/types";
 import { ConnectCard } from "./connect-card";
 
-const tokenTypeLabels = { user: "token de usuário", system_user: "usuário do sistema" } as const;
+const tokenTypeLabels = { user: "Token de usuário", system_user: "Token de usuário do sistema" } as const;
 
 type Props = { integration: MetaIntegration; canManage: boolean };
 
@@ -51,7 +51,7 @@ export const IntegrationHeader = ({ integration, canManage }: Props) => {
               </Badge>
             </div>
             <p className="text-muted-foreground text-sm">
-              {tokenTypeLabels[integration.tokenType]} · termina em {integration.tokenLast4}
+              {tokenTypeLabels[integration.tokenType]}
               {integration.lastSyncAt && (
                 <>
                   {" · última busca "}

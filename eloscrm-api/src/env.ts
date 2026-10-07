@@ -49,10 +49,19 @@ export const env = createEnv({
     // a mesma chave dos tokens de WhatsApp — sem a chave, as rotas de Meta respondem 503. A versão
     // da Graph API é env porque o Meta aposenta versões a cada ~2 anos e trocar não deve exigir deploy.
     META_GRAPH_VERSION: z.string().trim().regex(/^v\d+\.\d+$/).default("v26.0"),
+    // Configuração do app; WABA, portfolio, número e token pertencem às conexões de cada org.
+    META_WHATSAPP_APP_ID: z.string().trim().regex(/^\d+$/).optional(),
+    META_WHATSAPP_APP_SECRET: z.string().trim().min(1).optional(),
+    META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: z.string().trim().regex(/^\d+$/).optional(),
+    META_WHATSAPP_GRAPH_VERSION: z.string().trim().regex(/^v\d+\.\d+$/).default("v26.0"),
+    META_WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().trim().min(1).optional(),
+    META_WHATSAPP_TOKEN_ENCRYPTION_KEY: z.string().trim().regex(/^[0-9a-f]{64}$/, "deve ser hex de 32 bytes").optional(),
     // Quanto tempo o log de auditoria fica. A tabela cresce a cada ação e nada mais a poda: sem isto
     // ela só aumenta. 365 dias cobre o ciclo de uma negociação imobiliária com folga, e é também o
     // teto do dado pessoal que o snapshot de um registro apagado carrega.
     AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
+    WHATSAPP_JOURNAL_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(30),
+    WHATSAPP_COMMAND_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

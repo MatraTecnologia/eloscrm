@@ -107,6 +107,26 @@ model Organization {
   whatsappMessages WhatsappMessage[]
   metaIntegration  MetaIntegration?
   metaLeads        MetaLead[]
+  channelConnections ChannelConnection[]
+  messagingContacts  MessagingContact[]
+  contactIdentities  ContactIdentity[]
+  officialWebhookEvents OfficialWebhookEvent[]
+  officialDeliveryReceipts OfficialDeliveryReceipt[]
+  officialOnboardings OfficialOnboarding[]
+  officialSyncRequests OfficialSyncRequest[]
+  officialCommands OfficialSendCommand[]
+  officialTemplates OfficialTemplate[]
+  officialUploads OfficialUpload[]
+  officialRates OfficialRate[]
+  messageCosts MessageCost[]
+  costRevisions MessageCostRevision[]
+  costAnalytics CostAnalyticsSnapshot[]
+  costAnalyticsRevisions CostAnalyticsRevision[]
+  costReconciliations CostReconciliation[]
+  officialCampaigns OfficialCampaign[]
+  officialCampaignRecipients OfficialCampaignRecipient[]
+  communicationPermissions CommunicationPermission[]
+  communicationPermissionRevisions CommunicationPermissionRevision[]
 
   @@unique([slug])
   @@map("organization")
@@ -294,6 +314,9 @@ model Client {
   conversations  Conversation[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  messagingContact MessagingContact?
+  communicationPermission CommunicationPermission?
 
   @@index([organizationId])
   @@index([organizationId, status, nurtureUntil])
@@ -643,13 +666,250 @@ model UazapiInstance {
   logs          UazapiInstanceLog[]
   conversations Conversation[]
 
+  channelConnection ChannelConnection?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum ChannelProvider {
+  cloud_api
+  uazapi
+}
+
+enum ChannelConnectionStatus {
+  pending
+  connected
+  disconnected
+  disabled
+}
+
+model ChannelConnection {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider       ChannelProvider
+  status         ChannelConnectionStatus @default(pending)
+  label          String
+
+  // Metadados do ativo oficial, validados pelo onboarding antes de ativar a conexão.
+  businessPortfolioId String?
+  wabaId              String?
+  phoneNumberId       String? @unique
+  displayPhoneNumber  String?
+  verifiedName        String?
+  currency            String?
+  timezoneId          String?
+  isOnBusinessApp     Boolean @default(false)
+  tokenEnc            String?
+  tokenExpiresAt      DateTime?
+
+  // A conexão uazapi referencia a instância existente sem copiar sua credencial.
+  uazapiInstanceId String? @unique
+  uazapiInstance   UazapiInstance? @relation(fields: [uazapiInstanceId], references: [id], onDelete: Restrict)
+  disabledAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  identities ContactIdentity[]
+  conversations Conversation[]
+  messages WhatsappMessage[]
+  webhookEvents OfficialWebhookEvent[]
+  deliveryReceipts OfficialDeliveryReceipt[]
+  onboardings OfficialOnboarding[]
+  syncRequests OfficialSyncRequest[]
+  sendCommands OfficialSendCommand[]
+  uploads OfficialUpload[]
+  costReconciliations CostReconciliation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, provider, status])
+  @@index([wabaId, status])
+}
+
+enum OfficialOnboardingStatus {
+  pending
+  exchanging
+  verified
+  completed
+  failed
+  uncertain
+}
+
+enum OfficialSyncStatus {
+  pending
+  requesting
+  accepted
+  receiving
+  complete
+  declined
+  failed
+  uncertain
+  expired
+}
+
+model OfficialOnboarding {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId String
+  sessionHash String
+  status OfficialOnboardingStatus @default(pending)
+  codeHash String? @unique
+  tokenEnc String?
+  tokenExpiresAt DateTime?
+  wabaId String?
+  businessPortfolioId String?
+  currency String?
+  timezoneId String?
+  candidates Json?
+  connectionId String?
+  connection ChannelConnection? @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  expiresAt DateTime
+  syncDeadlineAt DateTime
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, userId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model OfficialSyncRequest {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  syncType String
+  status OfficialSyncStatus @default(pending)
+  requestId String?
+  requestedAt DateTime?
+  deadlineAt DateTime
+  progress Int @default(0)
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([connectionId, syncType])
+  @@index([status, deadlineAt])
+  @@index([organizationId, connectionId])
+}
+
+model MessagingContact {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  displayName    String?
+  clientId       String? @unique
+  client         Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  identities     ContactIdentity[]
+  conversations  Conversation[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+enum ContactIdentityKind {
+  phone
+  wa_id
+  bsuid
+  parent_bsuid
+  jid
+  lid
+}
+
+model ContactIdentity {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        MessagingContact @relation(fields: [contactId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  connectionId   String
+  connection     ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  kind           ContactIdentityKind
+  // Portfolio no oficial; conexão na uazapi. Telefone igual não autoriza fusão de contatos.
+  scope          String
+  value          String
+  source         String
+  recipientCountry String?
+  validFrom      DateTime @default(now())
+  validUntil     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, kind, scope, value])
+  @@index([organizationId, contactId])
 }
 
 enum WhatsappDirection {
   inbound
   outbound
+}
+
+enum OfficialWebhookStatus {
+  pending
+  processing
+  processed
+  failed
+  unresolved
+  unsupported
+}
+
+model OfficialWebhookEvent {
+  id String @id @default(cuid())
+  dedupKey String @unique
+  organizationId String?
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String?
+  connection ChannelConnection? @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  wabaId String
+  phoneNumberId String?
+  field String
+  payload Json
+  status OfficialWebhookStatus @default(pending)
+  attempts Int @default(0)
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  nextAttemptAt DateTime @default(now())
+  lastErrorCode String?
+  processedItemCount Int @default(0)
+  failedItemCount Int @default(0)
+  itemResults Json?
+  syncDetails Json?
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  payloadPurgedAt DateTime?
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, receivedAt])
+}
+
+model OfficialDeliveryReceipt {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  dedupKey String @unique
+  externalMessageId String
+  status WhatsappMessageStatus
+  occurredAt DateTime
+  pricing Json?
+  conversationData Json?
+  errorCodes Json?
+  receivedAt DateTime @default(now())
+
+  @@index([organizationId, connectionId, externalMessageId])
+}
+
+enum WhatsappMessageOrigin {
+  uazapi
+  cloud_api
+  business_app
+  history
 }
 
 // Espelha `mediaType` da uazapi, não `type`: é `mediaType` que separa gif de vídeo e nota de voz de
@@ -692,8 +952,14 @@ model Conversation {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  instanceId     String
-  instance       UazapiInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instanceId     String?
+  instance       UazapiInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  connectionId   String?
+  connection     ChannelConnection? @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  messagingContactId String?
+  messagingContact MessagingContact? @relation(fields: [messagingContactId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  lastCustomerMessageAt DateTime?
+  serviceWindowExpiresAt DateTime?
 
   // 554391834229@s.whatsapp.net
   chatid   String
@@ -722,6 +988,8 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   @@unique([instanceId, chatid])
+  @@unique([connectionId, messagingContactId])
+  @@unique([id, organizationId])
   @@index([organizationId, lastMessageAt])
   @@index([organizationId, phoneKey])
 }
@@ -737,6 +1005,13 @@ model WhatsappMessage {
   providerId String
   // `message.messageid` puro: é por ele que messages_update endereça as mensagens em lote
   providerMessageId String?
+  connectionId String?
+  connection ChannelConnection? @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  origin WhatsappMessageOrigin @default(uazapi)
+  recipientIdentity Json?
+  officialMediaId String?
+  liveReceivedAt DateTime?
+  officialStatusAt DateTime?
 
   direction WhatsappDirection
   type      WhatsappMessageType
@@ -757,6 +1032,16 @@ model WhatsappMessage {
   deletedAt DateTime?
 
   mediaStatus   WhatsappMediaStatus @default(none)
+  mediaLeaseToken String?
+  mediaLeaseExpiresAt DateTime?
+  mediaAttempts Int @default(0)
+  mediaNextAttemptAt DateTime?
+  automationStatus String?
+  automationAttempts Int @default(0)
+  automationNextAttemptAt DateTime?
+  automationProcessedAt DateTime?
+  automationErrorCode String?
+  automationSuggestedName String?
   mediaKey      String?
   mediaMime     String?
   mediaSize     Int?
@@ -798,16 +1083,175 @@ model WhatsappMessage {
   favoritedById String?
 
   reactions WhatsappReaction[]
+  officialCommand OfficialSendCommand?
+  cost MessageCost?
 
   sentAt    DateTime
   createdAt DateTime @default(now())
 
   @@unique([conversationId, providerId])
+  @@unique([id, organizationId])
+  @@unique([connectionId, providerMessageId])
   @@index([conversationId, sentAt])
   @@index([organizationId, providerMessageId])
+  @@index([automationStatus, automationNextAttemptAt])
+  @@index([mediaStatus, mediaNextAttemptAt])
   // a barra de fixadas e o filtro de favoritas leem por conversa, não a thread inteira
   @@index([conversationId, pinnedUntil])
   @@index([conversationId, favoritedAt])
+}
+
+enum OfficialSendStatus {
+  pending
+  preparing
+  sending
+  accepted
+  failed
+  uncertain
+}
+
+model OfficialSendCommand {
+  id String @id
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  messageId String @unique
+  message WhatsappMessage @relation(fields: [messageId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  actorUserId String
+  identityId String
+  idempotencyKey String
+  requestHash String
+  request Json
+  payload Json
+  payloadPurgedAt DateTime?
+  status OfficialSendStatus @default(pending)
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  safeError String?
+  providerErrorCode Int?
+  externalMessageId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  campaignRecipientId String? @unique
+  campaignRecipient OfficialCampaignRecipient? @relation(fields: [campaignRecipientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([campaignRecipientId, organizationId])
+  @@unique([organizationId, idempotencyKey])
+  @@unique([messageId, organizationId])
+  @@index([status, leaseExpiresAt, createdAt])
+  @@index([organizationId, connectionId])
+}
+
+model CommunicationPermission {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId String @unique
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  state String
+  phoneKey String?
+  evidence String
+  recordedById String
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+  revisions CommunicationPermissionRevision[]
+  @@index([organizationId, state])
+}
+
+model CommunicationPermissionRevision {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission CommunicationPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  state String
+  phoneKey String?
+  evidence String
+  recordedById String
+  revision Int
+  createdAt DateTime @default(now())
+  @@unique([permissionId, revision])
+  @@index([organizationId, phoneKey, createdAt])
+}
+
+model OfficialCampaign {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  pipelineId String
+  name String
+  actorUserId String
+  actorName String
+  idempotencyKey String
+  requestHash String
+  input Json
+  snapshot Json
+  previewHash String
+  status String @default("draft")
+  nextAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  recipients OfficialCampaignRecipient[]
+  @@unique([organizationId, idempotencyKey])
+  @@unique([id, organizationId])
+  @@index([organizationId, pipelineId, createdAt])
+  @@index([status, nextAt])
+}
+
+model OfficialCampaignRecipient {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaignId String
+  campaign OfficialCampaign @relation(fields: [campaignId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  clientId String
+  dealId String
+  contactId String
+  identityId String
+  identityHash String
+  clientName String
+  parameters Json
+  costSnapshot Json
+  status String @default("pending")
+  safeError String?
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  command OfficialSendCommand?
+  @@unique([id, organizationId])
+  @@unique([campaignId, contactId])
+  @@index([organizationId, campaignId, status])
+}
+
+model OfficialTemplate {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wabaId String
+  externalId String
+  name String
+  language String
+  category String
+  status String
+  definition Json
+  syncedAt DateTime @default(now())
+  @@unique([organizationId, wabaId, externalId])
+  @@index([organizationId, wabaId, name, language])
+}
+
+model OfficialUpload {
+  id String @id
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  key String
+  mime String
+  size Int
+  digest String
+  filename String
+  createdAt DateTime @default(now())
+  @@index([organizationId, connectionId])
 }
 
 model UazapiInstanceLog {
@@ -932,6 +1376,7 @@ model MetaIntegration {
 
   status    MetaIntegrationStatus @default(active)
   lastError String?
+  connectionWarning String?
 
   // destino padrão dos leads; cada formulário pode sobrescrever
   pipelineId String?
@@ -1014,4 +1459,116 @@ model MetaLead {
   receivedAt DateTime @default(now())
 
   @@index([organizationId, receivedAt])
+}
+
+model OfficialRate {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wabaId String
+  country String
+  category String
+  pricingType String
+  currency String
+  unitRate Decimal @db.Decimal(20, 10)
+  validFrom DateTime
+  validUntil DateTime
+  volumeFrom Int @default(0)
+  volumeUntil Int?
+  sourceUrl String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([organizationId, wabaId, country, category, pricingType, validFrom])
+}
+
+model MessageCost {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messageId String @unique
+  message WhatsappMessage @relation(fields: [messageId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  connectionId String
+  deliveredAt DateTime
+  country String?
+  category String?
+  pricingType String?
+  billable Boolean?
+  pricingModel String?
+  currency String?
+  amount Decimal? @db.Decimal(20, 10)
+  state String
+  receiptId String
+  pricingHash String
+  rateSnapshot Json?
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+  revisions MessageCostRevision[]
+  @@unique([messageId, organizationId])
+  @@index([organizationId, connectionId, deliveredAt])
+}
+
+model MessageCostRevision {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  costId String
+  cost MessageCost @relation(fields: [costId], references: [id], onDelete: Cascade)
+  revision Int
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@unique([costId, revision])
+}
+
+model CostAnalyticsSnapshot {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wabaId String
+  start DateTime
+  end DateTime
+  currency String?
+  status String
+  points Json
+  total Decimal? @db.Decimal(20, 10)
+  volume Int?
+  contentHash String?
+  revision Int @default(0)
+  syncedAt DateTime?
+  lastAttemptAt DateTime
+  safeError String?
+  revisions CostAnalyticsRevision[]
+  @@unique([organizationId, wabaId, start, end])
+}
+
+model CostAnalyticsRevision {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshotId String
+  snapshot CostAnalyticsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  revision Int
+  data Json
+  createdAt DateTime @default(now())
+  @@unique([snapshotId, revision])
+}
+
+model CostReconciliation {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  wabaId String
+  currency String
+  start DateTime
+  end DateTime
+  documentReference String
+  reportedTotal Decimal @db.Decimal(24, 10)
+  declaredFees Decimal? @db.Decimal(24, 10)
+  declaredTaxes Decimal? @db.Decimal(24, 10)
+  note String?
+  createdById String
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@index([organizationId, wabaId, start, end])
 }

@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { R2_PRIVATE_BUCKET, deleteFiles } from "../../lib/storage.js";
 import { deleteRemoteInstance } from "../whatsapp/whatsapp.service.js";
+import { uploadKeys } from "../whatsapp-outbound/outbound.repo.js";
 
 /**
  * O que o cascade do Postgres **não** alcança quando a imobiliária é excluída.
@@ -14,18 +15,20 @@ import { deleteRemoteInstance } from "../whatsapp/whatsapp.service.js";
  * instância para usar.
  */
 export const purgeOrganizationAssets = async (orgId: string) => {
-  const [anexos, midias] = await Promise.all([
+  const [attachments, messages, uploads] = await Promise.all([
     prisma.attachment.findMany({ where: { organizationId: orgId }, select: { key: true } }),
     prisma.whatsappMessage.findMany({
       where: { organizationId: orgId, mediaKey: { not: null } },
       select: { mediaKey: true },
     }),
+    uploadKeys(orgId),
   ]);
 
-  const keys = [
-    ...anexos.map((anexo) => anexo.key),
-    ...midias.flatMap((midia) => (midia.mediaKey ? [midia.mediaKey] : [])),
-  ];
+  const keys = [...new Set([
+    ...attachments.map(attachment => attachment.key),
+    ...messages.flatMap(message => (message.mediaKey ? [message.mediaKey] : [])),
+    ...uploads.map(upload => upload.key),
+  ])];
   // deleteFiles já lida com lote de 1000 e com lista vazia — sem mídia nenhuma o storage não é chamado
   const failedObjects = await deleteFiles(R2_PRIVATE_BUCKET, keys);
 

@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { MetaTokenType } from "../../generated/prisma/client.js";
 
-export const connectMetaSchema = z.object({
+export const connectMetaSchema = z.strictObject({
   token: z.string().trim().min(20, "Token curto demais para ser um token do Meta"),
   tokenType: z.enum(MetaTokenType),
 });

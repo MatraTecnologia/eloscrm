@@ -22,6 +22,7 @@ import type {
 } from "./broadcasts.schema.js";
 import { applyReplyFilter } from "./reply-filter.js";
 import { renderTemplate, templateVarsOf } from "./template.js";
+import { allowed } from "../communication-permissions/permissions.repo.js";
 
 export const BROADCAST_QUEUE = "broadcast-send";
 
@@ -60,17 +61,21 @@ const resolveTargets = async (orgId: string, pipelineId: string, filters: Previe
 export const preview = async (orgId: string, input: PreviewBroadcastInput) => {
   await requirePipeline(orgId, input.pipelineId);
   const targets = await resolveTargets(orgId, input.pipelineId, input.filters);
-  return targets.map(({ deal, ownerName, number }) => ({
-    dealId: deal.id,
-    title: deal.title,
-    value: deal.value,
-    stageId: deal.stageId,
-    propertyTitle: deal.property?.title ?? null,
-    ownerName,
-    tags: deal.tags,
-    client: { id: deal.client.id, name: deal.client.name, phone: deal.client.phone, temperature: deal.client.temperature },
-    // sem número discável a linha aparece, mas desabilitada: a pessoa vê quem ficou de fora e por quê
-    sendable: number !== null,
+  return Promise.all(targets.map(async ({ deal, ownerName, number }) => {
+    const exclusion = !number ? "Lead sem telefone válido" : !await allowed(orgId, deal.client.id, phoneKey(number)) ? "Permissão ausente ou comunicação descadastrada" : null;
+    return {
+      dealId: deal.id,
+      title: deal.title,
+      value: deal.value,
+      stageId: deal.stageId,
+      propertyTitle: deal.property?.title ?? null,
+      ownerName,
+      tags: deal.tags,
+      client: { id: deal.client.id, name: deal.client.name, phone: deal.client.phone, temperature: deal.client.temperature },
+      // A exclusão permanece visível para o gestor conferir a causa antes de disparar.
+      sendable: exclusion === null,
+      exclusion,
+    };
   }));
 };
 
@@ -81,21 +86,26 @@ export const create = async (orgId: string, input: CreateBroadcastInput, actor: 
   // o filtro roda de novo aqui, e só quem ele devolve pode entrar: um id marcado na tela que não
   // passa mais na condição (o negócio mudou de estágio nesse meio-tempo) fica de fora em silêncio
   const targets = await resolveTargets(orgId, input.pipelineId, input.filters);
-  const escolhidos = new Set(input.dealIds);
-  const alvos = targets.filter(({ deal }) => escolhidos.has(deal.id));
-  if (alvos.length === 0) throw httpError(422, "NO_RECIPIENTS", "Nenhum destinatário selecionado");
+  const selectedDeals = new Set(input.dealIds);
+  const selectedTargets = targets.filter(({ deal }) => selectedDeals.has(deal.id));
+  if (selectedTargets.length === 0) throw httpError(422, "NO_RECIPIENTS", "Nenhum destinatário selecionado");
 
-  const recipients = alvos.map(({ deal, ownerName, number }) => ({
+  const excludedClients = new Set<string>();
+  for (const target of selectedTargets) if (!await allowed(orgId, target.deal.client.id, phoneKey(target.number))) excludedClients.add(target.deal.client.id);
+
+  const recipients = selectedTargets.map(({ deal, ownerName, number }) => ({
     dealId: deal.id,
     clientId: deal.client.id,
     clientName: deal.client.name,
     number,
     text: renderTemplate(input.text, templateVarsOf({ ...deal, ownerName })),
-    ...(number
+    ...(excludedClients.has(deal.client.id)
+      ? { status: BroadcastRecipientStatus.SKIPPED, error: "Permissão ausente ou comunicação descadastrada" }
+      : number
       ? {}
       : { status: BroadcastRecipientStatus.SKIPPED, error: "Lead sem telefone válido" }),
   }));
-  const skipped = recipients.filter((r) => !r.number).length;
+  const skipped = recipients.filter((r) => r.status === BroadcastRecipientStatus.SKIPPED).length;
 
   const broadcast = await repo.createBroadcast(
     {
@@ -183,6 +193,7 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
   if (broadcast.status !== BroadcastStatus.RUNNING) {
     return settle({ status: "SKIPPED", error: "Disparo cancelado" });
   }
+  if (!await allowed(broadcast.organizationId, recipient.clientId, phoneKey(recipient.number))) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada" });
   const instance = await whatsappRepo.findByOrg(broadcast.organizationId);
   if (!instance || instance.status !== UazapiInstanceStatus.connected) {
     return settle({ status: "FAILED", error: "WhatsApp desconectado" });
@@ -217,6 +228,7 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
       name: broadcast.createdByName,
       source: AuditSource.AUTOMATION,
     };
+    if (!await allowed(broadcast.organizationId, recipient.clientId, phoneKey(number))) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada" });
     const message = await sendText(
       broadcast.organizationId,
       conversation.id,

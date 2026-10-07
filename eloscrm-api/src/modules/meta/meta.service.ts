@@ -1,10 +1,11 @@
-import { AuditAction, AuditEntity, MetaIntegrationStatus } from "../../generated/prisma/client.js";
+import { AuditAction, AuditEntity } from "../../generated/prisma/client.js";
+import * as z from "zod";
 import type { Actor } from "../../lib/actor.js";
 import { diffFields, recordAudit } from "../../lib/audit.js";
 import { snapshotOf } from "../../lib/audit-snapshot.js";
 import { decryptToken, encryptToken, last4 } from "../../lib/crypto.js";
 import { forbidden, httpError, notFound } from "../../lib/http-error.js";
-import { createMetaGraphClient } from "../../lib/meta/index.js";
+import { createMetaGraphClient, MetaGraphError } from "../../lib/meta/index.js";
 import { isOrgManager } from "../../lib/org-roles.js";
 import { prisma } from "../../lib/prisma.js";
 import { metaError, requireIntegrationEnv } from "./meta.gateway.js";
@@ -66,7 +67,7 @@ const refreshForms = async (integrationId: string) => {
 
   for (const page of pages) {
     const forms = await graph.leadForms(page.pageId, decryptToken(page.tokenEnc)).catch((err) => {
-      throw metaError(err);
+      throw metaError(err, { pageId: page.pageId, name: page.name });
     });
     for (const form of forms) {
       seen.push(form.id);
@@ -92,7 +93,7 @@ const refreshForms = async (integrationId: string) => {
  * Conecta (ou troca o token de) a conta do Meta.
  *
  * O token é validado contra a Graph API antes de qualquer escrita: `/me` diz quem ele é, e
- * `/me/accounts` entrega as páginas com os tokens de página — que é o que a leitura de leads exige.
+ * `/me/accounts` entrega as páginas e pode omitir o token próprio ao usar usuário do sistema.
  * Token que não alcança nenhuma página é recusado na hora: sem página não há formulário, e a tela
  * ficaria "conectada" sem nada para ligar.
  */
@@ -114,41 +115,41 @@ export const connect = async (orgId: string, data: ConnectMetaInput, actor: Acto
     );
   }
 
-  const before = await repo.findByOrg(orgId);
-  const saved = await prisma.metaIntegration.upsert({
-    where: { organizationId: orgId },
-    create: {
-      organizationId: orgId,
-      tokenType: data.tokenType,
-      tokenEnc: encryptToken(data.token),
-      tokenLast4: last4(data.token),
-      metaUserId: me.id,
-      metaUserName: me.name,
-    },
-    update: {
-      tokenType: data.tokenType,
-      tokenEnc: encryptToken(data.token),
-      tokenLast4: last4(data.token),
-      metaUserId: me.id,
-      metaUserName: me.name,
-      status: MetaIntegrationStatus.active,
-      lastError: null,
-    },
-  });
-
-  for (const page of pages) {
-    await prisma.metaPage.upsert({
-      where: { integrationId_pageId: { integrationId: saved.id, pageId: page.id } },
-      create: { integrationId: saved.id, pageId: page.id, name: page.name, tokenEnc: encryptToken(page.access_token) },
-      update: { name: page.name, tokenEnc: encryptToken(page.access_token) },
+  const pageSchema = z.object({ id: z.string().min(1), name: z.string().min(1), access_token: z.string().trim().min(1).nullish() });
+  const formSchema = z.array(z.object({ id: z.string().min(1), name: z.string().min(1), status: z.string().optional(), leads_count: z.number().optional() }));
+  const deniedPages: { pageId: string; name: string }[] = [];
+  const preparedPages = await Promise.all(pages.map(async raw => {
+    const parsed = pageSchema.safeParse(raw);
+    if (!parsed.success) throw httpError(502, "META_RESPONSE_INVALID", "O Meta retornou dados de página inválidos; tente novamente");
+    const page = parsed.data;
+    const pageToken = page.access_token ?? (data.tokenType === "system_user" ? data.token : null);
+    if (!pageToken) throw httpError(422, "META_PAGE_TOKEN_MISSING", "O Meta não retornou um token para uma das páginas. Confira as permissões ou conecte com um token de usuário do sistema autorizado.");
+    // O token do sistema só é salvo para a página após a Graph API confirmar acesso aos formulários.
+    const remoteForms = await graph.leadForms(page.id, pageToken).catch(err => {
+      if (err instanceof MetaGraphError && (err.graph?.code === 10 || err.graph?.code === 200)) {
+        deniedPages.push({ pageId: page.id, name: page.name });
+        return null;
+      }
+      throw metaError(err, { pageId: page.id, name: page.name });
     });
+    if (remoteForms === null) return null;
+    const forms = formSchema.safeParse(remoteForms);
+    if (!forms.success) throw httpError(502, "META_RESPONSE_INVALID", "O Meta retornou dados de formulário inválidos; tente novamente");
+    return { pageId: page.id, name: page.name, tokenEnc: encryptToken(pageToken), forms: forms.data };
+  }));
+  const accessiblePages = preparedPages.filter(page => page !== null);
+  const deniedPageNames = deniedPages.map(page => `"${page.name}" (ID ${page.pageId})`).join(", ");
+  if (accessiblePages.length === 0) {
+    throw httpError(403, "META_PAGE_ACCESS_DENIED", `Nenhuma página permitiu acesso aos formulários. Páginas recusadas: ${deniedPageNames}. Confira os ativos atribuídos, as permissões do token e o Acesso a leads na Meta.`);
   }
-  // página que o novo token não alcança leva os formulários dela junto (cascade)
-  await prisma.metaPage.deleteMany({
-    where: { integrationId: saved.id, pageId: { notIn: pages.map((p) => p.id) } },
-  });
+  const connectionWarning = deniedPages.length > 0
+    ? `Páginas ignoradas por falta de permissão: ${deniedPageNames}. Seus formulários e leads não serão buscados. Após corrigir o acesso na Meta, salve o token novamente para incluí-las.`
+    : null;
 
-  await refreshForms(saved.id);
+  const before = await repo.findByOrg(orgId);
+  const saved = await repo.saveConnection(orgId, {
+    tokenType: data.tokenType, tokenEnc: encryptToken(data.token), tokenLast4: last4(data.token), metaUserId: me.id, metaUserName: me.name, connectionWarning,
+  }, accessiblePages);
 
   await recordAudit({
     orgId,
@@ -157,7 +158,7 @@ export const connect = async (orgId: string, data: ConnectMetaInput, actor: Acto
     entityLabel: ENTITY_LABEL,
     action: before ? AuditAction.UPDATED : AuditAction.CREATED,
     actor,
-    context: { metaUserName: me.name, tokenType: data.tokenType, pages: pages.length },
+    context: { metaUserName: me.name, tokenType: data.tokenType, pages: accessiblePages.length, deniedPages: deniedPages.length },
     snapshot: snapshotOf(AuditEntity.META_INTEGRATION, saved),
   });
 

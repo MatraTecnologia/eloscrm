@@ -44,7 +44,7 @@ export const BroadcastRecipients = ({
           {enviaveis.length < rows.length && (
             <span className="text-muted-foreground">
               {" "}
-              · {rows.length - enviaveis.length} sem telefone
+              · {rows.length - enviaveis.length} {rows.length - enviaveis.length === 1 ? "excluído" : "excluídos"}
             </span>
           )}
         </span>
@@ -80,7 +80,7 @@ export const BroadcastRecipients = ({
                       formatPhone(row.client.phone)
                     ) : (
                       <span className="inline-flex items-center gap-1">
-                        <PhoneOff className="size-3" /> sem telefone
+                        <PhoneOff className="size-3" /> {row.exclusion ?? "sem telefone"}
                       </span>
                     )}
                   </span>

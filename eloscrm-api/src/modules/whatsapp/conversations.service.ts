@@ -125,6 +125,7 @@ export const conversationLabel = (conversation: ConversationLabelSource): string
 export const list = async (orgId: string, query: ListConversationsQuery) => {
   const where: Prisma.ConversationWhereInput = {
     organizationId: orgId,
+    instanceId: { not: null },
     archivedAt: query.archived ? { not: null } : null,
   };
   if (query.clientId) where.clientId = query.clientId;
@@ -161,18 +162,18 @@ export const list = async (orgId: string, query: ListConversationsQuery) => {
  */
 export const counts = async (orgId: string) => {
   const [all, unread, archived] = await Promise.all([
-    prisma.conversation.count({ where: { organizationId: orgId, archivedAt: null } }),
+    prisma.conversation.count({ where: { organizationId: orgId, instanceId: { not: null }, archivedAt: null } }),
     prisma.conversation.count({
-      where: { organizationId: orgId, archivedAt: null, unreadCount: { gt: 0 } },
+      where: { organizationId: orgId, instanceId: { not: null }, archivedAt: null, unreadCount: { gt: 0 } },
     }),
-    prisma.conversation.count({ where: { organizationId: orgId, archivedAt: { not: null } } }),
+    prisma.conversation.count({ where: { organizationId: orgId, instanceId: { not: null }, archivedAt: { not: null } } }),
   ]);
   return { all, unread, archived };
 };
 
 export const getById = async (orgId: string, id: string) => {
   const conversation = await prisma.conversation.findFirst({
-    where: { id, organizationId: orgId },
+    where: { id, organizationId: orgId, instanceId: { not: null } },
     select: conversationSelect,
   });
   if (!conversation) throw notFound("Conversa não encontrada");
@@ -234,13 +235,16 @@ const loadQuoted = async (conversationId: string, messages: WhatsappMessage[]) =
  */
 type MessageWithReactions = WhatsappMessage & { reactions?: WhatsappReaction[] };
 
-const serializeMessage = async (
+export const serializeMessage = async (
   message: MessageWithReactions,
   quoted?: Map<string, QuotedPreview>,
 ) => {
   // apagada nem chega a assinar URL: o arquivo continua no R2, mas ninguém recebe link para ele
   const media = message.deletedAt ? null : await resolveMediaUrl(message);
-  const { mediaKey: _key, mediaTempUrl: _tmp, reactions, ...rest } = hideDeleted(message);
+  const { mediaKey: _key, mediaTempUrl: _tmp, mediaLeaseToken: _mediaLease, mediaLeaseExpiresAt: _mediaLeaseExpires,
+    mediaAttempts: _mediaAttempts, mediaNextAttemptAt: _mediaNext, automationStatus: _automationStatus,
+    automationAttempts: _automationAttempts, automationNextAttemptAt: _automationNext, automationProcessedAt: _automationProcessed,
+    automationErrorCode: _automationError, automationSuggestedName: _automationName, reactions, ...rest } = hideDeleted(message);
   return {
     ...rest,
     // voto gravado antes de múltipla escolha existir vinha com `choice`; a tradução é aqui para o
@@ -337,14 +341,14 @@ const conversationForSending = async (orgId: string, conversationId: string) => 
     where: { id: conversationId, organizationId: orgId },
     include: { instance: true, client: { select: { name: true } } },
   });
-  if (!conversation) throw notFound("Conversa não encontrada");
+  if (!conversation?.instance) throw notFound("Conversa uazapi não encontrada");
   if (conversation.instance.remoteDeletedAt) {
     throw conflict("INSTANCE_REMOTE_DELETED", "A conexão de WhatsApp não existe mais no servidor");
   }
   if (conversation.instance.status !== UazapiInstanceStatus.connected) {
     throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar mensagens");
   }
-  return conversation;
+  return { ...conversation, instance: conversation.instance };
 };
 
 /**

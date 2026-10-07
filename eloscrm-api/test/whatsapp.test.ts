@@ -621,7 +621,7 @@ describe("auditoria da gestão da instância de WhatsApp", () => {
     expect(JSON.stringify(testSent)).not.toContain("999140409");
   });
 
-  it("a prévia diz quantas conversas e mídias a remoção vai levar", async () => {
+  it("a prévia diz quantas conversas e mídias serão preservadas após remover", async () => {
     const created = await createInstance();
     const instanceId = created.json().id;
     const conversation = await prisma.conversation.create({
@@ -647,7 +647,7 @@ describe("auditoria da gestão da instância de WhatsApp", () => {
       headers: { cookie },
     });
     expect(res.statusCode).toBe(200);
-    // é o número que a tela mostra antes de confirmar: remover a conexão apaga o atendimento inteiro
+    // A prévia mostra o atendimento que permanece após remover a instância do provedor.
     expect(res.json()).toMatchObject({
       conversations: 1,
       messages: 1,
@@ -655,7 +655,7 @@ describe("auditoria da gestão da instância de WhatsApp", () => {
     });
   });
 
-  it("remover a instância apaga as mídias no R2 junto com as conversas", async () => {
+  it("remover a instância preserva mídias no R2 e conversas na conexão histórica", async () => {
     const created = await createInstance();
     const instanceId = created.json().id;
     const conversation = await prisma.conversation.create({
@@ -684,9 +684,12 @@ describe("auditoria da gestão da instância de WhatsApp", () => {
       (await app.inject({ method: "DELETE", url: "/v1/whatsapp/instance", headers: { cookie } })).statusCode,
     ).toBe(204);
 
-    // as conversas cascateiam da instância; o bucket não cascateia, e é isto que o service faz
-    expect(await prisma.conversation.count({ where: { id: conversation.id } })).toBe(0);
-    expect(await headFile(R2_PRIVATE_BUCKET, mediaKey).catch(() => null)).toBeNull();
+    const saved = await prisma.conversation.findUniqueOrThrow({ where: { id: conversation.id } });
+    expect(saved.instanceId).toBeNull();
+    expect(saved.connectionId).toBeTruthy();
+    expect(await prisma.whatsappMessage.count({ where: { conversationId: conversation.id } })).toBe(1);
+    expect(await prisma.uazapiInstance.findUnique({ where: { id: instanceId } })).toBeNull();
+    expect(await headFile(R2_PRIVATE_BUCKET, mediaKey).catch(() => null)).toBeTruthy();
   });
 
   it("apaga a instância mas os eventos de auditoria continuam legíveis (D6)", async () => {

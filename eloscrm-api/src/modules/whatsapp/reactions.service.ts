@@ -81,7 +81,7 @@ export const react = async (
     where: { id: conversationId, organizationId: orgId },
     include: { instance: true },
   });
-  if (!conversation) throw notFound("Conversa não encontrada");
+  if (!conversation?.instance) throw notFound("Conversa uazapi não encontrada");
   if (conversation.instance.status !== UazapiInstanceStatus.connected) {
     throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de reagir");
   }

@@ -35,6 +35,10 @@ import { BroadcastFiltersForm } from "./broadcast-filters";
 import { BroadcastMessage } from "./broadcast-message";
 import { BroadcastProgress, BroadcastStatusBadge } from "./broadcast-progress";
 import { BroadcastRecipients } from "./broadcast-recipients";
+import { CampaignPanel } from "@/components/whatsapp-official/campaign-panel";
+import { useActiveOrganization, useSession } from "@/lib/auth-client";
+import { useMembers } from "@/lib/queries/members";
+import { CampaignPermission } from "@/components/whatsapp-official/campaign-permission";
 
 const TAB_CLASS = "data-active:text-primary after:bg-primary";
 const STEPS = ["Condições", "Destinatários", "Mensagem"] as const;
@@ -75,15 +79,21 @@ export const BroadcastDialog = ({
   trigger: React.ReactNode;
 }) => {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"novo" | "historico">("novo");
+  const [tab, setTab] = useState<"novo" | "historico" | "official">("novo");
   const [step, setStep] = useState(0);
   const [filters, setFilters] = useState<BroadcastFilters>({});
   const [rows, setRows] = useState<BroadcastPreviewRow[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [viewing, setViewing] = useState<string | null>(null);
+  const [permissionClient, setPermissionClient] = useState("");
+  const permissionClients = [...new Map(rows.map(row => [row.client.id, row.client])).values()];
+  const permission = permissionClients.find(client => client.id === permissionClient);
 
   const { data: instance } = useWhatsappInstance();
+  const { data: org } = useActiveOrganization(); const { data: session } = useSession(); const { data: members } = useMembers();
+  const role = members?.find(member => member.userId === session?.user.id)?.role;
+  const isManager = role === "owner" || role === "admin";
   const preview = usePreviewBroadcast();
   const create = useCreateBroadcast();
   const { data: history } = useBroadcasts(pipeline.id, open);
@@ -93,16 +103,17 @@ export const BroadcastDialog = ({
   const escolhidos = rows.filter((r) => selected.includes(r.dealId));
 
   const reset = () => {
-    setTab("novo");
+    setTab(isManager ? "official" : "novo");
     setStep(0);
     setFilters({});
     setRows([]);
     setSelected([]);
     setText("");
     setViewing(null);
+    setPermissionClient("");
   };
 
-  const buscar = async () => {
+  const loadRecipients = async () => {
     try {
       const result = await preview.mutateAsync({ pipelineId: pipeline.id, filters });
       setRows(result);
@@ -152,19 +163,21 @@ export const BroadcastDialog = ({
         <Tabs
           value={tab}
           onValueChange={(v) => {
-            setTab(v as "novo" | "historico");
+            setTab(v as "novo" | "historico" | "official");
             if (v === "novo") setViewing(null);
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <TabsList variant="line">
+          <TabsList variant="line" className="h-auto max-w-full flex-wrap">
+            {isManager && <TabsTrigger value="official" className={TAB_CLASS}>WhatsApp oficial</TabsTrigger>}
             <TabsTrigger value="novo" className={TAB_CLASS}>
-              Novo disparo
+              uazapi
             </TabsTrigger>
             <TabsTrigger value="historico" className={TAB_CLASS}>
-              Histórico
+              Histórico uazapi
             </TabsTrigger>
           </TabsList>
+          {isManager && <TabsContent value="official" className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col"><CampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /></TabsContent>}
 
           <TabsContent value="novo" className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
             {!conectado && (
@@ -186,12 +199,19 @@ export const BroadcastDialog = ({
               </div>
             )}
             {step === 1 && (
-              <BroadcastRecipients
-                rows={rows}
-                stages={stages}
-                selected={selected}
-                onChange={setSelected}
-              />
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+                <p className="text-xs text-muted-foreground">O disparo exige autorização registrada para o telefone de cada pessoa. Administradores podem registrar a evidência abaixo.</p>
+                {isManager && <label className="block text-sm">Permissão de comunicação<select aria-label="Permissão de comunicação uazapi" className="mt-1 w-full rounded-md border bg-background p-2 text-sm" value={permissionClient} onChange={event => setPermissionClient(event.target.value)}><option value="">Consultar uma pessoa</option>{permissionClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
+                {isManager && permission && <CampaignPermission key={`${org?.id}:${permission.id}`} clientId={permission.id} name={permission.name} onSaved={() => { setSelected([]); void loadRecipients(); }} />}
+                <div className="flex h-64 min-h-64 flex-col">
+                <BroadcastRecipients
+                  rows={rows}
+                  stages={stages}
+                  selected={selected}
+                  onChange={setSelected}
+                />
+                </div>
+              </div>
             )}
             {step === 2 && (
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -208,7 +228,7 @@ export const BroadcastDialog = ({
                 <span />
               )}
               {step === 0 && (
-                <Button onClick={buscar} disabled={preview.isPending}>
+                <Button onClick={loadRecipients} disabled={preview.isPending}>
                   {preview.isPending ? "Buscando…" : "Ver destinatários"}
                 </Button>
               )}

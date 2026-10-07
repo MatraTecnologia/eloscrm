@@ -20,6 +20,9 @@ import { OverviewTab } from "./overview-tab";
 import { TestSendTab } from "./test-send-tab";
 import { useAutoSyncProfile } from "./use-auto-sync-profile";
 import { WebhookTab } from "./webhook-tab";
+import { OfficialTab } from "@/components/whatsapp-official/official-tab";
+import { CostDashboard } from "@/components/whatsapp-official/cost-dashboard";
+import { AutomationPanel } from "@/components/whatsapp-official/automation-panel";
 
 export default function WhatsappIntegrationPage() {
   const { data: org, isPending: loadingOrg } = useActiveOrganization();
@@ -37,14 +40,27 @@ export default function WhatsappIntegrationPage() {
   const notConfigured = (error as { code?: string } | null)?.code === "INTEGRATION_NOT_CONFIGURED";
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex min-w-0 flex-col gap-6 p-0 sm:p-6">
       <div>
         <h1 className="text-2xl font-semibold">WhatsApp</h1>
         <p className="text-muted-foreground text-sm">
-          Conecte o número da imobiliária para acompanhar a conexão pelo elosCRM.
+          Gerencie o WhatsApp oficial e o número usado na conexão uazapi.
         </p>
       </div>
 
+      <Tabs defaultValue="official" className="min-w-0">
+        <TabsList className="max-w-full flex-wrap group-data-horizontal/tabs:h-auto">
+          <TabsTrigger value="official">WhatsApp oficial</TabsTrigger>
+          <TabsTrigger value="uazapi">uazapi</TabsTrigger>
+          {canManage && <TabsTrigger value="costs">Custos e consumo</TabsTrigger>}
+          {canManage && <TabsTrigger value="automations">Automações</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="official">
+          {org && <OfficialTab key={org.id} canManage={canManage} />}
+        </TabsContent>
+        {canManage && <TabsContent value="costs" className="min-w-0"><CostDashboard /></TabsContent>}
+        {canManage && <TabsContent value="automations" className="min-w-0">{org && <AutomationPanel key={org.id} />}</TabsContent>}
+        <TabsContent value="uazapi">
       {notConfigured && (
         <Alert>
           <TriangleAlert />
@@ -151,6 +167,8 @@ export default function WhatsappIntegrationPage() {
           </Tabs>
         </>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
