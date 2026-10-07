@@ -1,17 +1,6 @@
-import { prisma } from "../../lib/prisma.js";
 import { httpError } from "../../lib/http-error.js";
-import { phoneKey } from "../../lib/phone.js";
-import type { Prisma, ChannelConnection } from "../../generated/prisma/client.js";
+import type { ChannelConnection } from "../../generated/prisma/client.js";
 import { withConnectionLock } from "../whatsapp-official/identity.repo.js";
-
-export const importAllowed = async (orgId: string, phone: string | null, db: Prisma.TransactionClient = prisma) => {
-  const key = phoneKey(phone);
-  if (!key) return false;
-  const blocked = await db.communicationPermission.findFirst({ where: { organizationId: orgId, state: "suppressed", OR: [{ phoneKey: key }, { client: { organizationId: orgId, phoneKey: key } }] }, select: { id: true } });
-  if (blocked) return false;
-  const latest = await db.communicationPermissionRevision.findFirst({ where: { organizationId: orgId, phoneKey: key }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { state: true } });
-  return latest?.state !== "suppressed";
-};
 
 export const importedIdentity = (connection: ChannelConnection, phone: string, name: string) => withConnectionLock(connection, async tx => {
   const organizationId = connection.organizationId;

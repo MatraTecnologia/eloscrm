@@ -27,7 +27,7 @@ export const processCampaign = async ({ orgId, campaignId }: { orgId: string; ca
   } catch (error) {
     const code = error instanceof Error && "code" in error ? String(error.code) : null;
     const safeError = error instanceof Error && "expose" in error && error.expose === true ? error.message : "Não foi possível preparar este envio";
-    await repo.settle(orgId, row.id, claim.leaseToken, code === "CAMPAIGN_SUPPRESSED" || code === "CAMPAIGN_STOPPED" ? "skipped" : "failed", safeError, { code: code && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "PREPARATION_FAILED", stage: "preparation" });
+    await repo.settle(orgId, row.id, claim.leaseToken, code === "CAMPAIGN_STOPPED" ? "skipped" : "failed", safeError, { code: code && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "PREPARATION_FAILED", stage: "preparation" });
   }
 };
 createWorker<{ orgId: string; campaignId: string }>(CAMPAIGN_QUEUE, async job => processCampaign(job.data), 1);

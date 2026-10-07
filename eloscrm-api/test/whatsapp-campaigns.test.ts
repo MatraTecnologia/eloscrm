@@ -3,6 +3,8 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vites
 import type { FastifyInstance } from "fastify";
 vi.mock("../src/lib/whatsapp-official/graph.js", async original => ({ ...await original<object>(), sendMessage: vi.fn(), readTemplates: vi.fn() }));
 vi.mock("../src/lib/queue.js", async original => ({ ...await original<object>(), queueEnabled: vi.fn(() => true), enqueue: vi.fn(), createWorker: vi.fn() }));
+vi.mock("../src/modules/whatsapp/conversations.service.js", async original => ({ ...await original<object>(), sendText: vi.fn() }));
+import { sendText } from "../src/modules/whatsapp/conversations.service.js";
 import * as graph from "../src/lib/whatsapp-official/graph.js";
 import { queueEnabled } from "../src/lib/queue.js";
 import { prisma } from "../src/lib/prisma.js";
@@ -36,6 +38,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await app.close(); await prisma.$disconnect(); });
 beforeEach(async () => {
+  vi.mocked(sendText).mockReset(); vi.mocked(sendText).mockResolvedValue({ id: "message-fixture" } as Awaited<ReturnType<typeof sendText>>);
   vi.mocked(queueEnabled).mockReturnValue(true); vi.mocked(graph.sendMessage).mockReset(); vi.mocked(graph.readTemplates).mockReset();
   const fixture = await createOfficialConnectionFixture(orgId); channel = (await outbound.connection(orgId, fixture.connection.id))!;
   const pipeline = await prisma.pipeline.create({ data: { organizationId: orgId, name: `Funil fictício ${randomUUID()}`, stages: { create: { organizationId: orgId, name: "Entrada", position: 0 } } }, include: { stages: true } });
@@ -49,7 +52,6 @@ beforeEach(async () => {
   vi.mocked(graph.readTemplates).mockResolvedValue([definition]); await sends.syncTemplates(orgId, channel.id);
   const template = await prisma.officialTemplate.findFirstOrThrow({ where: { organizationId: orgId, wabaId: channel.wabaId! } });
   input = { connectionId: channel.id, pipelineId: pipeline.id, filters: {}, dealIds: [deal.id], templateId: template.id, parameters: { header: {}, body: { "1": "Exemplo" } } };
-  await permissions.save(orgId, clientId, { state: "allowed", evidence: "Permissão fictícia para teste" }, actor());
   await prisma.officialRate.create({ data: { organizationId: orgId, wabaId: channel.wabaId!, country: "BR", category: "MARKETING", pricingType: "REGULAR", currency: channel.currency!, unitRate: "0.0000012345", volumeFrom: 0, validFrom: new Date("2026-01-01"), validUntil: new Date("2027-01-01"), sourceUrl: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing", createdById: actorId } });
   vi.mocked(graph.sendMessage).mockResolvedValue({ messages: [{ id: `wamid.${randomUUID()}` }] });
 });
@@ -155,21 +157,22 @@ describe("campanhas oficiais sem envio real", () => {
     await processCampaign({ orgId, campaignId: id });
     expect(graph.sendMessage).not.toHaveBeenCalled(); expect((await service.get(orgId, id)).status).toBe("needs_review");
   });
-  it("uazapi exige autorização no preview, na criação e no worker, inclusive para o número congelado", async () => {
-    await prisma.communicationPermission.deleteMany({ where: { organizationId: orgId, clientId } });
-    expect((await legacy.preview(orgId, { pipelineId: input.pipelineId, filters: {} })).find(row => row.dealId === input.dealIds[0])?.sendable).toBe(false);
-    const instance = await prisma.uazapiInstance.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, remoteId: randomUUID(), name: "Instância fictícia", tokenEnc: channel.tokenEnc!, tokenHash: randomUUID(), webhookSecret: randomUUID(), status: "connected" }, update: { status: "connected" } });
-    expect(instance.status).toBe("connected");
-    const saved = await legacy.create(orgId, { pipelineId: input.pipelineId, filters: {}, dealIds: input.dealIds, text: "Teste fictício" }, actor());
-    expect(saved.recipients[0]).toMatchObject({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada" });
-    await permissions.save(orgId, clientId, { state: "allowed", evidence: "Autorização fictícia" }, actor());
+  it("uazapi aceita leads sem permissão e ignora descadastro no worker", async () => {
     expect((await legacy.preview(orgId, { pipelineId: input.pipelineId, filters: {} })).find(row => row.dealId === input.dealIds[0])?.sendable).toBe(true);
-    const pending = await legacy.create(orgId, { pipelineId: input.pipelineId, filters: {}, dealIds: input.dealIds, text: "Teste fictício" }, actor());
-    await prisma.client.update({ where: { id: clientId }, data: { phoneKey: "4311112222" } });
-    await permissions.save(orgId, clientId, { state: "allowed", evidence: "Autorização para outro número" }, actor());
-    await processLegacyRecipient({ recipientId: pending.recipients[0]!.id });
-    expect((await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: pending.recipients[0]!.id } })).status).toBe("SKIPPED");
-    expect(graph.sendMessage).not.toHaveBeenCalled();
+    await prisma.uazapiInstance.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, remoteId: randomUUID(), name: "Instância fictícia", tokenEnc: channel.tokenEnc!, tokenHash: randomUUID(), webhookSecret: randomUUID(), status: "connected" }, update: { status: "connected" } });
+    const saved = await legacy.create(orgId, { pipelineId: input.pipelineId, filters: {}, dealIds: input.dealIds, text: "Teste fictício" }, actor());
+    expect(saved.recipients[0]).toMatchObject({ status: "PENDING", error: null });
+    await permissions.save(orgId, clientId, { state: "suppressed", evidence: "Registro histórico desativado" }, actor());
+    expect((await legacy.preview(orgId, { pipelineId: input.pipelineId, filters: {} })).find(row => row.dealId === input.dealIds[0])?.sendable).toBe(true);
+    await processLegacyRecipient({ recipientId: saved.recipients[0]!.id });
+    expect((await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: saved.recipients[0]!.id } })).status).toBe("SENT");
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+  it("endpoints de permissão estão desativados", async () => {
+    const url = `/v1/whatsapp/campaigns/permissions/${clientId}`;
+    expect((await app.inject({ method: "GET", url, headers: { cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url, headers: { cookie, origin: env.WEB_ORIGIN }, payload: { state: "allowed", evidence: "Teste" } })).statusCode).toBe(404);
+    expect(await prisma.communicationPermission.count({ where: { clientId } })).toBe(0);
   });
   it("protege tenant, papel, origem e valores financeiros; idempotência de criação", async () => {
     expect((await app.inject({ method: "POST", url: "/v1/whatsapp/campaigns/preview", payload: input })).statusCode).toBe(401);
@@ -185,12 +188,12 @@ describe("campanhas oficiais sem envio real", () => {
     await prisma.member.update({ where: { id: member.id }, data: { role: "owner" } });
     expect(JSON.stringify(saved)).not.toMatch(/tokenEnc|requestHash|leaseToken/);
   });
-  it("deduplica por pessoa e exclui permissão ausente, supressão e identidade inválida", async () => {
+  it("deduplica por pessoa, ignora descadastro e exclui identidade inválida", async () => {
     const result = await preview(orgId, { ...input, dealIds: [...input.dealIds, secondDealId] });
     expect(result.eligible).toBe(1); expect(result.excluded).toBe(1); expect(result.estimate.amount).toBe("0.0000012345");
     await permissions.save(orgId, clientId, { state: "suppressed", evidence: "Descadastro fictício" }, actor());
-    expect((await preview(orgId, input)).eligible).toBe(0);
-    expect(await prisma.communicationPermissionRevision.count({ where: { organizationId: orgId, permission: { clientId } } })).toBe(2);
+    expect((await preview(orgId, input)).eligible).toBe(1);
+    expect(await prisma.communicationPermissionRevision.count({ where: { organizationId: orgId, permission: { clientId } } })).toBe(1);
     await permissions.save(orgId, clientId, { state: "allowed", evidence: "Nova permissão fictícia" }, actor());
     await prisma.contactIdentity.updateMany({ where: { organizationId: orgId, connectionId: channel.id }, data: { validUntil: new Date() } });
     expect((await preview(orgId, input)).rows[0]!.exclusion).toMatch(/identidade/);
@@ -199,7 +202,8 @@ describe("campanhas oficiais sem envio real", () => {
     const saved = await draft(); const old = (saved.snapshot as { previewHash: string }).previewHash;
     vi.mocked(queueEnabled).mockReturnValue(false);
     await expect(service.approve(orgId, saved.id, old, true, actor())).rejects.toMatchObject({ code: "CAMPAIGN_REDIS_REQUIRED" });
-    vi.mocked(queueEnabled).mockReturnValue(true);
+    vi.mocked(sendText).mockReset(); vi.mocked(sendText).mockResolvedValue({ id: "message-fixture" } as Awaited<ReturnType<typeof sendText>>);
+  vi.mocked(queueEnabled).mockReturnValue(true);
     await prisma.officialRate.updateMany({ where: { organizationId: orgId, wabaId: channel.wabaId! }, data: { unitRate: "0.000002" } });
     await expect(service.approve(orgId, saved.id, old, true, actor())).rejects.toMatchObject({ code: "CAMPAIGN_CHANGED" });
     const revised = await service.repreview(orgId, saved.id);
@@ -215,13 +219,12 @@ describe("campanhas oficiais sem envio real", () => {
     expect((await service.get(orgId, id)).recipients[0]).toMatchObject({ deliveryStatus: "read", cost: { amount: "0.0000012345" } });
     await releaseSlot(id); await processCampaign({ orgId, campaignId: id }); expect((await service.get(orgId, id)).status).toBe("done");
   });
-  it("descadastro após preview impede envio e suprime outro lead com o mesmo telefone", async () => {
+  it("descadastro histórico em outro lead não impede envio oficial", async () => {
     const id = await start();
     const duplicate = await prisma.client.create({ data: { organizationId: orgId, name: "Outro cadastro", phoneKey: clientPhoneKey } });
     await permissions.save(orgId, duplicate.id, { state: "suppressed", evidence: "Descadastro fictício compartilhado" }, actor());
     await processCampaign({ orgId, campaignId: id });
-    expect(graph.sendMessage).not.toHaveBeenCalled(); expect((await service.get(orgId, id)).recipients[0]!.status).toBe("skipped");
-    expect(await permissions.suppressed(orgId, clientId)).toBe(true);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1); expect((await service.get(orgId, id)).recipients[0]!.status).toBe("sent");
   });
   it("cancelamento durante consulta remota impede submissão e a recuperação não burla a fila", async () => {
     const id = await start();
@@ -251,7 +254,7 @@ describe("campanhas oficiais sem envio real", () => {
     await releaseSlot(first); await releaseSlot(second); await processCampaign({ orgId, campaignId: remaining });
     expect(graph.sendMessage).toHaveBeenCalledTimes(2);
   });
-  it("supressão preserva o número antigo após editar ambos os cadastros, inclusive no worker uazapi", async () => {
+  it("histórico de descadastro não bloqueia o número congelado no worker uazapi", async () => {
     const saved = await prisma.broadcast.create({ data: { organizationId: orgId, pipelineId: input.pipelineId, pipelineName: "Funil fictício", text: "Mensagem fictícia", filters: {}, createdByName: actor().name, total: 1 } });
     const recipient = await prisma.broadcastRecipient.create({ data: { broadcastId: saved.id, clientId, dealId: input.dealIds[0]!, clientName: "Pessoa fictícia", number: (await permissions.client(orgId, clientId))!.phoneKey ? (await prisma.client.findUniqueOrThrow({ where: { id: clientId } })).phone! : "", text: "Mensagem fictícia" } });
     await prisma.client.update({ where: { id: clientId }, data: { phoneKey: "4311112222" } });
@@ -259,11 +262,10 @@ describe("campanhas oficiais sem envio real", () => {
     await permissions.save(orgId, duplicate.id, { state: "suppressed", evidence: "Descadastro fictício no número original" }, actor());
     await prisma.client.update({ where: { id: duplicate.id }, data: { phoneKey: "4333334444" } });
     await permissions.save(orgId, duplicate.id, { state: "allowed", evidence: "Autorização para o novo número" }, actor());
-    expect(await permissions.suppressed(orgId, clientId, clientPhoneKey)).toBe(true);
-    expect(await permissions.allowed(orgId, clientId)).toBe(false);
     await prisma.broadcast.updateMany({ where: { organizationId: orgId }, data: { nextAt: new Date(Date.now() - 1000) } });
     await processLegacyRecipient({ recipientId: recipient.id });
-    expect((await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: recipient.id } })).status).toBe("SKIPPED");
+    expect((await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: recipient.id } })).status).toBe("SENT");
+    expect(sendText).toHaveBeenCalledTimes(1);
   });
   it("BSUID permite campanha, mas mercado ausente não vira custo zero", async () => {
     await prisma.contactIdentity.updateMany({ where: { organizationId: orgId, connectionId: channel.id }, data: { kind: "bsuid", value: "BR.fixture-user" } });
@@ -281,16 +283,16 @@ describe("campanhas oficiais sem envio real", () => {
     const result = await preview(orgId, { ...input, dealIds: [...input.dealIds, secondDealId] });
     expect(result.eligible).toBe(1); expect(result.excluded).toBe(1); expect(result.rows.find(row => row.exclusion)?.exclusion).toContain("já selecionada");
   });
-  it("descadastro durante consulta remota bloqueia a checagem final e início repetido não duplica", async () => {
+  it("registro histórico durante consulta remota não bloqueia envio nem duplica o início", async () => {
     const id = await start(); const snapshot = (await service.get(orgId, id)).snapshot as { previewHash: string };
     await service.approve(orgId, id, snapshot.previewHash, true, actor());
     vi.mocked(graph.readTemplates).mockImplementationOnce(async () => { await permissions.save(orgId, clientId, { state: "suppressed", evidence: "Descadastro durante preparação" }, actor()); return [definition]; });
-    await processCampaign({ orgId, campaignId: id }); expect(graph.sendMessage).not.toHaveBeenCalled();
-    expect((await service.get(orgId, id)).recipients[0]!.safeError).toMatch(/descadastrada/);
+    await processCampaign({ orgId, campaignId: id }); expect(graph.sendMessage).toHaveBeenCalledTimes(1);
+    expect((await service.get(orgId, id)).recipients[0]!.status).toBe("sent");
   });
   it("dispara template para telefone importado sem criar lead ou card e preserva a identidade na resposta", async () => {
     const phone = "5543999990001";
-    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone, name: "Pessoa importada" }], consent: { confirmed: true, evidence: "Autorização fictícia da lista" } }, parameters: { header: {}, body: {} }, parameterSources: { header: {}, body: { "1": "firstName" } } };
+    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone, name: "Pessoa importada" }] }, parameters: { header: {}, body: {} }, parameterSources: { header: {}, body: { "1": "firstName" } } };
     const counts = [await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })];
     const snapshot = await preview(orgId, request);
     expect(snapshot.eligible).toBe(1); expect(snapshot.rows[0]?.text).toContain("Pessoa"); expect(snapshot.estimate.amount).not.toBeNull();
@@ -309,15 +311,15 @@ describe("campanhas oficiais sem envio real", () => {
     expect(received.id).toBe(imported.contactId);
     expect((await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, id: identityId } })).source).toBe("campaign_import");
   });
-  it("reconfere descadastro de telefone importado antes do worker submeter à Meta", async () => {
-    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990002", name: "Pessoa importada" }], consent: { confirmed: true, evidence: "Autorização fictícia da lista" } } };
+  it("telefone importado com descadastro histórico continua elegível para envio", async () => {
+    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990002", name: "Pessoa importada" }] } };
     const snapshot = await preview(orgId, request);
     const saved = await service.create(orgId, { ...request, name: "Lista importada", idempotencyKey: randomUUID(), previewHash: snapshot.previewHash }, actor());
     await service.approve(orgId, saved.id, snapshot.previewHash, true, actor());
     const client = await prisma.client.create({ data: { organizationId: orgId, name: "Pessoa descadastrada", phone: "5543999990002", phoneKey: "4399990002" } });
     await permissions.save(orgId, client.id, { state: "suppressed", evidence: "Descadastro fictício posterior" }, actor());
     await processCampaign({ orgId, campaignId: saved.id });
-    expect(graph.sendMessage).not.toHaveBeenCalled(); expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("skipped");
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1); expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("sent");
   });
 
 });

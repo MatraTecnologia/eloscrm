@@ -16,7 +16,6 @@ import { BroadcastRecipients } from "@/app/(app)/deals/broadcast-recipients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TemplateFields, templateSupported, templateVariables, templateHeaderFormat, templateButtons } from "./template-fields";
-import { CampaignPermission } from "./campaign-permission";
 import { CampaignProgress, campaignStatus } from "./campaign-progress";
 import { formatCost, categoryLabels, costLabels } from "./cost-format";
 
@@ -34,7 +33,7 @@ export const CampaignPanel = ({ pipeline }: { pipeline: Pipeline }) => {
   const [headerUploadId, setHeaderUploadId] = useState<string | null>(null);
   const [previewInput, setPreviewInput] = useState<CampaignInput | null>(null);
   const [sources, setSources] = useState<Record<string, ParameterSource | "">>({});
-  const [viewing, setViewing] = useState<string | null>(null); const [permissionClient, setPermissionClient] = useState("");
+  const [viewing, setViewing] = useState<string | null>(null);
   const [audienceSource, setAudienceSource] = useState<"crm" | "import">("crm");
   const [importedAudience, setImportedAudience] = useState<ImportedAudience | null>(null);
   const [pendingCreation, setPendingCreation] = useState<Creation | null>(null); const [error, setError] = useState<string | null>(null);
@@ -65,8 +64,6 @@ export const CampaignPanel = ({ pipeline }: { pipeline: Pipeline }) => {
     onSuccess: result => { setViewing(result.id); setPendingCreation(null); setSnapshot(null); setError(null); void qc.invalidateQueries({ queryKey: ["whatsapp-campaigns", org?.id] }); },
     onError: error => { const failure = error as { code?: string; message?: string }; if (["CAMPAIGN_CHANGED", "CAMPAIGN_NO_RECIPIENTS"].includes(failure.code ?? "")) { setPendingCreation(null); setSnapshot(null); } setError(failure.message ?? "Não foi possível confirmar o rascunho. Consulte a mesma solicitação antes de criar outro"); } });
   const busy = targets.isPending || preview.isPending || create.isPending || upload.isPending || sync.isPending; const locked = !!pendingCreation;
-  const selectedClients = [...new Map(rows.filter(row => selected.includes(row.dealId)).map(row => [row.client.id, row.client])).values()];
-  const permission = selectedClients.find(client => client.id === permissionClient);
   const save = () => {
     if (!snapshot || !previewInput) return;
     const request = pendingCreation ?? { ...structuredClone(previewInput), name: name.trim(), previewHash: snapshot.previewHash, idempotencyKey: crypto.randomUUID() };
@@ -86,9 +83,7 @@ export const CampaignPanel = ({ pipeline }: { pipeline: Pipeline }) => {
       <BroadcastFiltersForm pipeline={pipeline} filters={filters} onChange={value => { setFilters(value); setRows([]); setSelected([]); setSnapshot(null); }} />
       <Button variant="outline" onClick={() => { setError(null); targets.mutate(); }}>Buscar negócios</Button>
       {targets.isSuccess && <div className="flex h-80 flex-col"><BroadcastRecipients rows={rows} stages={pipeline.stages} selected={selected} onChange={value => { setSelected(value.slice(0, 200)); setSnapshot(null); }} /></div>}
-      <p className="text-xs text-muted-foreground">{"Selecione até 200 negócios. Identidade oficial e permissão são conferidas no preview; negócios da mesma pessoa são deduplicados."}</p>
-      {!!selectedClients.length && <label className="block text-sm">Permissão de comunicação<select aria-label="Permissão de comunicação" className="mt-1 w-full rounded-md border bg-background p-2 text-sm" value={permissionClient} onChange={event => setPermissionClient(event.target.value)}><option value="">Consultar uma pessoa</option>{selectedClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
-      {permission && <CampaignPermission key={permission.id} clientId={permission.id} name={permission.name} onSaved={() => setSnapshot(null)} />}
+      <p className="text-xs text-muted-foreground">{"Selecione até 200 negócios. A identidade oficial é conferida no preview; negócios da mesma pessoa são deduplicados."}</p>
       </>}
       <label className="block text-sm">Template<select aria-label="Template" className="mt-1 w-full rounded-md border bg-background p-2 text-sm" value={templateId} onChange={event => { setTemplateId(event.target.value); setValues({}); setSources({}); setHeaderFile(null); setHeaderUploadId(null); setSnapshot(null); }}><option value="">Selecione um template aprovado</option>{templates.data?.filter(templateSupported).map(value => <option key={value.id} value={value.id}>{value.name} · {value.language} · {categoryLabels[value.category] ?? "Categoria indisponível"}</option>)}</select></label>
       <div className="flex flex-wrap items-center gap-3"><Button variant="outline" size="sm" disabled={!connectionId || sync.isPending} onClick={() => sync.mutate()}>{sync.isPending ? "Sincronizando…" : "Sincronizar templates"}</Button><Link href="/integracoes/whatsapp?tab=templates" className="text-sm text-primary underline">Gerenciar templates</Link></div>

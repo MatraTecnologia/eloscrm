@@ -31,7 +31,7 @@ const BroadcastsPage = () => {
         <label className="space-y-1 text-sm">Funil para organizar o histórico<select aria-label="Funil do disparo" value={pipeline?.id ?? ""} onChange={event => setPipelineId(event.target.value)} className="block h-10 w-full rounded-md border bg-background px-3"><option value="" disabled>Selecione um funil</option>{pipelines.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="space-y-1 text-sm">Enviar por<select aria-label="Provedor do disparo" value={canManage ? provider : "uazapi"} onChange={event => setProvider(event.target.value as "cloud_api" | "uazapi")} className="block h-10 w-full rounded-md border bg-background px-3">{canManage && <option value="cloud_api">WhatsApp oficial · template aprovado</option>}<option value="uazapi">uazapi · mensagem de texto</option></select></label>
       </div>
-      {!pipeline ? <p className="text-sm text-muted-foreground">Crie um funil para organizar o histórico dos disparos.</p> : canManage && provider === "cloud_api" ? <CampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /> : <UazapiCampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} canManage={canManage} />}
+      {!pipeline ? <p className="text-sm text-muted-foreground">Crie um funil para organizar o histórico dos disparos.</p> : canManage && provider === "cloud_api" ? <CampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /> : <UazapiCampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} />}
     </>}
   </div>;
 };

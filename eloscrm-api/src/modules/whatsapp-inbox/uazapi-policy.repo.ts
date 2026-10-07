@@ -1,7 +1,5 @@
 import { prisma } from "../../lib/prisma.js";
 import { conflict, notFound } from "../../lib/http-error.js";
-import { suppressed } from "../communication-permissions/permissions.repo.js";
-import { phoneKey } from "../../lib/phone.js";
 
 // Compara o DDI inteiro. A única equivalência adicional é o nono dígito de celulares brasileiros.
 export const sameSenderNumber = (official: string | null, ownerJid: string | null) => {
@@ -40,8 +38,6 @@ export const resolveManualRoute = async (orgId: string, conversationId: string) 
   const identities = await prisma.contactIdentity.findMany({ where: { organizationId: orgId, contactId: conversation.messagingContactId, scope: `business:${connection.businessPortfolioId}`, source: "provider", validUntil: null, validFrom: { lte: new Date() }, kind: { in: ["wa_id", "phone"] } }, select: { kind: true, value: true } });
   const identity = identities.find(item => item.kind === "wa_id") ?? identities[0];
   if (!identity || !/^\d{10,15}$/.test(identity.value)) throw conflict("UAZAPI_RECIPIENT_UNAVAILABLE", "Este contato não possui um telefone vigente informado pela Meta; use o canal oficial");
-  const clientId = conversation.clientId ?? conversation.messagingContact?.clientId;
-  if (clientId && await suppressed(orgId, clientId, phoneKey(identity.value))) throw conflict("UAZAPI_RECIPIENT_SUPPRESSED", "Este contato está descadastrado da comunicação");
   return { conversation, connection, instance, destination: identity.value };
 };
 

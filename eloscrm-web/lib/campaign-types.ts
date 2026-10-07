@@ -13,4 +13,3 @@ export type CampaignPreview = {
 };
 export type CampaignSummary = { id: string; name: string; connectionId: string; status: string; createdAt: string };
 export type OfficialCampaign = CampaignSummary & { pipelineId: string; snapshot: CampaignPreview; recipients: { id: string; destination: string | null; clientId: string; clientName: string; dealId: string; status: string; safeError: string | null; errorCode: string | null; errorStage: string | null; attempts: number; startedAt: string | null; completedAt: string | null; commandId: string | null; messageId: string | null; deliveryStatus: string | null; cost: { amount: string | null; currency: string | null; state: string } | null }[] };
-export type CommunicationPermission = { state: "unknown" | "allowed" | "suppressed"; evidence: string | null; revision: number; updatedAt: string | null };

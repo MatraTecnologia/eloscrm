@@ -6,14 +6,12 @@ import { templateSchema } from "../whatsapp-outbound/outbound.schema.js";
 import { mediaTypes, readMedia, type MediaMime } from "../whatsapp-outbound/media.service.js";
 import { buildTemplate } from "../whatsapp-outbound/template.js";
 import { eventHash } from "../whatsapp-official/webhook.schema.js";
-import * as permissions from "../communication-permissions/permissions.repo.js";
 import { CostDecimal } from "../whatsapp-costs/money.js";
 import * as costs from "../whatsapp-costs/costs.repo.js";
 import * as repo from "./campaigns.repo.js";
 import type { CampaignInput } from "./campaigns.schema.js";
-import { phoneKey } from "../../lib/phone.js";
 import { resolveParameters } from "./parameters.js";
-import { importAllowed, importedIdentity } from "../campaign-imports/imports.repo.js";
+import { importedIdentity } from "../campaign-imports/imports.repo.js";
 
 export const preview = async (orgId: string, input: CampaignInput) => {
   const [channel, pipeline] = await Promise.all([outbound.connection(orgId, input.connectionId), deals.findPipeline(orgId, input.pipelineId)]);
@@ -49,8 +47,7 @@ export const preview = async (orgId: string, input: CampaignInput) => {
     const phone = imported.phone!;
     let identity: Awaited<ReturnType<typeof importedIdentity>> | null = null;
     let exclusion: string | null = null;
-    if (!await importAllowed(orgId, phone)) exclusion = "Comunicação descadastrada para este telefone";
-    else if (destinations.has(`import:${phone}`)) exclusion = "Telefone repetido nesta lista";
+    if (destinations.has(`import:${phone}`)) exclusion = "Telefone repetido nesta lista";
     else {
       try { identity = await importedIdentity(channel, phone, imported.name); }
       catch { exclusion = "Identidade do telefone exige revisão"; }
@@ -69,8 +66,7 @@ export const preview = async (orgId: string, input: CampaignInput) => {
     const identity = contact?.identities.find(value => ["wa_id", "bsuid", "parent_bsuid", "phone"].includes(value.kind));
     const destination = identity ? `${identity.scope}:${["phone", "wa_id"].includes(identity.kind) ? "to" : "recipient"}:${identity.value}` : null;
     let exclusion: string | null = null;
-    if (!await permissions.allowed(orgId, deal.client.id, identity && ["wa_id", "phone"].includes(identity.kind) ? phoneKey(identity.value) : null)) exclusion = "Permissão ausente ou comunicação descadastrada";
-    else if (!identity) exclusion = "Sem identidade oficial vigente neste portfolio";
+    if (!identity) exclusion = "Sem identidade oficial vigente neste portfolio";
     else if (used.has(contact!.id) || destinations.has(destination!)) exclusion = "Pessoa já selecionada por outro negócio";
     const resolved = resolveParameters(input, deal, deal.ownerId ? owners.get(deal.ownerId) : undefined);
     let text: string | null = null;

@@ -70,6 +70,17 @@ describe("uazapi como escolha manual no número oficial", () => {
     expect((await app.inject({ method: "POST", url: url(), headers: headers(), payload: payload() })).json().error.code).toBe("UAZAPI_RECIPIENT_UNAVAILABLE");
     expect(remote.send.text).not.toHaveBeenCalled();
   });
+  it("descadastro histórico não bloqueia envio manual pela uazapi", async () => {
+    const client = await prisma.client.create({ data: { organizationId: orgId, name: "Contato fictício", phone: "5543998414904", phoneKey: "4398414904" } });
+    await prisma.messagingContact.update({ where: { id: contactId }, data: { clientId: client.id } });
+    await prisma.conversation.update({ where: { id: conversationId }, data: { clientId: client.id } });
+    const userId = (await prisma.member.findFirstOrThrow({ where: { organizationId: orgId, role: "owner" } })).userId;
+    await prisma.communicationPermission.create({ data: { organizationId: orgId, clientId: client.id, state: "suppressed", phoneKey: client.phoneKey, recordedById: userId, evidence: "Registro histórico desativado" } });
+    expect((await get(orgId, `client:${client.id}`)).channels[0]!.uazapiManual?.allowed).toBe(true);
+    const response = await app.inject({ method: "POST", url: url(), headers: headers(), payload: payload() });
+    expect(response.statusCode).toBe(201);
+    expect(remote.send.text).toHaveBeenCalledTimes(1);
+  });
   it("exige confirmação, rejeita destino do navegador e protege tenant e origem", async () => {
     expect((await app.inject({ method: "POST", url: url(), headers: headers(), payload: { ...payload(), confirmManualException: false } })).statusCode).toBe(422);
     expect((await app.inject({ method: "POST", url: url(), headers: headers(), payload: { ...payload(), number: "5543991112222" } })).statusCode).toBe(422);

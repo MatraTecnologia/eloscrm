@@ -30,9 +30,10 @@ describe("importação de destinatários sem envio real", () => {
     await expect(parseImport("contacts.json", Buffer.alloc(1024 * 1024 + 1))).rejects.toMatchObject({ code: "IMPORT_INVALID" });
     await expect(parseImport("contacts.json", Buffer.from(JSON.stringify(Array.from({ length: 1001 }, () => ({ phone: "5543999990001" })))))).rejects.toMatchObject({ code: "IMPORT_INVALID" });
   });
-  it("revalida autorização, telefone e limite mesmo sem usar a tela de importação", () => {
+  it("revalida telefone e limite sem exigir autorização na importação", () => {
     expect(importedAudienceSchema.safeParse({ recipients: [{ phone: "=123", name: "Pessoa" }], consent: { confirmed: true, evidence: "Teste" } }).success).toBe(false);
-    expect(importedAudienceSchema.safeParse({ recipients: [{ phone: "5543999990001" }], consent: { confirmed: false, evidence: "Teste" } }).success).toBe(false);
+    expect(importedAudienceSchema.safeParse({ recipients: [{ phone: "5543999990001" }], consent: { confirmed: false, evidence: "Teste" } }).success).toBe(true);
+    expect(importedAudienceSchema.safeParse({ recipients: [{ phone: "5543999990001" }] }).success).toBe(true);
     expect(importedAudienceSchema.safeParse({ recipients: Array.from({ length: 201 }, () => ({ phone: "5543999990001" })), consent: { confirmed: true, evidence: "Teste" } }).success).toBe(false);
   });
 });

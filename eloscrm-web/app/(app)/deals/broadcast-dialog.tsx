@@ -38,7 +38,6 @@ import { BroadcastRecipients } from "./broadcast-recipients";
 import { CampaignPanel } from "@/components/whatsapp-official/campaign-panel";
 import { useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useMembers } from "@/lib/queries/members";
-import { CampaignPermission } from "@/components/whatsapp-official/campaign-permission";
 
 const TAB_CLASS = "data-active:text-primary after:bg-primary";
 const STEPS = ["Condições", "Destinatários", "Mensagem"] as const;
@@ -86,9 +85,6 @@ export const BroadcastDialog = ({
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [viewing, setViewing] = useState<string | null>(null);
-  const [permissionClient, setPermissionClient] = useState("");
-  const permissionClients = [...new Map(rows.map(row => [row.client.id, row.client])).values()];
-  const permission = permissionClients.find(client => client.id === permissionClient);
 
   const { data: instance } = useWhatsappInstance();
   const { data: org } = useActiveOrganization(); const { data: session } = useSession(); const { data: members } = useMembers();
@@ -110,7 +106,6 @@ export const BroadcastDialog = ({
     setSelected([]);
     setText("");
     setViewing(null);
-    setPermissionClient("");
   };
 
   const loadRecipients = async () => {
@@ -200,9 +195,6 @@ export const BroadcastDialog = ({
             )}
             {step === 1 && (
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-                <p className="text-xs text-muted-foreground">O disparo exige autorização registrada para o telefone de cada pessoa. Administradores podem registrar a evidência abaixo.</p>
-                {isManager && <label className="block text-sm">Permissão de comunicação<select aria-label="Permissão de comunicação uazapi" className="mt-1 w-full rounded-md border bg-background p-2 text-sm" value={permissionClient} onChange={event => setPermissionClient(event.target.value)}><option value="">Consultar uma pessoa</option>{permissionClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
-                {isManager && permission && <CampaignPermission key={`${org?.id}:${permission.id}`} clientId={permission.id} name={permission.name} onSaved={() => { setSelected([]); void loadRecipients(); }} />}
                 <div className="flex h-64 min-h-64 flex-col">
                 <BroadcastRecipients
                   rows={rows}

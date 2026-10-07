@@ -10,7 +10,6 @@ import { env } from "../src/env.js";
 import { encryptToken, hashToken } from "../src/lib/crypto.js";
 import { enqueue } from "../src/lib/queue.js";
 import { sendText } from "../src/modules/whatsapp/conversations.service.js";
-import * as permissions from "../src/modules/communication-permissions/permissions.repo.js";
 import * as service from "../src/modules/broadcasts/broadcasts.service.js";
 import type { CreateBroadcastInput } from "../src/modules/broadcasts/broadcasts.schema.js";
 
@@ -39,7 +38,6 @@ beforeEach(async () => {
   const dealIds: string[] = [];
   for (const phone of ["5543991112233", "5543992223344"]) {
     const client = await prisma.client.create({ data: { organizationId: orgId, name: "Pessoa fictícia", phone, phoneKey: phone.slice(2, 4) + phone.slice(-8) } });
-    await permissions.save(orgId, client.id, { state: "allowed", evidence: "Permissão fictícia para teste" }, actor());
     const deal = await prisma.deal.create({ data: { organizationId: orgId, pipelineId: pipeline.id, stageId: pipeline.stages[0]!.id, clientId: client.id, title: "Negócio fictício" } });
     dealIds.push(deal.id);
   }
@@ -111,22 +109,22 @@ describe("ciclo persistente de disparos uazapi sem envio real", () => {
   });
   it("envia lista importada sem criar leads ou cards e deduplica os números", async () => {
     const counts = [await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })];
-    const imported: CreateBroadcastInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990001", name: "Pessoa importada" }, { phone: "5543999990001", name: "Pessoa repetida" }], consent: { confirmed: true, evidence: "Autorização fictícia da lista" } } };
+    const imported: CreateBroadcastInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990001", name: "Pessoa importada" }, { phone: "5543999990001", name: "Pessoa repetida" }] } };
     const saved = await service.create(orgId, imported, actor());
     expect(saved.skipped).toBe(1);
     for (const row of saved.recipients) { await releaseSlot(); await service.processRecipient({ recipientId: row.id }); }
     expect(sendText).toHaveBeenCalledTimes(1); expect(vi.mocked(sendText).mock.calls[0]![2].text).toBe("Olá Pessoa");
     expect([await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })]).toEqual(counts);
   });
-  it("protege o upload por sessão e origem e rejeita lista sem autorização", async () => {
+  it("protege o upload por sessão e origem e aceita lista sem autorização", async () => {
     const url = "/v1/broadcasts/imports/preview";
     const payload = { filename: "contacts.csv", content: Buffer.from("phone,name\n5543999990001,Pessoa").toString("base64") };
     expect((await app.inject({ method: "POST", url, payload })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url, headers: { cookie, origin: "https://example.invalid" }, payload })).statusCode).toBe(403);
     const response = await app.inject({ method: "POST", url, headers: { cookie, origin: env.WEB_ORIGIN }, payload });
     expect(response.statusCode).toBe(200); expect(response.json().valid).toBe(1);
-    const invalid = await app.inject({ method: "POST", url: "/v1/broadcasts", headers: { cookie, origin: env.WEB_ORIGIN }, payload: { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990001", name: "Pessoa" }], consent: { confirmed: false, evidence: "Teste" } } } });
-    expect(invalid.statusCode).toBe(422);
+    const imported = await app.inject({ method: "POST", url: "/v1/broadcasts", headers: { cookie, origin: env.WEB_ORIGIN }, payload: { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990001", name: "Pessoa" }] } } });
+    expect(imported.statusCode).toBe(201);
   });
 
 });

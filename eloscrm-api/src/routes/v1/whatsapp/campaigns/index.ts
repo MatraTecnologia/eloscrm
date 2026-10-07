@@ -3,14 +3,13 @@ import type { FastifyInstance } from "fastify";
 import { authGuard } from "../../../../plugins/auth-guard.js";
 import { orgGuard } from "../../../../plugins/org-guard.js";
 import { env } from "../../../../env.js";
-import { forbidden, httpError, notFound } from "../../../../lib/http-error.js";
+import { forbidden, httpError } from "../../../../lib/http-error.js";
 import { actorOf } from "../../../../lib/actor.js";
 import { requireManager } from "../../../../modules/whatsapp-costs/costs.service.js";
 import * as schema from "../../../../modules/whatsapp-campaigns/campaigns.schema.js";
 import * as service from "../../../../modules/whatsapp-campaigns/campaigns.service.js";
 import { preview } from "../../../../modules/whatsapp-campaigns/preview.service.js";
 import { list } from "../../../../modules/whatsapp-campaigns/campaigns.repo.js";
-import * as permissions from "../../../../modules/communication-permissions/permissions.repo.js";
 import { targets } from "../../../../modules/whatsapp-campaigns/targets.service.js";
 import { broadcastFiltersSchema } from "../../../../modules/broadcasts/broadcasts.schema.js";
 import "../../../../modules/whatsapp-campaigns/dispatch.service.js";
@@ -37,12 +36,5 @@ const campaignRoutes = async (app: FastifyInstance) => {
   app.post("/:id/start", options, async request => service.approve(request.orgId!, schema.idSchema.parse(request.params).id, schema.approvalSchema.parse(request.body).previewHash, true, actorOf(request)));
   app.post("/:id/cancel", options, async request => { z.strictObject({}).parse(request.body); return service.cancel(request.orgId!, schema.idSchema.parse(request.params).id, actorOf(request)); });
   for (const action of ["pause", "resume"] as const) app.post(`/:id/${action}`, options, async request => { z.strictObject({}).parse(request.body); return service.changeState(request.orgId!, schema.idSchema.parse(request.params).id, action === "pause" ? "paused" : "running", actorOf(request)); });
-  const clientParams = z.strictObject({ clientId: z.string().min(1).max(128) });
-  app.get("/permissions/:clientId", async request => {
-    const { clientId } = clientParams.parse(request.params);
-    if (!await permissions.client(request.orgId!, clientId)) throw notFound("Lead não encontrado");
-    return await permissions.get(request.orgId!, clientId) ?? { state: "unknown", revision: 0, evidence: null, updatedAt: null };
-  });
-  app.post("/permissions/:clientId", options, async request => permissions.save(request.orgId!, clientParams.parse(request.params).clientId, schema.permissionSchema.parse(request.body), actorOf(request)));
 };
 export default campaignRoutes;

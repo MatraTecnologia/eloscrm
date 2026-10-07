@@ -25,10 +25,8 @@ import type {
 } from "./broadcasts.schema.js";
 import { applyReplyFilter } from "./reply-filter.js";
 import { renderTemplate, templateVarsOf } from "./template.js";
-import { allowed } from "../communication-permissions/permissions.repo.js";
 import { importBroadcastRecipients } from "../campaign-imports/broadcast-audience.service.js";
 import { importedAudienceSchema } from "../campaign-imports/imports.schema.js";
-import { importAllowed } from "../campaign-imports/imports.repo.js";
 
 export const BROADCAST_QUEUE = "broadcast-send";
 
@@ -67,8 +65,8 @@ const resolveTargets = async (orgId: string, pipelineId: string, filters: Previe
 export const preview = async (orgId: string, input: PreviewBroadcastInput) => {
   await requirePipeline(orgId, input.pipelineId);
   const targets = await resolveTargets(orgId, input.pipelineId, input.filters);
-  return Promise.all(targets.map(async ({ deal, ownerName, number }) => {
-    const exclusion = !number ? "Lead sem telefone válido" : !await allowed(orgId, deal.client.id, phoneKey(number)) ? "Permissão ausente ou comunicação descadastrada" : null;
+  return targets.map(({ deal, ownerName, number }) => {
+    const exclusion = !number ? "Lead sem telefone válido" : null;
     return {
       dealId: deal.id,
       title: deal.title,
@@ -82,7 +80,7 @@ export const preview = async (orgId: string, input: PreviewBroadcastInput) => {
       sendable: exclusion === null,
       exclusion,
     };
-  }));
+  });
 };
 
 export const create = async (orgId: string, input: CreateBroadcastInput, actor: Actor) => {
@@ -105,11 +103,8 @@ export const create = async (orgId: string, input: CreateBroadcastInput, actor: 
   const selectedTargets = targets.filter(({ deal }) => selectedDeals.has(deal.id));
   if (selectedTargets.length === 0 && !input.importedAudience) throw httpError(422, "NO_RECIPIENTS", "Nenhum destinatário selecionado");
 
-  const excludedClients = new Set<string>();
-  for (const target of selectedTargets) if (!await allowed(orgId, target.deal.client.id, phoneKey(target.number))) excludedClients.add(target.deal.client.id);
-
   const seen = new Set<string>();
-  const recipients = input.importedAudience ? await importBroadcastRecipients(orgId, input.importedAudience, input.text) : selectedTargets.map(({ deal, ownerName, number }) => {
+  const recipients = input.importedAudience ? importBroadcastRecipients(input.importedAudience, input.text) : selectedTargets.map(({ deal, ownerName, number }) => {
     const key = phoneKey(number);
     const duplicate = !!key && seen.has(key);
     if (key) seen.add(key);
@@ -121,9 +116,7 @@ export const create = async (orgId: string, input: CreateBroadcastInput, actor: 
     clientName: deal.client.name,
     number,
     text,
-    ...(duplicate ? { status: BroadcastRecipientStatus.SKIPPED, error: "Telefone repetido neste disparo", errorCode: "DUPLICATE_DESTINATION", errorStage: "selection" } : excludedClients.has(deal.client.id)
-      ? { status: BroadcastRecipientStatus.SKIPPED, error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" }
-      : number
+    ...(duplicate ? { status: BroadcastRecipientStatus.SKIPPED, error: "Telefone repetido neste disparo", errorCode: "DUPLICATE_DESTINATION", errorStage: "selection" } : number
       ? { status: BroadcastRecipientStatus.PENDING }
       : { status: BroadcastRecipientStatus.SKIPPED, error: "Lead sem telefone válido", errorCode: "INVALID_DESTINATION", errorStage: "selection" }),
   }; });
@@ -226,8 +219,7 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
   let submitting = false;
   try {
   const imported = typeof broadcast.filters === "object" && broadcast.filters && "importedAudience" in broadcast.filters ? importedAudienceSchema.parse(broadcast.filters.importedAudience) : null;
-  const permitted = () => imported ? imported.recipients.some(value => value.phone === recipient.number && `import:${value.phone}` === recipient.dealId) && importAllowed(broadcast.organizationId, recipient.number) : allowed(broadcast.organizationId, recipient.clientId, phoneKey(recipient.number));
-  if (!await permitted()) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" });
+  if (imported && !imported.recipients.some(value => value.phone === recipient.number && `import:${value.phone}` === recipient.dealId)) return settle({ status: "SKIPPED", error: "Destinatário não pertence à lista importada", errorCode: "INVALID_DESTINATION", errorStage: "validation" });
   const instance = await whatsappRepo.findByOrg(broadcast.organizationId);
   if (!instance || instance.status !== UazapiInstanceStatus.connected) {
     return settle({ status: "FAILED", error: "WhatsApp desconectado", errorCode: "INSTANCE_NOT_CONNECTED", errorStage: "connection" });
@@ -261,7 +253,6 @@ export const processRecipient = async ({ recipientId }: { recipientId: string })
       name: broadcast.createdByName,
       source: AuditSource.AUTOMATION,
     };
-    if (!await permitted()) return settle({ status: "SKIPPED", error: "Permissão ausente ou comunicação descadastrada", errorCode: "PERMISSION_DENIED", errorStage: "validation" });
     const current = await repo.findBroadcast(broadcast.organizationId, broadcast.id);
     if (current?.status === "PAUSED") return repo.releaseRecipient(recipient.id);
     if (current?.status !== "RUNNING") return settle({ status: "SKIPPED", error: "Disparo encerrado", errorCode: "BROADCAST_STOPPED", errorStage: "validation" });

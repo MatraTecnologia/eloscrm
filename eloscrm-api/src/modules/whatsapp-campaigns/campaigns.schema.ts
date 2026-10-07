@@ -16,7 +16,6 @@ export const campaignInputSchema = z.strictObject({
 }).refine(value => value.importedAudience ? value.dealIds.length === 0 : value.dealIds.length > 0, "Selecione negócios ou uma lista importada, sem misturar os públicos");
 export const createSchema = campaignInputSchema.safeExtend({ name: z.string().trim().min(1).max(120), idempotencyKey: z.string().uuid(), previewHash: z.string().regex(/^[a-f0-9]{64}$/) });
 export const approvalSchema = z.strictObject({ previewHash: z.string().regex(/^[a-f0-9]{64}$/) });
-export const permissionSchema = z.strictObject({ state: z.enum(["allowed", "suppressed"]), evidence: z.string().trim().min(3).max(500) });
 export const idSchema = z.strictObject({ id: z.string().uuid() });
 export type CampaignInput = z.infer<typeof campaignInputSchema>;
 export type CreateInput = z.infer<typeof createSchema>;

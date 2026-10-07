@@ -17,9 +17,8 @@ import { BroadcastFiltersForm } from "../deals/broadcast-filters";
 import { BroadcastRecipients } from "../deals/broadcast-recipients";
 import { BroadcastMessage } from "../deals/broadcast-message";
 import { BroadcastProgress, BroadcastStatusBadge } from "../deals/broadcast-progress";
-import { CampaignPermission } from "@/components/whatsapp-official/campaign-permission";
 
-export const UazapiCampaignPanel = ({ pipeline, canManage }: { pipeline: Pipeline; canManage: boolean }) => {
+export const UazapiCampaignPanel = ({ pipeline }: { pipeline: Pipeline }) => {
   const instance = useWhatsappInstance();
   const history = useBroadcasts(pipeline.id);
   const preview = usePreviewBroadcast();
@@ -32,7 +31,6 @@ export const UazapiCampaignPanel = ({ pipeline, canManage }: { pipeline: Pipelin
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [viewing, setViewing] = useState<string | null>(null);
-  const [permissionClient, setPermissionClient] = useState("");
   const [sampleId, setSampleId] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
@@ -40,8 +38,6 @@ export const UazapiCampaignPanel = ({ pipeline, canManage }: { pipeline: Pipelin
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const connected = instance.data?.status === "connected";
   const selectedRows = rows.filter(row => selected.includes(row.dealId));
-  const clients = [...new Map(rows.map(row => [row.client.id, row.client])).values()];
-  const permission = clients.find(client => client.id === permissionClient);
   const sample = selectedRows.find(row => row.dealId === sampleId) ?? selectedRows[0] ?? null;
   const recipientCount = audienceSource === "import" ? importedCount : selectedRows.length;
   const importedSample: BroadcastPreviewRow | null = importedAudience?.recipients[0] ? { dealId: "import", title: "Lista importada", value: null, stageId: "", propertyTitle: null, ownerName: null, tags: [], client: { id: "", name: importedAudience.recipients[0].name, phone: importedAudience.recipients[0].phone, temperature: "FRIO" }, sendable: true, exclusion: null } : null;
@@ -74,9 +70,7 @@ export const UazapiCampaignPanel = ({ pipeline, canManage }: { pipeline: Pipelin
     <fieldset disabled={busy || !!pendingKey} className="min-w-0 space-y-5">
       <section className="space-y-3"><h3 className="font-medium">Público</h3><label className="block text-sm">Origem dos destinatários<select aria-label="Origem dos destinatários uazapi" value={audienceSource} onChange={event => { setAudienceSource(event.target.value as "crm" | "import"); setImportedAudience(null); setImportedCount(0); setSelected([]); }} className="mt-1 w-full rounded-md border bg-background p-2"><option value="crm">Negócios do CRM</option><option value="import">Importar arquivo</option></select></label>{audienceSource === "import" ? <RecipientImport onChange={(value, count) => { setImportedAudience(value); setImportedCount(count); }} /> : <><BroadcastFiltersForm pipeline={pipeline} filters={filters} onChange={value => { setFilters(value); setRows([]); setSelected([]); }} /><Button variant="outline" onClick={load}>{preview.isPending ? "Buscando…" : "Buscar destinatários"}</Button>
         {preview.isSuccess && <div className="flex h-80 flex-col"><BroadcastRecipients rows={rows} stages={pipeline.stages} selected={selected} onChange={setSelected} /></div>}
-        <p className="text-xs text-muted-foreground">Até 200 negócios por disparo. Telefones repetidos recebem uma única mensagem. A permissão de comunicação é conferida novamente antes do envio.</p>
-        {canManage && !!clients.length && <label className="block space-y-1 text-sm">Permissão de comunicação<select aria-label="Pessoa para consultar permissão uazapi" value={permissionClient} onChange={event => setPermissionClient(event.target.value)} className="block h-9 w-full rounded-md border bg-background px-2"><option value="">Consultar uma pessoa</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
-        {canManage && permission && <CampaignPermission key={permission.id} clientId={permission.id} name={permission.name} onSaved={() => { setSelected([]); void load(); }} />}
+        <p className="text-xs text-muted-foreground">Até 200 negócios por disparo. Telefones repetidos recebem uma única mensagem.</p>
         </>}
       </section>
       <section className="space-y-3 border-t pt-5">
@@ -93,7 +87,7 @@ export const UazapiCampaignPanel = ({ pipeline, canManage }: { pipeline: Pipelin
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Confirmar disparo pela uazapi?</AlertDialogTitle>
-          <AlertDialogDescription>{`Serão processados ${recipientCount} destinatários pelo número ${instance.data?.ownerJid?.split("@")[0] ?? instance.data?.name}. Telefones repetidos e pessoas sem permissão serão excluídos. Os envios ocorrem com intervalo; você poderá cancelar o restante pelo acompanhamento.`}</AlertDialogDescription>
+          <AlertDialogDescription>{`Serão processados ${recipientCount} destinatários pelo número ${instance.data?.ownerJid?.split("@")[0] ?? instance.data?.name}. Telefones repetidos serão excluídos. Os envios ocorrem com intervalo; você poderá cancelar o restante pelo acompanhamento.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={create.isPending}>Voltar</AlertDialogCancel>

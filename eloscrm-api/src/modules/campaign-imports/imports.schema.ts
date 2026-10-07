@@ -7,7 +7,7 @@ export const normalizePhone = (value: string) => {
 };
 export const importedAudienceSchema = z.strictObject({
   recipients: z.array(z.strictObject({ phone: z.string().min(1).max(40).transform(normalizePhone).refine(value => value !== null, "Telefone inválido"), name: z.string().trim().max(120).default("") })).min(1).max(200),
-  consent: z.strictObject({ confirmed: z.literal(true), evidence: z.string().trim().min(3).max(500) }),
+  consent: z.strictObject({ confirmed: z.boolean(), evidence: z.string().trim().max(500) }).optional(),
 });
 export type ImportedAudience = z.infer<typeof importedAudienceSchema>;
 export const importFileSchema = z.strictObject({ filename: z.string().min(1).max(200), content: z.string().min(1).max(1400000).regex(/^[A-Za-z0-9+/]*={0,2}$/) });

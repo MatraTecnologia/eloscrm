@@ -5,22 +5,6 @@ import type { Actor } from "../../lib/actor.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 
 export const client = (orgId: string, clientId: string, db: Prisma.TransactionClient = prisma) => db.client.findFirst({ where: { organizationId: orgId, id: clientId }, select: { id: true, phoneKey: true, communicationPermission: { select: { state: true, revision: true, phoneKey: true } } } });
-export const suppressed = async (orgId: string, clientId: string, recipientPhoneKey?: string | null, db: Prisma.TransactionClient = prisma) => {
-  const current = await client(orgId, clientId, db);
-  if (!current) return true;
-  const keys = [...new Set([current.phoneKey, recipientPhoneKey].filter((key): key is string => Boolean(key)))];
-  if (await db.communicationPermission.findFirst({ where: { organizationId: orgId, state: "suppressed", OR: [{ clientId }, { phoneKey: { in: keys } }, { client: { organizationId: orgId, phoneKey: { in: keys } } }] }, select: { id: true } })) return true;
-  // Mudar o telefone do cadastro não revoga o descadastro já registrado para o número anterior.
-  for (const key of keys) {
-    const latest = await db.communicationPermissionRevision.findFirst({ where: { organizationId: orgId, phoneKey: key }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { state: true } });
-    if (latest?.state === "suppressed") return true;
-  }
-  return false;
-};
-export const allowed = async (orgId: string, clientId: string, recipientPhoneKey?: string | null, db: Prisma.TransactionClient = prisma) => {
-  const current = await client(orgId, clientId, db); const permission = current?.communicationPermission;
-  return permission?.state === "allowed" && permission.phoneKey === current?.phoneKey && (!recipientPhoneKey || permission.phoneKey === recipientPhoneKey) && !await suppressed(orgId, clientId, recipientPhoneKey, db);
-};
 export const get = (orgId: string, clientId: string) => prisma.communicationPermission.findFirst({ where: { organizationId: orgId, clientId }, select: { state: true, evidence: true, revision: true, updatedAt: true } });
 export const save = (orgId: string, clientId: string, input: { state: string; evidence: string }, actor: Actor) => prisma.$transaction(async tx => {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`permissions:${orgId}`}, 0))`;
