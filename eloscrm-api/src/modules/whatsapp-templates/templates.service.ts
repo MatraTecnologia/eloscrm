@@ -16,7 +16,9 @@ const providerError = (error: unknown): never => {
 };
 export const create = async (orgId: string, connectionId: string, userId: string, input: unknown) => {
   await requireManager(orgId, userId);
-  const data = createTemplateSchema.parse(input);
+  const parsed = createTemplateSchema.safeParse(input);
+  if (!parsed.success) throw httpError(422, "OFFICIAL_TEMPLATE_INVALID", parsed.error.issues.find(issue => issue.code === "custom")?.message ?? "Confira o nome, idioma, categoria, limites de texto e exemplos do template");
+  const data = parsed.data;
   const credentials = await getOfficialCredentials(orgId, connectionId);
   const components: Record<string, unknown>[] = [
     ...(data.header ? [{ type: "HEADER", format: "TEXT", text: data.header }] : []),

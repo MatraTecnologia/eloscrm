@@ -39,8 +39,15 @@ describe("gerenciamento de templates", () => {
     expect(saved.status).toBe("PENDING");
     expect(response.payload).not.toContain("accessToken");
   });
-  it.each([{ ...draft, extra: true }, { ...draft, name: "Nome inválido" }, { ...draft, examples: [] }, { ...draft, body: "Olá {{2}}" }, { ...draft, category: "AUTHENTICATION" }])("rejeita dados inválidos antes de chamar a Meta", async payload => {
+  it.each([{ ...draft, extra: true }, { ...draft, name: "Nome inválido" }, { ...draft, examples: [] }, { ...draft, body: "Olá {{2}}" }, { ...draft, category: "AUTHENTICATION" }, { ...draft, body: "Olá {{01}}, sua visita está confirmada." }, { ...draft, body: "Olá {{2}}, sua visita {{1}} está confirmada.", examples: ["Maria", "amanhã"] }, { ...draft, body: "{{1}}, sua visita está confirmada." }, { ...draft, body: "Sua visita está confirmada, {{1}}" }, { ...draft, body: "Sua visita está confirmada, {{1}}   " }, { ...draft, body: "Olá {{nome}}, sua visita está confirmada." }])("rejeita dados inválidos antes de chamar a Meta", async payload => {
     expect((await app.inject({ method: "POST", url: url(), headers: headers(), payload })).statusCode).toBe(422);
+    expect(graph.createTemplate).not.toHaveBeenCalled();
+  });
+  it("informa o erro de variável sem devolver o conteúdo da mensagem", async () => {
+    const response = await app.inject({ method: "POST", url: url(), headers: headers(), payload: { ...draft, body: "Sua visita está confirmada, {{1}}" } });
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error).toEqual({ code: "OFFICIAL_TEMPLATE_INVALID", message: "A mensagem não pode começar nem terminar com uma variável; inclua texto fixo antes e depois" });
+    expect(response.payload).not.toContain("Sua visita está confirmada");
     expect(graph.createTemplate).not.toHaveBeenCalled();
   });
   it("bloqueia corretores e conexões de outra imobiliária", async () => {
