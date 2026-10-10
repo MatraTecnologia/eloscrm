@@ -13,6 +13,7 @@ export type SendInput = z.infer<typeof sendSchema>;
 export const templateSchema = z.looseObject({
   id: z.string().regex(/^\d+$/), name: z.string().min(1).max(512), language: z.string().min(1).max(32), category: z.string().max(64), status: z.string().max(64),
   parameter_format: z.enum(["NAMED", "POSITIONAL"]).optional(),
+  rejected_reason: z.string().max(4096).nullish(),
   components: z.array(z.looseObject({ type: z.string(), format: z.string().optional(), text: z.string().optional(), buttons: z.array(z.looseObject({ type: z.string(), url: z.string().optional() })).optional() })).max(20),
 });
 export type TemplateDefinition = z.infer<typeof templateSchema>;

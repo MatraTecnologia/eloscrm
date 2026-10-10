@@ -17,6 +17,13 @@ export const resolveConnection = (wabaId: string, phoneNumberId?: string) => pho
   ? prisma.channelConnection.findFirst({ where: { provider: "cloud_api", wabaId, phoneNumberId } })
   : Promise.resolve(null);
 
+// Eventos da conta não possuem phone_number_id; todos os vínculos autorizados da WABA recebem o estado.
+export const templateConnections = (wabaId: string, organizationId?: string | null) => prisma.channelConnection.findMany({
+  where: { provider: "cloud_api", wabaId, status: { not: "disabled" }, ...(organizationId ? { organizationId } : {}) },
+  select: { id: true, organizationId: true },
+  distinct: ["organizationId"], orderBy: { createdAt: "asc" },
+});
+
 export const capture = async (body: unknown, receivedAt: Date) => {
   const envelope = envelopeSchema.parse(body);
   const rows: Prisma.OfficialWebhookEventCreateManyInput[] = [];
@@ -24,12 +31,14 @@ export const capture = async (body: unknown, receivedAt: Date) => {
     for (const change of entry.changes) {
       const metadata = objectSchema.safeParse(change.value.metadata).data ?? {};
       const phoneNumberId = stringOf(metadata.phone_number_id);
-      const connection = await resolveConnection(entry.id, phoneNumberId);
+      const accountConnections = change.field === "message_template_status_update" ? await templateConnections(entry.id) : [];
+      const connection = change.field === "message_template_status_update" ? (accountConnections.length === 1 ? accountConnections[0] : null) : await resolveConnection(entry.id, phoneNumberId);
       rows.push({
-        dedupKey: eventHash({ wabaId: entry.id, field: change.field, value: change.value }),
+        dedupKey: eventHash({ wabaId: entry.id, field: change.field, value: change.value, ...(change.field === "message_template_status_update" ? { time: entry.time ?? null } : {}) }),
         wabaId: entry.id, phoneNumberId, field: change.field, payload: change.value as Prisma.InputJsonObject,
         organizationId: connection?.organizationId, connectionId: connection?.id,
-        status: connection ? "pending" : "unresolved", receivedAt, nextAttemptAt: receivedAt,
+        status: connection || accountConnections.length ? "pending" : "unresolved", receivedAt, nextAttemptAt: receivedAt,
+        occurredAt: entry.time === undefined ? null : new Date(entry.time * 1000),
       });
     }
   }

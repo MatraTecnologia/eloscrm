@@ -5,10 +5,13 @@ import { getOfficialCredentials } from "../channel-connections/channel-connectio
 import { eventHash } from "../whatsapp-official/webhook.schema.js";
 import * as graph from "../../lib/whatsapp-official/graph.js";
 import * as repo from "./outbound.repo.js";
-import { sendSchema, templateSchema, sendResponseSchema, type SendInput } from "./outbound.schema.js";
+import { sendSchema, templateSchema, sendResponseSchema, type SendInput, type TemplateDefinition } from "./outbound.schema.js";
 import { buildTemplate } from "./template.js";
 import { mediaTypes, readMedia, type MediaMime } from "./media.service.js";
 import { checkCampaign } from "../whatsapp-campaigns/gate.service.js";
+
+// Motivos de revisão não alteram o conteúdo; POSITIONAL é o formato padrão da Meta.
+const templateHash = (definition: TemplateDefinition) => eventHash({ ...definition, parameter_format: definition.parameter_format ?? "POSITIONAL", rejected_reason: undefined });
 
 const prepare = async (orgId: string, connectionId: string, input: SendInput, userId: string, campaignRecipientId?: string | null) => {
   const credentials = await getOfficialCredentials(orgId, connectionId);
@@ -83,9 +86,10 @@ export const createSend = async (orgId: string, connectionId: string, raw: unkno
 };
 
 export const syncTemplates = async (orgId: string, connectionId: string) => {
+  const startedAt = new Date();
   const credentials = await getOfficialCredentials(orgId, connectionId);
   const definitions = (await graph.readTemplates(credentials.accessToken, credentials.wabaId!)).map(value => templateSchema.parse(value));
-  await repo.saveTemplates(orgId, credentials.wabaId!, definitions);
+  await repo.saveTemplates(orgId, credentials.wabaId!, definitions, startedAt);
   return repo.listTemplates(orgId, credentials.wabaId!);
 };
 export const listTemplates = async (orgId: string, connectionId: string) => {
@@ -109,7 +113,7 @@ export const executeSend = async (orgId: string, id: string) => {
       const snapshot = templateSchema.parse(prepared.payload.templateSnapshot);
       const definitions = (await graph.readTemplates(prepared.credentials.accessToken, prepared.credentials.wabaId!, snapshot.name)).map(value => templateSchema.parse(value));
       const current = definitions.find(definition => definition.id === snapshot.id && definition.language === snapshot.language);
-      if (!current || current.status !== "APPROVED" || eventHash(current) !== eventHash(snapshot)) throw httpError(422, "OFFICIAL_TEMPLATE_CHANGED", "O template mudou ou perdeu a aprovação; sincronize e prepare um novo envio");
+      if (!current || current.status !== "APPROVED" || templateHash(current) !== templateHash(snapshot)) throw httpError(422, "OFFICIAL_TEMPLATE_CHANGED", "O template mudou ou perdeu a aprovação; sincronize e prepare um novo envio");
     }
     const payload = { ...prepared.payload };
     delete payload.templateSnapshot;

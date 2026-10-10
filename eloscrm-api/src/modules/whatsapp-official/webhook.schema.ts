@@ -6,6 +6,7 @@ export const envelopeSchema = z.looseObject({
   object: z.literal("whatsapp_business_account"),
   entry: z.array(z.looseObject({
     id: z.string().regex(/^\d{1,40}$/),
+    time: z.number().int().nonnegative().max(253402300799).optional(),
     changes: z.array(z.looseObject({ field: z.string().min(1).max(100), value: objectSchema })).min(1).max(1000),
   })).min(1).max(100),
 });

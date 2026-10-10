@@ -893,6 +893,7 @@ model OfficialWebhookEvent {
   receivedAt DateTime @default(now())
   processedAt DateTime?
   payloadPurgedAt DateTime?
+  occurredAt DateTime?
   updatedAt DateTime @updatedAt
 
   @@index([status, nextAttemptAt])
@@ -1252,6 +1253,11 @@ model OfficialTemplate {
   status String
   definition Json
   syncedAt DateTime @default(now())
+  statusUpdatedAt DateTime?
+  statusEventAt DateTime?
+  rejectionReason String?
+  rejectionDetail String?
+  rejectionRecommendation String?
   @@unique([organizationId, wabaId, externalId])
   @@index([organizationId, wabaId, name, language])
 }

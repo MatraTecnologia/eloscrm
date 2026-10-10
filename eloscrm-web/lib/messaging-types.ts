@@ -16,6 +16,7 @@ export type InboxMessage = WhatsappMessage & {
 };
 export type OfficialTemplate = {
   id: string; name: string; language: string; category: string; status: string; syncedAt: string;
+  statusUpdatedAt?: string | null; rejectionReason?: string | null; rejectionDetail?: string | null; rejectionRecommendation?: string | null;
   definition: { parameter_format?: "NAMED" | "POSITIONAL"; components: { type: string; format?: string; text?: string; buttons?: { type: string; url?: string; text?: string }[] }[] };
 };
 export type OfficialSendInput = { idempotencyKey: string; identityId: string; quotedMessageId?: string } & (

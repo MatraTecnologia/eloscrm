@@ -15,14 +15,23 @@ export const conversation = (orgId: string, connectionId: string, contactId: str
 export const quoted = (orgId: string, id: string) => prisma.whatsappMessage.findFirst({ where: { organizationId: orgId, id } });
 export const membership = (orgId: string, userId: string) => prisma.member.findFirst({ where: { organizationId: orgId, userId }, select: { id: true } });
 export const template = (orgId: string, wabaId: string, id: string) => prisma.officialTemplate.findFirst({ where: { organizationId: orgId, wabaId, id } });
-export const listTemplates = (orgId: string, wabaId: string) => prisma.officialTemplate.findMany({ where: { organizationId: orgId, wabaId }, orderBy: [{ name: "asc" }, { language: "asc" }], select: { id: true, name: true, language: true, category: true, status: true, definition: true, syncedAt: true } });
-export const saveTemplates = (orgId: string, wabaId: string, definitions: TemplateDefinition[]) => prisma.$transaction(async tx => {
-  await tx.officialTemplate.updateMany({ where: { organizationId: orgId, wabaId }, data: { status: "MISSING" } });
-  for (const definition of definitions) await tx.officialTemplate.upsert({
+export const listTemplates = (orgId: string, wabaId: string) => prisma.officialTemplate.findMany({ where: { organizationId: orgId, wabaId }, orderBy: [{ name: "asc" }, { language: "asc" }], select: { id: true, name: true, language: true, category: true, status: true, definition: true, syncedAt: true, statusUpdatedAt: true, rejectionReason: true, rejectionDetail: true, rejectionRecommendation: true } });
+export const saveTemplates = (orgId: string, wabaId: string, definitions: TemplateDefinition[], startedAt = new Date()) => prisma.$transaction(async tx => {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-templates:${orgId}:${wabaId}`}, 0))::text`;
+  await tx.officialTemplate.updateMany({ where: { organizationId: orgId, wabaId, OR: [{ statusUpdatedAt: null }, { statusUpdatedAt: { lte: startedAt } }] }, data: { status: "MISSING" } });
+  for (const definition of definitions) {
+    const previous = await tx.officialTemplate.findFirst({ where: { organizationId: orgId, wabaId, externalId: definition.id } });
+    if (previous?.statusUpdatedAt && previous.statusUpdatedAt > startedAt) continue;
+    const rejected = definition.status === "REJECTED";
+    const rejectionReason = rejected ? (definition.rejected_reason && definition.rejected_reason !== "NONE" ? definition.rejected_reason : previous?.rejectionReason ?? null) : null;
+    const sameRejection = rejected && rejectionReason === previous?.rejectionReason;
+    const review = { statusUpdatedAt: startedAt, rejectionReason, rejectionDetail: sameRejection ? previous?.rejectionDetail ?? null : null, rejectionRecommendation: sameRejection ? previous?.rejectionRecommendation ?? null : null };
+    await tx.officialTemplate.upsert({
     where: { organizationId_wabaId_externalId: { organizationId: orgId, wabaId, externalId: definition.id } },
-    create: { organizationId: orgId, wabaId, externalId: definition.id, name: definition.name, language: definition.language, category: definition.category, status: definition.status, definition: definition as Prisma.InputJsonObject },
-    update: { name: definition.name, language: definition.language, category: definition.category, status: definition.status, definition: definition as Prisma.InputJsonObject, syncedAt: new Date() },
-  });
+    create: { organizationId: orgId, wabaId, externalId: definition.id, name: definition.name, language: definition.language, category: definition.category, status: definition.status, definition: definition as Prisma.InputJsonObject, ...review },
+    update: { name: definition.name, language: definition.language, category: definition.category, status: definition.status, definition: definition as Prisma.InputJsonObject, syncedAt: new Date(), ...review },
+    });
+  }
 }, { timeout: 30_000 });
 export const upload = (orgId: string, connectionId: string, id: string) => prisma.officialUpload.findFirst({ where: { organizationId: orgId, connectionId, id } });
 export const uploadKeys = (orgId: string) => prisma.officialUpload.findMany({ where: { organizationId: orgId }, select: { key: true } });

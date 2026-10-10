@@ -6,6 +6,7 @@ import type { Actor } from "../../lib/actor.js";
 import * as repo from "./webhook.repo.js";
 import { processChange, safeErrorCode } from "./webhook-processing.service.js";
 import { refreshSyncProgress } from "../whatsapp-onboarding/sync-request.service.js";
+import { processTemplateStatus } from "../whatsapp-templates/template-status.service.js";
 
 const WEBHOOK_QUEUE = "whatsapp-official-webhook";
 
@@ -14,6 +15,13 @@ export const processEvent = async (id: string) => {
   const event = await repo.claim(id, leaseToken, new Date());
   if (!event) return;
   try {
+    if (event.field === "message_template_status_update") {
+      const connections = await repo.templateConnections(event.wabaId, event.organizationId);
+      if (!connections.length) { await repo.finish(id, leaseToken, "unresolved", "OFFICIAL_CONNECTION_UNRESOLVED"); return; }
+      for (const connection of connections) await processTemplateStatus(event, connection);
+      await repo.finish(id, leaseToken, "processed", undefined, { results: [{ path: "template", status: "processed" }], syncDetails: [] });
+      return;
+    }
     const connection = await repo.resolveConnection(event.wabaId, event.phoneNumberId ?? undefined);
     if (!connection || (event.organizationId && event.organizationId !== connection.organizationId) || (event.connectionId && event.connectionId !== connection.id)) {
       await repo.finish(id, leaseToken, "unresolved", "OFFICIAL_CONNECTION_UNRESOLVED");

@@ -29,6 +29,7 @@ export const useInboxRefresh = () => {
 export const useSendTemplates = (connectionId: string | null) => {
   const { data: org } = useActiveOrganization();
   return useQuery({ queryKey: ["whatsapp-inbox", org?.id, "templates", connectionId], enabled: !!org?.id && !!connectionId,
+    refetchInterval: 10_000,
     queryFn: async () => (await api.get<OfficialTemplate[]>(`/whatsapp/outbound/connections/${connectionId}/templates`)).data,
   });
 };

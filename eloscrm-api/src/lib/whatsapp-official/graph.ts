@@ -40,7 +40,7 @@ export const readTemplates = async (token: string, wabaId: string, name?: string
   const entries: unknown[] = [];
   let after: string | undefined;
   for (let index = 0; index < 20; index++) {
-    const page = await requestGraph(`${wabaId}/message_templates`, token, { fields: "id,name,language,category,status,parameter_format,components", limit: "100", ...(name ? { name } : {}), ...(after ? { after } : {}) });
+    const page = await requestGraph(`${wabaId}/message_templates`, token, { fields: "id,name,language,category,status,parameter_format,components,rejected_reason", limit: "100", ...(name ? { name } : {}), ...(after ? { after } : {}) });
     if (!page || typeof page !== "object" || !("data" in page) || !Array.isArray(page.data)) throw new OfficialGraphError(null, false);
     entries.push(...page.data);
     const paging = "paging" in page ? page.paging : null;
