@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export type TemplateDraft = { name: string; language: string; category: string; header: string; body: string; footer: string; examples: string[] };
 export const TemplateEditor = ({ busy, onSave, onCancel }: { busy: boolean; onSave: (draft: TemplateDraft) => void; onCancel: () => void }) => {
-  const [draft, setDraft] = useState<TemplateDraft>({ name: "", language: "pt_BR", category: "UTILITY", header: "", body: "", footer: "", examples: [] });
+  const [draft, setDraft] = useState<TemplateDraft>({ name: "", language: "pt_BR", category: "MARKETING", header: "", body: "", footer: "", examples: [] });
   const placeholders = [...new Set([...draft.body.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]))];
   const variables = [...new Set(placeholders.map(Number))];
   const body = draft.body.trim();
