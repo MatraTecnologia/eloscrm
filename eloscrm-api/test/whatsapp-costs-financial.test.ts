@@ -106,7 +106,8 @@ describe("financeiro oficial declarado e recortes locais", () => {
   it("mercado declarado permite país explícito em BSUID sem inferir seu conteúdo", async () => {
     const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, displayName: "Contato de teste" } });
     const identity = await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, source: "provider", kind: "bsuid", scope: `business:${channel.businessPortfolioId}`, value: `BR.${randomUUID()}`, validFrom: new Date("2026-10-01T00:00:00.000Z") } });
-    await service.addRate(orgId, { ...rate, category: "SERVICE" }, actorId);
+    // o preview cota o envio de agora: a tarifa precisa valer hoje, não até uma data fixa que vence
+    await service.addRate(orgId, { ...rate, category: "SERVICE", validUntil: new Date(Date.now() + 365 * 864e5).toISOString() }, actorId);
     expect((await service.preview(orgId, { connectionId: channel.id, identityId: identity.id, type: "text" })).state).toBe("missing_country");
     await service.setRecipientCountry(orgId, { connectionId: channel.id, identityId: identity.id, country: "US" });
     expect((await service.preview(orgId, { connectionId: channel.id, identityId: identity.id, type: "text" })).amount).toBe(rate.unitRate);

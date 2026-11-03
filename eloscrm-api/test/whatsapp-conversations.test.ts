@@ -705,7 +705,7 @@ describe("ações da conversa", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("marcar como lida e ingerir mensagem recebida não geram evento de auditoria (D7)", async () => {
+  it("marcar como lida e webhook de mensagem da uazapi (descartada) não geram evento de auditoria (D7)", async () => {
     const antes = await prisma.auditEvent.count({ where: { organizationId: orgId } });
 
     await app.inject({
@@ -751,9 +751,11 @@ describe("ações da conversa", () => {
       },
     });
     expect(res.statusCode).toBe(200);
+    // desde cf1424f a uazapi não ingere "messages": o webhook responde 200 e descarta
+    // (test/whatsapp-ingest.test.ts); a ingestão recebida agora é a do canal oficial
     expect(
       await prisma.whatsappMessage.findFirst({ where: { conversationId, text: "mais uma mensagem" } }),
-    ).not.toBeNull();
+    ).toBeNull();
 
     const depois = await prisma.auditEvent.count({ where: { organizationId: orgId } });
     expect(depois).toBe(antes);

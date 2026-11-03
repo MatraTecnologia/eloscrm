@@ -22,10 +22,11 @@ export const legacyEligibility = async (orgId: string, instanceId: string) => {
 
 export const requireLegacyEligibility = async (orgId: string, conversationId: string) => {
   const conversation = await prisma.conversation.findFirst({ where: { organizationId: orgId, id: conversationId }, select: { instanceId: true, instance: { select: { status: true, remoteDeletedAt: true } } } });
-  if (!conversation) throw notFound("Conversa não encontrada nesta imobiliária");
+  // conversa oficial não tem instância: para esta rota ela não existe, como em `conversationForSending`
+  if (!conversation?.instanceId) throw notFound("Conversa uazapi não encontrada");
   if (conversation.instance?.remoteDeletedAt) throw conflict("INSTANCE_REMOTE_DELETED", "A conexão de WhatsApp não existe mais no servidor");
   if (conversation.instance && conversation.instance.status !== "connected") throw conflict("INSTANCE_NOT_CONNECTED", "Conecte o WhatsApp antes de enviar mensagens");
-  if (!conversation.instanceId || !await legacyEligibility(orgId, conversation.instanceId)) throw conflict("UAZAPI_NUMBER_MISMATCH", "Na conversa, a uazapi deve usar o mesmo número do WhatsApp oficial conectado em Coexistence. Use Disparos para números separados.");
+  if (!await legacyEligibility(orgId, conversation.instanceId)) throw conflict("UAZAPI_NUMBER_MISMATCH", "Na conversa, a uazapi deve usar o mesmo número do WhatsApp oficial conectado em Coexistence. Use Disparos para números separados.");
 };
 
 export const resolveManualRoute = async (orgId: string, conversationId: string) => {

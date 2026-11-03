@@ -143,7 +143,8 @@ describe("custos oficiais, sem envios reais", () => {
   it("preview resolve categoria e identidade no servidor, sem conceder gratuidade pela janela", async () => {
     const contactId = (await prisma.conversation.findFirstOrThrow({ where: { id: conversationId, organizationId: orgId } })).messagingContactId!;
     const identity = await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, contactId, kind: { in: ["phone", "wa_id"] } } });
-    await costs.addRate(orgId, { ...rate, category: "SERVICE" }, actorId);
+    // o preview cota o envio de agora: a tarifa precisa valer hoje, não até uma data fixa que vence
+    await costs.addRate(orgId, { ...rate, category: "SERVICE", validUntil: new Date(Date.now() + 365 * 864e5).toISOString() }, actorId);
     const preview = await costs.preview(orgId, { connectionId: channel.id, identityId: identity.id, type: "text" });
     expect(preview).toMatchObject({ amount: rate.unitRate, state: "estimated_base", category: "SERVICE" });
     await expect(costs.preview(foreignOrg, { connectionId: channel.id, identityId: identity.id, type: "text" })).rejects.toMatchObject({ statusCode: 404 });
