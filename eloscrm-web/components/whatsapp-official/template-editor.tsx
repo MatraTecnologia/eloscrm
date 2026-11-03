@@ -5,7 +5,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 export type TemplateDraft = { name: string; language: string; category: string; header: string; body: string; footer: string; examples: string[] };
-export const TemplateEditor = ({ busy, onSave, onCancel }: { busy: boolean; onSave: (draft: TemplateDraft) => void; onCancel: () => void }) => {
+// minúsculas, sem acento; espaço e qualquer outro caractere inválido viram "_"
+const normalizeTemplateName = (value: string) => value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9_]+/g, "_");
+
+export const TemplateEditor =({ busy, onSave, onCancel }: { busy: boolean; onSave: (draft: TemplateDraft) => void; onCancel: () => void }) => {
   const [draft, setDraft] = useState<TemplateDraft>({ name: "", language: "pt_BR", category: "MARKETING", header: "", body: "", footer: "", examples: [] });
   const placeholders = [...new Set([...draft.body.matchAll(/\{\{(\d+)\}\}/g)].map(match => match[1]))];
   const variables = [...new Set(placeholders.map(Number))];
@@ -24,7 +27,7 @@ export const TemplateEditor = ({ busy, onSave, onCancel }: { busy: boolean; onSa
   return <form className="grid gap-6 rounded-lg border p-4 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={event => { event.preventDefault(); if (!invalid && !busy) onSave({ ...draft, examples: draft.examples.slice(0, variables.length) }); }}>
     <fieldset disabled={busy} className="min-w-0 space-y-4">
       <legend className="mb-3 font-medium">Novo template de texto</legend>
-      <label className="block space-y-1 text-sm">Nome<Input value={draft.name} maxLength={512} placeholder="confirmacao_visita" onChange={event => setDraft({ ...draft, name: event.target.value })} /><span className="text-xs text-muted-foreground">Somente letras minúsculas, números e sublinhado.</span></label>
+      <label className="block space-y-1 text-sm">Nome<Input value={draft.name} maxLength={512} placeholder="confirmacao_visita" onChange={event => setDraft({ ...draft, name: normalizeTemplateName(event.target.value) })} /><span className="text-xs text-muted-foreground">Somente letras minúsculas, números e sublinhado.</span></label>
       <div className="grid grid-cols-2 gap-3"><label className="space-y-1 text-sm">Categoria<select className="h-9 w-full rounded-md border bg-background px-2" value={draft.category} onChange={event => setDraft({ ...draft, category: event.target.value })}><option value="UTILITY">Utilidade</option><option value="MARKETING">Marketing</option></select></label><label className="space-y-1 text-sm">Idioma<select className="h-9 w-full rounded-md border bg-background px-2" value={draft.language} onChange={event => setDraft({ ...draft, language: event.target.value })}><option value="pt_BR">Português (Brasil)</option><option value="en_US">Inglês (EUA)</option><option value="es">Espanhol</option></select></label></div>
       <p className="text-xs text-muted-foreground">{draft.category === "UTILITY" ? "Utilidade: confirmação ou atualização de uma solicitação específica do cliente, como uma visita agendada. Ofertas de imóveis e prospecção são Marketing." : "Marketing: ofertas de imóveis, campanhas e prospecção. Use conteúdo autorizado pelo destinatário."} A Meta pode alterar a categoria, o que afeta o custo dos envios.</p>
       <label className="block space-y-1 text-sm">Cabeçalho opcional<Input maxLength={60} value={draft.header} onChange={event => setDraft({ ...draft, header: event.target.value })} /></label>
