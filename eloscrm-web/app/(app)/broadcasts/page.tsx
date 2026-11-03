@@ -11,6 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignPanel } from "@/components/whatsapp-official/campaign-panel";
 import { UazapiCampaignPanel } from "./uazapi-campaign-panel";
 
+// disparo pela uazapi desligado enquanto os disparos saem pela API oficial; a API recusa do mesmo jeito
+// (`UAZAPI_BROADCASTS_ENABLED`), isto só tira a opção da tela
+const UAZAPI_BROADCASTS_ENABLED = false;
+
 const BroadcastsPage = () => {
   const { data: org } = useActiveOrganization();
   const { data: session } = useSession();
@@ -29,9 +33,9 @@ const BroadcastsPage = () => {
     {members.isPending || pipelines.isPending ? <Skeleton className="h-64 w-full" /> : members.isError || pipelines.isError ? <div role="alert" className="space-y-2"><p>Não foi possível carregar os dados dos disparos.</p><Button variant="outline" onClick={() => { void members.refetch(); void pipelines.refetch(); }}>Tentar novamente</Button></div> : <>
       <div className="grid gap-4 border-b pb-5 sm:grid-cols-2">
         <label className="space-y-1 text-sm">Funil para organizar o histórico<select aria-label="Funil do disparo" value={pipeline?.id ?? ""} onChange={event => setPipelineId(event.target.value)} className="block h-10 w-full rounded-md border bg-background px-3"><option value="" disabled>Selecione um funil</option>{pipelines.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="space-y-1 text-sm">Enviar por<select aria-label="Provedor do disparo" value={canManage ? provider : "uazapi"} onChange={event => setProvider(event.target.value as "cloud_api" | "uazapi")} className="block h-10 w-full rounded-md border bg-background px-3">{canManage && <option value="cloud_api">WhatsApp oficial · template aprovado</option>}<option value="uazapi">uazapi · mensagem de texto</option></select></label>
+        {UAZAPI_BROADCASTS_ENABLED && <label className="space-y-1 text-sm">Enviar por<select aria-label="Provedor do disparo" value={canManage ? provider : "uazapi"} onChange={event => setProvider(event.target.value as "cloud_api" | "uazapi")} className="block h-10 w-full rounded-md border bg-background px-3">{canManage && <option value="cloud_api">WhatsApp oficial · template aprovado</option>}<option value="uazapi">uazapi · mensagem de texto</option></select></label>}
       </div>
-      {!pipeline ? <p className="text-sm text-muted-foreground">Crie um funil para organizar o histórico dos disparos.</p> : canManage && provider === "cloud_api" ? <CampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /> : <UazapiCampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} />}
+      {!pipeline ? <p className="text-sm text-muted-foreground">Crie um funil para organizar o histórico dos disparos.</p> : canManage && (provider === "cloud_api" || !UAZAPI_BROADCASTS_ENABLED) ? <CampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /> : UAZAPI_BROADCASTS_ENABLED ? <UazapiCampaignPanel key={`${org?.id}:${pipeline.id}`} pipeline={pipeline} /> : <p className="text-sm text-muted-foreground">Os disparos são feitos pelo gestor, pelo WhatsApp oficial.</p>}
     </>}
   </div>;
 };

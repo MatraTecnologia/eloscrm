@@ -9,3 +9,6 @@ config({ path: ".env.test", override: true });
 process.env.META_WHATSAPP_TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("hex");
 process.env.META_WHATSAPP_APP_SECRET = randomBytes(32).toString("hex");
 process.env.META_WHATSAPP_WEBHOOK_VERIFY_TOKEN = randomBytes(32).toString("hex");
+
+// a suíte continua cobrindo o disparo uazapi; o desligado tem arquivo próprio
+process.env.UAZAPI_BROADCASTS_ENABLED ??= "true";

@@ -44,6 +44,10 @@ const requireConnectedInstance = async (orgId: string) => {
   return instance;
 };
 
+const requireUazapiBroadcastsEnabled = () => {
+  if (!env.UAZAPI_BROADCASTS_ENABLED) throw conflict("BROADCAST_DISABLED", "O disparo pela uazapi está desativado. Use o WhatsApp oficial.");
+};
+
 const requirePipeline = async (orgId: string, pipelineId: string) => {
   const pipeline = await repo.findPipeline(orgId, pipelineId);
   if (!pipeline) throw notFound("Funil não encontrado");
@@ -84,6 +88,7 @@ export const preview = async (orgId: string, input: PreviewBroadcastInput) => {
 };
 
 export const create = async (orgId: string, input: CreateBroadcastInput, actor: Actor) => {
+  requireUazapiBroadcastsEnabled();
   const requestHash = eventHash({ ...input, idempotencyKey: undefined });
   if (input.idempotencyKey) {
     const previous = await repo.existing(orgId, input.idempotencyKey);
@@ -200,7 +205,7 @@ export const cancel = async (orgId: string, id: string, actor: Actor) => {
 };
 
 export const changeState = async (orgId: string, id: string, status: "RUNNING" | "PAUSED", actor: Actor) => {
-  if (status === "RUNNING") { await requireConnectedInstance(orgId); if (env.NODE_ENV !== "test" && !queueEnabled()) throw httpError(503, "BROADCAST_REDIS_REQUIRED", "Configure Redis para retomar os disparos"); }
+  if (status === "RUNNING") { requireUazapiBroadcastsEnabled(); await requireConnectedInstance(orgId); if (env.NODE_ENV !== "test" && !queueEnabled()) throw httpError(503, "BROADCAST_REDIS_REQUIRED", "Configure Redis para retomar os disparos"); }
   return repo.transition(orgId, id, status, actor);
 };
 

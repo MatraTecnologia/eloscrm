@@ -198,6 +198,11 @@ derruba o número da imobiliária inteira) e worker com concorrência 1. `attemp
 **nunca lança**: o resultado vai para a linha do `BroadcastRecipient` (`SENT`/`FAILED`/`SKIPPED`),
 porque uma retentativa depois de um envio que chegou seria mensagem duplicada no celular do cliente.
 Sem `REDIS_URL` o `enqueue` roda inline e o `delay` é ignorado — em dev o disparo sai de uma vez.
+**Desligado por padrão desde 2026-11-03** (`UAZAPI_BROADCASTS_ENABLED`, default `false`): criar e
+retomar respondem `409 BROADCAST_DISABLED`, enquanto pausar, cancelar e ler o histórico continuam
+funcionando. Os disparos saem pela campanha oficial. A web esconde a opção pela constante de mesmo
+nome em `app/(app)/broadcasts/page.tsx`; `test/setup.ts` liga a env para a suíte seguir cobrindo o
+caminho, e `test/broadcast-disabled.test.ts` cobre o desligado.
 
 O envio reaproveita `sendText` de conversas, então a mensagem vira bolha na caixa de entrada e é
 auditada como `MESSAGE_SENT` com origem `AUTOMATION` e o criador do disparo como ator. A conversa é
@@ -413,4 +418,4 @@ comportamento atual; consulte as observações de tráfego antes de alterar a in
   bugs; leia antes de propor qualquer um deles como "melhoria óbvia". O envio de mídia saiu da lista
   em 2026-08-10, com o caminho escolhido registrado lá.
 
-> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-09-30 14:44 (-03)
+> Criado em 2026-07-23 17:01 (-03) · Última modificação: 2026-11-03 20:15 (-03)

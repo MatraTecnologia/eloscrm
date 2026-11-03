@@ -62,6 +62,9 @@ export const env = createEnv({
     AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
     WHATSAPP_JOURNAL_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(30),
     WHATSAPP_COMMAND_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
+    // disparo em massa pela uazapi fica desligado enquanto os disparos saem pela API oficial;
+    // `true` reabre a criação e a retomada em /v1/broadcasts sem precisar de deploy de código
+    UAZAPI_BROADCASTS_ENABLED: z.stringbool().default(false),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
