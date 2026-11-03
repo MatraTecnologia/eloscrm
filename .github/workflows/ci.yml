@@ -47,13 +47,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sobe S3 local (MinIO)
+      # SeaweedFS no lugar do MinIO, que deixou de publicar imagem pública (o pull falhava com
+      # "pull access denied"). Sem identidade configurada o SeaweedFS aceita acesso anônimo, e
+      # storage.test.ts exige 403 para leitura sem assinatura: por isso a credencial vai em -s3.config.
+      - name: Sobe S3 local (SeaweedFS)
         run: |
-          docker run -d --name minio -p 8333:9000 \
-            -e MINIO_ROOT_USER=test -e MINIO_ROOT_PASSWORD=test12345 \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8333/minio/health/live && break
+          mkdir -p "$RUNNER_TEMP/seaweedfs"
+          echo '{"identities":[{"name":"ci","credentials":[{"accessKey":"test","secretKey":"test12345"}],"actions":["Admin","Read","List","Tagging","Write"]}]}' > "$RUNNER_TEMP/seaweedfs/s3.json"
+          docker run -d --name seaweedfs -p 8333:8333 -v "$RUNNER_TEMP/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro" \
+            chrislusf/seaweedfs:4.50 server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -ip.bind=0.0.0.0
+          for i in $(seq 1 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8333/)" = "403" ] && break
             sleep 1
           done
 

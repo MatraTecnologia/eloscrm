@@ -73,7 +73,7 @@ O Postgres é real, sem mocks nem banco em memória; uazapi e Graph API são moc
 
 ## CI
 
-`.github/workflows/ci.yml`, em push para `main` e em todo PR. Job `api`: Postgres 17 e MinIO local para os testes de storage, `db:generate` → `db:push` → `lint` → `typecheck` → `test` → `build`, com as envs no próprio job (sem `.env` no runner — o `dotenv` do `test/setup.ts` simplesmente não encontra arquivo e o ambiente prevalece). Job `web`: `lint` → `typecheck` → `build`.
+`.github/workflows/ci.yml`, em push para `main` e em todo PR. Job `api`: Postgres 17 e SeaweedFS local (S3 na 8333, com identidade em `-s3.config` para o bucket não aceitar leitura anônima) para os testes de storage, `db:generate` → `db:push` → `lint` → `typecheck` → `test` → `build`, com as envs no próprio job (sem `.env` no runner — o `dotenv` do `test/setup.ts` simplesmente não encontra arquivo e o ambiente prevalece). Job `web`: `lint` → `typecheck` → `build`.
 
 Os dois jobs passam `package_json_file` ao `pnpm/action-setup`: `defaults.run.working-directory` só afeta steps `run`, e sem apontar o arquivo a action procura o `packageManager` no `package.json` da raiz — que não existe aqui.
 
@@ -172,4 +172,4 @@ contratos ou executar procedimentos antigos.
 - Spec histórica do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano histórico da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-09-30 14:44 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-11-03 20:49 (-03)
