@@ -125,7 +125,9 @@ describe("campanha oficial fora da ordem da central", () => {
     expect((await inbox.list(orgId, { ...all, q: name })).items.map(item => item.id)).toEqual([`client:${clientId}`]);
     expect((await inbox.list(orgId, dispatched)).items.map(item => item.id)).toContain(`client:${clientId}`);
 
-    await inbound(phone, new Date());
+    // o webhook traz o horário em segundos: sem folga, a resposta pode empatar ou perder para o
+    // createdAt (em ms) de uma conversa do teste anterior e o "primeiro da lista" vira sorte
+    await inbound(phone, new Date(Date.now() + 60_000));
     const first = (await inbox.list(orgId, all)).items[0]!;
     expect(first.id).toBe(`client:${clientId}`);
     expect(first.unreadCount).toBe(1);
