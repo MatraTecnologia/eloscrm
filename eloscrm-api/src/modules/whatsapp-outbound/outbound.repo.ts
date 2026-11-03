@@ -116,7 +116,8 @@ export const accept = (channel: ChannelConnection, id: string, leaseToken: strin
   }
   await tx.whatsappMessage.updateMany({ where: { organizationId: channel.organizationId, id: local.id }, data: { providerId: externalMessageId, providerMessageId: externalMessageId, status: "sent", sentAt: new Date() } });
   await tx.officialSendCommand.updateMany({ where: { organizationId: channel.organizationId, id, leaseToken }, data: { status: "accepted", externalMessageId, safeError: null, leaseToken: null, leaseExpiresAt: null } });
-  await tx.conversation.updateMany({ where: { organizationId: channel.organizationId, id: local.conversationId }, data: { lastMessageAt: new Date(), lastMessageText: local.text } });
+  // envio de campanha não é atendimento: a conversa não sobe na central (a aba de disparos a mostra)
+  if (!saved.campaignRecipientId) await tx.conversation.updateMany({ where: { organizationId: channel.organizationId, id: local.conversationId }, data: { lastMessageAt: new Date(), lastMessageText: local.text } });
   await reconcileReceipts(tx, channel, externalMessageId);
 });
 

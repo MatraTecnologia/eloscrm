@@ -8,6 +8,8 @@ export type InboxChannel = {
 };
 export type InboxGroup = {
   id: string; name: string; clientId: string | null; unreadCount: number; archived: boolean; lastMessageAt: string | null; lastMessageText: string | null; channels: InboxChannel[];
+  // horário que ordena a linha; no filtro de disparos é o do envio da campanha
+  listedAt?: string | null;
 };
 export type InboxMessage = WhatsappMessage & {
   conversationId: string; connectionId: string | null; origin: "uazapi" | "cloud_api" | "business_app" | "history";

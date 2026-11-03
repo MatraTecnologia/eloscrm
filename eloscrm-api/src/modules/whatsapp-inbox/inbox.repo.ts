@@ -6,21 +6,46 @@ import { recordAudit } from "../../lib/audit.js";
 import type { Actor } from "../../lib/actor.js";
 import type { ListInput } from "./inbox.schema.js";
 
-export const listGroups = (orgId: string, input: ListInput, cursor?: { id: string; at: string }) => prisma.$queryRaw<{ id: string; at: Date }[]>(Prisma.sql`
-  WITH entries AS (
+// Contatos de campanha oficial ativa, ou que receberam a mensagem da campanha nas últimas 24h: é
+// a janela em que a resposta costuma chegar. `at` é o horário do envio, não o do atendimento.
+const dispatchedSql = (orgId: string) => Prisma.sql`dispatched AS (
+    SELECT m."conversationId", MAX(m."sentAt") AS at
+    FROM "OfficialSendCommand" s
+    JOIN "OfficialCampaignRecipient" r ON r.id = s."campaignRecipientId" AND r."organizationId" = s."organizationId"
+    JOIN "OfficialCampaign" k ON k.id = r."campaignId" AND k."organizationId" = s."organizationId"
+    JOIN "WhatsappMessage" m ON m.id = s."messageId" AND m."organizationId" = s."organizationId"
+    WHERE s."organizationId" = ${orgId} AND m.status <> 'failed'
+      AND (k.status IN ('running', 'paused', 'needs_review') OR m."sentAt" > ${new Date(Date.now() - 86_400_000)})
+    GROUP BY m."conversationId"
+  ), `;
+
+export const listGroups = (orgId: string, input: ListInput, cursor?: { id: string; at: string }) => {
+  const broadcasts = input.filter === "broadcasts";
+  // sem busca nem lead definido, a conversa que só recebeu campanha fica fora da central (está na aba
+  // de disparos) até ter mensagem de atendimento; conversa aberta por envio manual continua listada
+  const attendedOnly = (input.filter === "all" || input.filter === "unread") && !input.q && !input.clientId;
+  return prisma.$queryRaw<{ id: string; at: Date }[]>(Prisma.sql`
+  WITH ${broadcasts ? dispatchedSql(orgId) : Prisma.empty}entries AS (
     SELECT CASE WHEN c."isGroup" THEN 'conversation:' || c.id
       WHEN COALESCE(c."clientId", mc."clientId") IS NOT NULL THEN 'client:' || COALESCE(c."clientId", mc."clientId")
       WHEN c."messagingContactId" IS NOT NULL THEN 'contact:' || c."messagingContactId"
       ELSE 'conversation:' || c.id END AS id,
-      COALESCE(c."lastMessageAt", c."createdAt") AS at, c."unreadCount", c."archivedAt",
+      ${broadcasts ? Prisma.sql`d.at` : Prisma.sql`c."lastMessageAt"`} AS at, c."createdAt", c."unreadCount", c."archivedAt",
+      ${attendedOnly ? Prisma.sql`c."lastMessageAt" IS NULL AND EXISTS (
+        SELECT 1 FROM "OfficialSendCommand" s JOIN "WhatsappMessage" m ON m.id = s."messageId" AND m."organizationId" = s."organizationId"
+        WHERE s."organizationId" = c."organizationId" AND m."conversationId" = c.id AND s."campaignRecipientId" IS NOT NULL
+      )` : Prisma.sql`FALSE`} AS "campaignOnly",
       COALESCE(cl.name, mc."displayName", c."contactName", c."waName", c.phone, '') AS name, COALESCE(c.phone, '') AS phone
     FROM "Conversation" c
+    ${broadcasts ? Prisma.sql`JOIN dispatched d ON d."conversationId" = c.id` : Prisma.empty}
     LEFT JOIN "MessagingContact" mc ON mc.id = c."messagingContactId" AND mc."organizationId" = c."organizationId"
     LEFT JOIN "Client" cl ON cl.id = COALESCE(c."clientId", mc."clientId") AND cl."organizationId" = c."organizationId"
     WHERE c."organizationId" = ${orgId} AND (c."instanceId" IS NOT NULL OR c."connectionId" IS NOT NULL)
   ), groups AS (
-    SELECT id, MAX(at) AS at FROM entries GROUP BY id
+    -- MAX ignora nulo: a conversa nova de um disparo não puxa para cima o grupo que já tinha atendimento
+    SELECT id, COALESCE(MAX(at), MAX("createdAt")) AS at FROM entries GROUP BY id
     HAVING ${input.clientId && input.filter === "all" ? Prisma.sql`TRUE` : input.filter === "archived" ? Prisma.sql`BOOL_AND("archivedAt" IS NOT NULL)` : Prisma.sql`BOOL_OR("archivedAt" IS NULL)`}
+      ${attendedOnly ? Prisma.sql`AND BOOL_OR(NOT "campaignOnly")` : Prisma.empty}
       ${input.filter === "unread" ? Prisma.sql`AND SUM("unreadCount") > 0` : Prisma.empty}
       ${input.clientId ? Prisma.sql`AND id = ${`client:${input.clientId}`}` : Prisma.empty}
       ${input.q ? Prisma.sql`AND BOOL_OR(position(lower(${input.q}) in lower(name || ' ' || phone)) > 0)` : Prisma.empty}
@@ -28,6 +53,7 @@ export const listGroups = (orgId: string, input: ListInput, cursor?: { id: strin
     ${cursor ? Prisma.sql`WHERE (at, id) < (${new Date(cursor.at)}, ${cursor.id})` : Prisma.empty}
     ORDER BY at DESC, id DESC LIMIT ${input.limit + 1}
 `);
+};
 
 export const childWhere = (orgId: string, groupId: string): Prisma.ConversationWhereInput => {
   const [kind, id] = groupId.split(":");

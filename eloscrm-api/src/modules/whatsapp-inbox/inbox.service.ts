@@ -38,7 +38,7 @@ export const list = async (orgId: string, input: ListInput) => {
   const rows = await repo.listGroups(orgId, input, cursor);
   const page = rows.slice(0, input.limit);
   const last = page.at(-1);
-  return { items: await Promise.all(page.map(row => get(orgId, row.id))), nextCursor: rows.length > input.limit && last ? Buffer.from(JSON.stringify({ id: last.id, at: last.at.toISOString() })).toString("base64url") : undefined };
+  return { items: await Promise.all(page.map(async row => ({ ...await get(orgId, row.id), listedAt: row.at }))), nextCursor: rows.length > input.limit && last ? Buffer.from(JSON.stringify({ id: last.id, at: last.at.toISOString() })).toString("base64url") : undefined };
 };
 export const messages = async (orgId: string, id: string, input: { q?: string; before?: string; limit: number }) => {
   const group = await get(orgId, id);

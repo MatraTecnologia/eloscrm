@@ -49,11 +49,18 @@ export const ingestMessage = async (connection: ChannelConnection, raw: Record<s
         ...enrichment, ...(firstLiveInbound ? { liveReceivedAt: receivedAt, origin: "cloud_api", automationStatus: "pending", automationNextAttemptAt: receivedAt, automationSuggestedName: profile.displayName } : {}),
       } });
     }
+    // eco que chega antes do `accept` ainda não casa pelo providerMessageId: com envio de campanha
+    // em voo nesta conversa, a mensagem de saída nova é tratada como o próprio disparo
+    const campaignEcho = !existing && message.direction === "outbound" && !!await tx.officialSendCommand.findFirst({
+      where: { organizationId: connection.organizationId, campaignRecipientId: { not: null }, status: { in: ["pending", "preparing", "sending", "uncertain"] }, message: { conversationId: conversation.id } },
+      select: { id: true },
+    });
     await tx.conversation.updateMany({
       where: { id: conversation.id, organizationId: connection.organizationId },
       data: {
         ...(firstLiveInbound ? { unreadCount: { increment: 1 } } : {}),
-        ...(!conversation.lastMessageAt || message.sentAt >= conversation.lastMessageAt ? { lastMessageAt: message.sentAt, lastMessageText: existing && existing.rawType !== "media_placeholder" ? existing.text : message.text } : {}),
+        // eco/histórico do que o CRM enviou não reordena: o envio já decidiu se a conversa sobe
+        ...(!existing?.sentByApi && !campaignEcho && (!conversation.lastMessageAt || message.sentAt >= conversation.lastMessageAt) ? { lastMessageAt: message.sentAt, lastMessageText: existing && existing.rawType !== "media_placeholder" ? existing.text : message.text } : {}),
         ...(firstLiveInbound && (!conversation.lastCustomerMessageAt || message.sentAt > conversation.lastCustomerMessageAt) ? {
           lastCustomerMessageAt: message.sentAt, serviceWindowExpiresAt: new Date(message.sentAt.getTime() + 86_400_000),
         } : {}),

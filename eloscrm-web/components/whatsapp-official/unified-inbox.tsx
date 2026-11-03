@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { ArrowLeft, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,24 +10,26 @@ import { useInboxGroup, useInboxGroups } from "@/lib/queries/inbox";
 import { InboxDetail } from "./inbox-detail";
 import { cn } from "@/lib/utils";
 
+const INBOX_FILTERS = ["all", "unread", "archived", "broadcasts"] as const;
+
 export const UnifiedInbox = () => {
   const { data: org } = useActiveOrganization();
   const [selected, setSelected] = useQueryState("thread", { history: "push" });
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useQueryState("filter", parseAsStringLiteral(INBOX_FILTERS).withDefault("all"));
   useEffect(() => { const timer = setTimeout(() => setAppliedSearch(search.trim()), 300); return () => clearTimeout(timer); }, [search]);
   const list = useInboxGroups({ q: appliedSearch || undefined, filter });
   const detail = useInboxGroup(selected);
   const items = useMemo(() => [...new Map((list.data?.pages ?? []).flatMap(page => page.items).map(item => [item.id, item])).values()], [list.data]);
   return <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[320px_1fr]">
     <div className={cn("flex min-h-0 flex-col border-r", selected && "hidden md:flex")}>
-      <div className="space-y-2 border-b p-3"><div className="relative"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input aria-label="Buscar atendimento" placeholder="Buscar contato ou telefone" value={search} onChange={event => setSearch(event.target.value)} className="pl-8" /></div><select aria-label="Filtro de atendimentos" value={filter} onChange={event => setFilter(event.target.value)} className="h-8 w-full rounded-md border bg-background px-2 text-sm"><option value="all">Atendimentos ativos</option><option value="unread">Não lidos</option><option value="archived">Arquivados</option></select></div>
+      <div className="space-y-2 border-b p-3"><div className="relative"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input aria-label="Buscar atendimento" placeholder="Buscar contato ou telefone" value={search} onChange={event => setSearch(event.target.value)} className="pl-8" /></div><select aria-label="Filtro de atendimentos" value={filter} onChange={event => setFilter(event.target.value as (typeof INBOX_FILTERS)[number])} className="h-8 w-full rounded-md border bg-background px-2 text-sm"><option value="all">Atendimentos ativos</option><option value="unread">Não lidos</option><option value="archived">Arquivados</option><option value="broadcasts">Disparos em andamento</option></select></div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {list.isLoading && <Skeleton className="m-3 h-20" />}
         {list.isError && <div className="p-3 text-sm" role="alert">Não foi possível carregar os atendimentos.<Button variant="outline" size="sm" onClick={() => list.refetch()}>Tentar novamente</Button></div>}
-        {!list.isLoading && !list.isError && !items.length && <p className="p-4 text-sm text-muted-foreground">Nenhum atendimento encontrado.</p>}
-        {items.map(item => <button key={item.id} onClick={() => setSelected(item.id)} className={cn("block w-full border-b p-3 text-left hover:bg-muted", selected === item.id && "border-l-2 border-l-primary bg-muted")}><div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{item.name}</span>{item.lastMessageAt && <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={item.lastMessageAt}>{new Date(item.lastMessageAt).toLocaleDateString("pt-BR") === new Date().toLocaleDateString("pt-BR") ? new Date(item.lastMessageAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : new Date(item.lastMessageAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</time>}{item.unreadCount > 0 && <span className="rounded-full bg-primary px-2 text-xs text-primary-foreground">{item.unreadCount}</span>}</div><p className="truncate text-xs text-muted-foreground">{[...new Set(item.channels.map(channel => channel.provider === "cloud_api" ? "Oficial" : "uazapi"))].join(" · ")}</p><p className="truncate text-sm text-muted-foreground">{item.lastMessageText ?? "Mensagem com mídia ou atendimento sem mensagens"}</p></button>)}
+        {!list.isLoading && !list.isError && !items.length && <p className="p-4 text-sm text-muted-foreground">{filter === "broadcasts" ? "Nenhum disparo em andamento." : "Nenhum atendimento encontrado."}</p>}
+        {items.map(item => { const at = filter === "broadcasts" ? item.listedAt : item.lastMessageAt; return <button key={item.id} onClick={() => setSelected(item.id)} className={cn("block w-full border-b p-3 text-left hover:bg-muted", selected === item.id && "border-l-2 border-l-primary bg-muted")}><div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{item.name}</span>{at && <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={at}>{new Date(at).toLocaleDateString("pt-BR") === new Date().toLocaleDateString("pt-BR") ? new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : new Date(at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</time>}{item.unreadCount > 0 && <span className="rounded-full bg-primary px-2 text-xs text-primary-foreground">{item.unreadCount}</span>}</div><p className="truncate text-xs text-muted-foreground">{[...new Set(item.channels.map(channel => channel.provider === "cloud_api" ? "Oficial" : "uazapi"))].join(" · ")}</p><p className="truncate text-sm text-muted-foreground">{item.lastMessageText ?? (filter === "broadcasts" ? "Disparo enviado, ainda sem resposta" : "Mensagem com mídia ou atendimento sem mensagens")}</p></button>; })}
         {list.hasNextPage && <Button className="m-3" variant="outline" size="sm" disabled={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>Carregar mais</Button>}
       </div>
     </div>
