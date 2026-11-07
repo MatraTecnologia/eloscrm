@@ -54,22 +54,38 @@ export const cancel = (orgId: string, id: string, actor: Actor) => prisma.$trans
   await recordAudit({ orgId, actor, entityType: "BROADCAST", entityId: id, action: "CANCELED", context: { connectionId: saved.connectionId } }, tx);
 });
 export const pause = (orgId: string, id: string) => prisma.officialCampaign.updateMany({ where: { organizationId: orgId, id, status: "running" }, data: { status: "needs_review" } });
-export const transition = (orgId: string, id: string, status: "paused" | "running", actor: Actor) => prisma.$transaction(async tx => {
+export const transition = (orgId: string, id: string, status: "paused" | "running", actor: Actor, costs?: Map<string, Prisma.InputJsonObject>) => prisma.$transaction(async tx => {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`campaign:${orgId}:${id}`}, 0))`;
   const saved = await tx.officialCampaign.findFirst({ where: { organizationId: orgId, id } });
   if (!saved) throw notFound("Campanha não encontrada");
-  if (!["running", "paused"].includes(saved.status)) throw conflict("CAMPAIGN_STATE", "Esta campanha não pode ser pausada ou retomada no estado atual");
+  // Revisão necessária só retoma: quem já recebeu não recebe de novo, e o gate revalida cada envio.
+  if (!(status === "running" ? ["running", "paused", "needs_review"] : ["running", "paused"]).includes(saved.status)) throw conflict("CAMPAIGN_STATE", "Esta campanha não pode ser pausada ou retomada no estado atual");
+  if (status === "running" && saved.status !== "running" && !costs) throw conflict("CAMPAIGN_CHANGED", "Atualize a previsão antes de continuar");
+  // Inclui quem ficou em preparação com lease vencido: o claim o retoma e o gate compararia a tarifa antiga.
+  for (const [dealId, costSnapshot] of costs ?? []) await tx.officialCampaignRecipient.updateMany({ where: { organizationId: orgId, campaignId: id, dealId, OR: [{ status: "pending" }, { status: "preparing", leaseExpiresAt: { lte: new Date() } }] }, data: { costSnapshot } });
   await tx.officialCampaign.updateMany({ where: { organizationId: orgId, id }, data: { status } });
   await recordAudit({ orgId, actor, entityType: "BROADCAST", entityId: id, action: "UPDATED", context: { status } }, tx);
 });
-export const recipient = (orgId: string, id: string) => prisma.officialCampaignRecipient.findFirst({ where: { organizationId: orgId, id }, include: { campaign: true, command: { select: { id: true, status: true, safeError: true } } } });
+export const recipient = (orgId: string, id: string) => prisma.officialCampaignRecipient.findFirst({ where: { organizationId: orgId, id }, include: { campaign: true, command: { select: { id: true, status: true, safeError: true, providerErrorCode: true } } } });
 export const settle = (orgId: string, id: string, leaseToken: string, status: string, safeError: string | null = null, failure?: { code: string | null; stage: string }) => prisma.$transaction(async tx => {
   const reference = await tx.officialCampaignRecipient.findFirst({ where: { organizationId: orgId, id }, select: { campaignId: true, campaign: { select: { connectionId: true } } } });
   if (!reference) return;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`campaign-dispatch:${orgId}:${reference.campaign.connectionId}`}, 0))`;
   // O intervalo após concluir a tentativa e a liberação do slot são atômicos, inclusive em consultas lentas.
   await tx.officialCampaign.updateMany({ where: { organizationId: orgId, id: reference.campaignId }, data: { nextAt: new Date(Date.now() + 10000) } });
-  return tx.officialCampaignRecipient.updateMany({ where: { organizationId: orgId, id, status: "preparing", leaseToken }, data: { status, safeError, errorCode: failure?.code, errorStage: failure?.stage, completedAt: status === "pending" ? null : new Date(), leaseToken: null, leaseExpiresAt: null } });
+  return tx.officialCampaignRecipient.updateMany({ where: { organizationId: orgId, id, status: "preparing", leaseToken }, data: { status, safeError, errorCode: failure?.code ?? null, errorStage: failure?.stage ?? null, completedAt: status === "pending" ? null : new Date(), leaseToken: null, leaseExpiresAt: null } });
+});
+// Falha que não é do destinatário (conexão, conta, template): ele volta à fila com o motivo, e o
+// comando que não chegou à Meta é desvinculado para a próxima tentativa nascer com outra chave.
+export const holdForRetry = (orgId: string, id: string, leaseToken: string, reason: string, code: string | null, options: { commandId?: string; status: "paused" | "needs_review" }) => prisma.$transaction(async tx => {
+  const reference = await tx.officialCampaignRecipient.findFirst({ where: { organizationId: orgId, id }, select: { campaignId: true, campaign: { select: { connectionId: true } } } });
+  if (!reference) return;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`campaign-dispatch:${orgId}:${reference.campaign.connectionId}`}, 0))`;
+  if (options.commandId) await tx.officialSendCommand.updateMany({ where: { organizationId: orgId, id: options.commandId, campaignRecipientId: id, status: "failed" }, data: { campaignRecipientId: null } });
+  // Revisão vence pausa: uma campanha pausada que encontra mudança de template ou tarifa precisa de revisão.
+  await tx.officialCampaign.updateMany({ where: { organizationId: orgId, id: reference.campaignId, status: { in: options.status === "needs_review" ? ["running", "paused"] : ["running"] } }, data: { status: options.status } });
+  await tx.officialCampaign.updateMany({ where: { organizationId: orgId, id: reference.campaignId }, data: { nextAt: new Date(Date.now() + 10000) } });
+  return tx.officialCampaignRecipient.updateMany({ where: { organizationId: orgId, id, status: "preparing", leaseToken }, data: { status: "pending", safeError: reason, errorCode: code, errorStage: "paused", completedAt: null, leaseToken: null, leaseExpiresAt: null } });
 });
 export const claim = (orgId: string, campaignId: string) => prisma.$transaction(async tx => {
   const saved = await tx.officialCampaign.findFirst({ where: { organizationId: orgId, id: campaignId } });

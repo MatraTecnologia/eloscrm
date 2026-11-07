@@ -323,6 +323,16 @@ Se público, template, identidade, parâmetros, mídia ou custo mudarem, o servi
 
 Uma falha isolada é registrada e não implica interromper todo o lote. Existem pausas deliberadas para mudanças ou falhas que afetam as condições da campanha, como template ou arquivo que deixou de ser válido.
 
+Desde 2026-11-07 o gate (`gate.service.ts`) e o worker (`dispatch.service.ts`) separam três casos:
+
+- **Mudança de um destinatário** (o negócio saiu dos filtros, o contato mudou, o nome usado no template mudou): só ele fica de fora, como `skipped` com o código `CAMPAIGN_RECIPIENT_CHANGED` e o motivo. Antes, um card movido no meio de um disparo de uma hora pausava a campanha inteira.
+- **Mudança de template, arquivo ou tarifa**: a campanha vai para `needs_review` e o destinatário volta para a fila. **Continuar** (também a partir de `paused`) aplica a tarifa atual aos pendentes. Se o template ou o arquivo mudou (`CAMPAIGN_TEMPLATE_CHANGED`), a retomada é recusada, a tela esconde o botão e a campanha precisa ser encerrada. Quem já recebeu não recebe de novo.
+- **Falha global** (`failures.ts`: conexão, token, conta, pagamento, número restrito, template pausado, desativado ou fora do catálogo local, e qualquer recusa da Graph antes da submissão, que só consulta template e arquivo): a campanha vai para `paused` e o destinatário volta para a fila com o motivo, mostrado na tela. O comando que falhou sem ser aceito pela Meta é desvinculado do destinatário, e a nova tentativa usa a chave `campaign:<id>:<tentativa>`. Antes, cada destinatário virava "Falhou", um a cada 10–20 s, até a campanha terminar sem ninguém receber. Resultado incerto continua nunca reenviado.
+
+O `checkSubmission` compara o telefone da lista importada com a identidade nas duas grafias do celular (`officialPhoneVariants`). Entre 2026-11-07 09:32 e este ajuste, a identidade passou a ser gravada com o nono dígito e a comparação exata fazia falhar quem estava na lista sem ele.
+
+Lead batizado pela automação (nome igual ao telefone formatado, `isAutoNamed`) fica excluído quando o template usa o nome, com o motivo apontando para **Leads › Corrigir nomes**. Sem isso, o template saía como "Olá (43), …".
+
 ### 12.2. Pausa, retomada e cancelamento
 
 Pausar impede novas reservas de destinatários. Uma operação já reservada ou submetida pode concluir depois do clique. Cancelar não recolhe mensagens já enviadas nem garante cancelar uma submissão que já chegou ao provedor.
@@ -733,4 +743,4 @@ A configuração de Embedded Signup e as regras comerciais da Meta podem mudar. 
 
 Este documento registra a implementação presente. Melhorias futuras devem atualizar primeiro os contratos efetivos e depois as seções afetadas, sem transformar um plano em funcionalidade entregue.
 
-> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-11-07 08:49 (-03)
+> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-11-07 10:04 (-03)

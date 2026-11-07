@@ -85,7 +85,8 @@ export const preview = async (orgId: string, input: CampaignInput) => {
     if (identity && (used.has(identity.contactId) || destinations.has(destination!))) exclusion = "Pessoa já selecionada por outro negócio";
     const resolved = resolveParameters(input, deal, deal.ownerId ? owners.get(deal.ownerId) : undefined);
     let text: string | null = null;
-    if (resolved.missing) exclusion ??= "Campo do CRM ausente para personalizar o template";
+    if (resolved.missingName) exclusion ??= "Lead sem nome no cadastro (está com o telefone); corrija em Leads › Corrigir nomes";
+    else if (resolved.missing) exclusion ??= "Campo do CRM ausente para personalizar o template";
     else {
       try { text = build(resolved.parameters).preview; }
       catch { exclusion ??= "Dados personalizados excedem os limites do template"; }

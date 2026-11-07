@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js";
 import { httpError } from "../../lib/http-error.js";
 import { campaignInputSchema } from "./campaigns.schema.js";
+import { officialPhoneVariants, toOfficialPhone } from "../../lib/phone.js";
 
 export const checkSubmission = async (tx: Prisma.TransactionClient, orgId: string, recipientId: string) => {
   const reference = await tx.officialCampaignRecipient.findFirst({ where: { organizationId: orgId, id: recipientId }, select: { campaignId: true } });
@@ -11,6 +12,7 @@ export const checkSubmission = async (tx: Prisma.TransactionClient, orgId: strin
   const imported = campaignInputSchema.parse(recipient.campaign.input).importedAudience?.recipients.find(value => `import:${value.phone}` === recipient.dealId);
   if (imported) {
     const identity = await tx.contactIdentity.findFirst({ where: { organizationId: orgId, id: recipient.identityId }, select: { value: true } });
-    if (identity?.value !== imported.phone) throw httpError(422, "CAMPAIGN_CHANGED", "A identidade do destinatário importado mudou");
+    // A identidade guarda o celular com o nono dígito (ou o wa_id da Meta, sem ele); a lista pode trazer qualquer grafia.
+    if (!identity || !officialPhoneVariants(toOfficialPhone(imported.phone) ?? imported.phone).includes(identity.value)) throw httpError(422, "CAMPAIGN_CHANGED", "A identidade do destinatário importado mudou");
   }
 };

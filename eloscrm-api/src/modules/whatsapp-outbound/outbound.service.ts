@@ -98,13 +98,15 @@ export const listTemplates = async (orgId: string, connectionId: string) => {
   return repo.listTemplates(orgId, channel.wabaId!);
 };
 
-export const executeSend = async (orgId: string, id: string) => {
+// Devolve o código da falha para a campanha decidir entre falha do destinatário e pausa da fila.
+export type SendFailure = { code: string | null; providerCode: number | null; submitted: boolean; unanswered: boolean };
+export const executeSend = async (orgId: string, id: string): Promise<SendFailure | null> => {
   const leaseToken = await repo.claim(orgId, id);
-  if (!leaseToken) return;
+  if (!leaseToken) return null;
   let submitted = false;
   try {
     const command = await repo.command(orgId, id);
-    if (!command) return;
+    if (!command) return null;
     if (command.campaignRecipientId) await checkCampaign(orgId, command.campaignRecipientId);
     const input = sendSchema.parse(command.request);
     const prepared = await prepare(orgId, command.connectionId, input, command.actorUserId, command.campaignRecipientId);
@@ -131,16 +133,18 @@ export const executeSend = async (orgId: string, id: string) => {
     const finalCheck = await prepare(orgId, command.connectionId, input, command.actorUserId, command.campaignRecipientId);
     if (command.campaignRecipientId) await checkCampaign(orgId, command.campaignRecipientId);
     if (eventHash(finalCheck.payload) !== eventHash(command.payload)) throw httpError(422, "OFFICIAL_SEND_CHANGED", "O envio mudou antes da submissão");
-    if (!await repo.markSending(orgId, id, leaseToken)) return;
+    if (!await repo.markSending(orgId, id, leaseToken)) return null;
     submitted = true;
     const response = sendResponseSchema.parse(await graph.sendMessage(finalCheck.credentials.accessToken, finalCheck.credentials.phoneNumberId!, payload));
     await repo.recordResponse(orgId, id, leaseToken, response.messages[0]!.id);
     await repo.accept(finalCheck.channel, id, leaseToken, response.messages[0]!.id);
+    return null;
   } catch (error) {
     const providerError = error instanceof graph.OfficialGraphError ? error : null;
     const uncertain = submitted && (!providerError || providerError.uncertain);
     const safeError = uncertain ? "A resposta da Meta não foi confirmada; não reenviar automaticamente" : error instanceof Error && "expose" in error && error.expose === true ? error.message : "Não foi possível enviar pela conexão oficial";
     await repo.finishFailure(orgId, id, leaseToken, uncertain, safeError, providerError?.code ?? null);
+    return { code: !providerError && error instanceof Error && "code" in error ? String(error.code) : null, providerCode: providerError?.code ?? null, submitted, unanswered: !!providerError && providerError.code === null };
   }
 };
 

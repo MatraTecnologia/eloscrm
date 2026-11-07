@@ -4,6 +4,7 @@ import { campaignInputSchema } from "./campaigns.schema.js";
 import { preview } from "./preview.service.js";
 import * as repo from "./campaigns.repo.js";
 import { requireManager } from "../whatsapp-costs/costs.service.js";
+import { globalFailure, RECIPIENT_CHANGED } from "./failures.js";
 
 export const checkCampaign = async (orgId: string, recipientId: string) => {
   const row = await repo.recipient(orgId, recipientId);
@@ -14,9 +15,10 @@ export const checkCampaign = async (orgId: string, recipientId: string) => {
   let current: Awaited<ReturnType<typeof preview>>;
   try { current = await preview(orgId, imported ? { ...input, importedAudience: { ...input.importedAudience!, recipients: [imported] } } : { ...input, dealIds: [row.dealId] }); }
   catch (error) {
-    if (!input.headerUploadId) throw error;
+    // Conexão, token ou template indisponível não são problema do arquivo: o worker pausa com o motivo certo.
+    if (!input.headerUploadId || globalFailure(error instanceof Error && "code" in error ? String(error.code) : null, null)) throw error;
     await repo.pause(orgId, row.campaignId);
-    throw httpError(422, "CAMPAIGN_CHANGED", "Não foi possível confirmar o arquivo e o template; a campanha foi pausada para revisão");
+    throw httpError(422, "CAMPAIGN_TEMPLATE_CHANGED", "Não foi possível confirmar o arquivo do cabeçalho; a campanha foi pausada para revisão");
   }
   const target = current.rows.find(value => value.dealId === row.dealId);
   const snapshot = row.campaign.snapshot as unknown as Awaited<ReturnType<typeof preview>>;
@@ -24,8 +26,18 @@ export const checkCampaign = async (orgId: string, recipientId: string) => {
   // destino são os mesmos: o envio segue pela identidade congelada, que o outbound revalida.
   const sameIdentity = target?.identityId === row.identityId && target.identityHash === row.identityHash;
   const promoted = !sameIdentity && !!target && target.contactId === row.contactId && !!await repo.activeIdentity(orgId, row.identityId, row.contactId);
-  if (!target || target.exclusion || target.clientId !== row.clientId || target.contactId !== row.contactId || (!sameIdentity && !promoted) || eventHash(target.parameters) !== eventHash(row.parameters) || eventHash(target.cost) !== eventHash(row.costSnapshot) || eventHash(current.template) !== eventHash(snapshot.template) || eventHash(current.headerMedia ?? null) !== eventHash(snapshot.headerMedia ?? null)) {
+  // Template e arquivo valem para todos: mudou um, mudou a campanha inteira.
+  if (eventHash(current.template) !== eventHash(snapshot.template) || eventHash(current.headerMedia ?? null) !== eventHash(snapshot.headerMedia ?? null)) {
     await repo.pause(orgId, row.campaignId);
-    throw httpError(422, "CAMPAIGN_CHANGED", "Público, dados personalizados, identidade, template, arquivo ou tarifa mudou; a campanha foi pausada para revisão");
+    throw httpError(422, "CAMPAIGN_TEMPLATE_CHANGED", "O template ou o arquivo do cabeçalho mudou desde a aprovação");
+  }
+  // O resto é de um destinatário só. Um card movido ou um lead renomeado no meio de um disparo de uma
+  // hora não pode parar os outros: este fica de fora e a fila segue.
+  if (!target || target.exclusion) throw httpError(422, RECIPIENT_CHANGED, `Não enviado: ${target?.exclusion ?? "Negócio indisponível ou fora dos filtros"} (mudou durante o disparo)`);
+  if (target.clientId !== row.clientId || target.contactId !== row.contactId || (!sameIdentity && !promoted)) throw httpError(422, RECIPIENT_CHANGED, "Não enviado: o contato do lead mudou durante o disparo");
+  if (eventHash(target.parameters) !== eventHash(row.parameters)) throw httpError(422, RECIPIENT_CHANGED, "Não enviado: os dados personalizados do lead mudaram durante o disparo");
+  if (eventHash(target.cost) !== eventHash(row.costSnapshot)) {
+    await repo.pause(orgId, row.campaignId);
+    throw httpError(422, "CAMPAIGN_CHANGED", "A tarifa mudou desde a aprovação; a campanha foi pausada. Continue para aplicar a tarifa atual aos envios restantes");
   }
 };

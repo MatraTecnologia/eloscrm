@@ -1,5 +1,6 @@
 import { conflict, httpError, notFound } from "../../lib/http-error.js";
 import type { Actor } from "../../lib/actor.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 import { eventHash } from "../whatsapp-official/webhook.schema.js";
 import { queueEnabled } from "../../lib/queue.js";
 import { syncTemplates } from "../whatsapp-outbound/outbound.service.js";
@@ -64,6 +65,16 @@ export const changeState = async (orgId: string, id: string, status: "paused" | 
     const saved = await get(orgId, id);
     await getOfficialCredentials(orgId, saved.connectionId);
     await syncTemplates(orgId, saved.connectionId);
+    if (["needs_review", "paused"].includes(saved.status)) {
+      // Continuar aplica a tarifa atual a quem ainda não recebeu. Template e arquivo não: a mensagem
+      // aprovada é a que sai, ou a campanha acaba aqui.
+      const current = await repreview(orgId, id);
+      const snapshot = saved.snapshot as typeof current;
+      if (eventHash(current.template) !== eventHash(snapshot.template) || eventHash(current.headerMedia ?? null) !== eventHash(snapshot.headerMedia ?? null)) throw conflict("CAMPAIGN_CHANGED", "O template ou o arquivo do cabeçalho mudou desde a aprovação. Encerre esta campanha e crie outra");
+      const costs = new Map(current.rows.filter(row => !row.exclusion).map(row => [row.dealId, row.cost as Prisma.InputJsonObject]));
+      await repo.transition(orgId, id, status, actor, costs);
+      return get(orgId, id);
+    }
   }
   await repo.transition(orgId, id, status, actor);
   return get(orgId, id);

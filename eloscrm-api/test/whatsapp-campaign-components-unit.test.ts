@@ -8,7 +8,7 @@ describe("parâmetros de componentes da campanha", () => {
   it("preserva os botões fixos enquanto resolve campos do CRM sem alterar a origem", () => {
     const parsed = input();
     const before = structuredClone(parsed);
-    expect(resolveParameters(parsed)).toEqual({ parameters: { header: {}, body: { "1": "Prévia" }, buttons: { "0": "appointment-123" } }, missing: false });
+    expect(resolveParameters(parsed)).toEqual({ parameters: { header: {}, body: { "1": "Prévia" }, buttons: { "0": "appointment-123" } }, missing: false, missingName: false });
     expect(parsed).toEqual(before);
   });
   it("recusa URL livre, path traversal, índice inválido e upload sem UUID", () => {

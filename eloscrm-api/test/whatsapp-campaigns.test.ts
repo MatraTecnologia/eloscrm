@@ -23,7 +23,7 @@ import { processRecipient as processLegacyRecipient } from "../src/modules/broad
 import * as legacy from "../src/modules/broadcasts/broadcasts.service.js";
 import { campaignInputSchema } from "../src/modules/whatsapp-campaigns/campaigns.schema.js";
 import type { CampaignInput } from "../src/modules/whatsapp-campaigns/campaigns.schema.js";
-import { officialPhoneVariants } from "../src/lib/phone.js";
+import { formatBrPhone, officialPhoneVariants } from "../src/lib/phone.js";
 import type { ChannelConnection } from "../src/generated/prisma/client.js";
 import type { TemplateDefinition } from "../src/modules/whatsapp-outbound/outbound.schema.js";
 
@@ -148,7 +148,7 @@ describe("campanhas oficiais sem envio real", () => {
     expect(campaignInputSchema.safeParse({ ...mapped, parameterSources: { header: {}, body: { "1": "organizationId" } } }).success).toBe(false);
     await expect(preview(orgId, { ...mapped, parameters: input.parameters })).rejects.toMatchObject({ code: "CAMPAIGN_PARAMETERS" });
   });
-  it("mudança no campo personalizado exige nova aprovação e pausa antes do worker enviar", async () => {
+  it("mudança no campo personalizado exige nova aprovação e, no meio do disparo, pula só esse lead", async () => {
     input = { ...input, parameters: { header: {}, body: {} }, parameterSources: { header: {}, body: { "1": "fullName" } } };
     const saved = await draft(); const hash = (saved.snapshot as { previewHash: string }).previewHash;
     await prisma.client.update({ where: { id: clientId }, data: { name: "Nome alterado" } });
@@ -156,7 +156,10 @@ describe("campanhas oficiais sem envio real", () => {
     const id = await start();
     await prisma.client.update({ where: { id: clientId }, data: { name: "Nome alterado novamente" } });
     await processCampaign({ orgId, campaignId: id });
-    expect(graph.sendMessage).not.toHaveBeenCalled(); expect((await service.get(orgId, id)).status).toBe("needs_review");
+    expect(graph.sendMessage).not.toHaveBeenCalled();
+    const current = await service.get(orgId, id);
+    expect(current.status).toBe("running"); expect(current.recipients[0]).toMatchObject({ status: "skipped", errorCode: "CAMPAIGN_RECIPIENT_CHANGED" });
+    expect(current.recipients[0]!.safeError).toContain("dados personalizados");
   });
   it("uazapi aceita leads sem permissão e ignora descadastro no worker", async () => {
     expect((await legacy.preview(orgId, { pipelineId: input.pipelineId, filters: {} })).find(row => row.dealId === input.dealIds[0])?.sendable).toBe(true);
@@ -431,4 +434,120 @@ describe("campanhas oficiais sem envio real", () => {
     expect(graph.sendMessage).toHaveBeenCalledTimes(1); expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("sent");
   });
 
+});
+
+describe("disparo resiliente", () => {
+  const extraRecipient = async (name: string) => {
+    const phone = `55439${randomInt(10000000, 99999999)}`;
+    const client = await prisma.client.create({ data: { organizationId: orgId, name, phone, phoneKey: phone.slice(2, 4) + phone.slice(-8) } });
+    const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
+    const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: client.id, pipelineId: input.pipelineId, stageId: original.stageId, title: `Negócio de ${name}` } });
+    input = { ...input, dealIds: [...input.dealIds, deal.id] };
+    return { client, deal };
+  };
+  beforeEach(() => { vi.mocked(graph.sendMessage).mockImplementation(async () => ({ messages: [{ id: `wamid.${randomUUID()}` }] })); });
+  const drain = async (id: string, times: number) => { for (let i = 0; i < times; i++) { await processCampaign({ orgId, campaignId: id }); await releaseSlot(id); } };
+
+  it("lead que sai dos filtros no meio do disparo é pulado e os outros recebem", async () => {
+    const { deal } = await extraRecipient("Segundo lead");
+    const id = await start();
+    const other = await prisma.stage.create({ data: { organizationId: orgId, pipelineId: input.pipelineId, name: "Outro estágio", position: 1 } });
+    await prisma.officialCampaign.update({ where: { id }, data: { input: { ...input, filters: { stageIds: [(await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } })).stageId] } } } });
+    await prisma.deal.update({ where: { id: deal.id }, data: { stageId: other.id } });
+    await drain(id, 3);
+    const saved = await service.get(orgId, id);
+    expect(saved.status).toBe("done");
+    expect(saved.recipients.find(row => row.dealId === deal.id)).toMatchObject({ status: "skipped", errorCode: "CAMPAIGN_RECIPIENT_CHANGED" });
+    expect(saved.recipients.filter(row => row.status === "sent")).toHaveLength(1);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1);
+  });
+  it("erro da conta na Meta pausa a campanha, devolve o lead à fila e retomar envia sem duplicar", async () => {
+    await extraRecipient("Segundo lead");
+    const id = await start();
+    vi.mocked(graph.sendMessage).mockRejectedValueOnce(new graph.OfficialGraphError(131042, false));
+    await drain(id, 2);
+    let saved = await service.get(orgId, id);
+    expect(saved.status).toBe("paused"); expect(graph.sendMessage).toHaveBeenCalledTimes(1);
+    expect(saved.recipients.every(row => row.status === "pending")).toBe(true);
+    expect(saved.recipients.find(row => row.safeError)?.safeError).toContain("forma de pagamento");
+    await service.changeState(orgId, id, "running", actor());
+    await drain(id, 3);
+    saved = await service.get(orgId, id);
+    expect(saved.status).toBe("done"); expect(saved.recipients.every(row => row.status === "sent" && !row.errorCode && !row.safeError)).toBe(true);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(3);
+    expect(await prisma.officialSendCommand.count({ where: { organizationId: orgId, campaignRecipient: { campaignId: id } } })).toBe(2);
+  });
+  it("template pausado pela Meta pausa a campanha sem queimar a fila nem chamar o envio", async () => {
+    await extraRecipient("Segundo lead");
+    const id = await start();
+    vi.mocked(graph.readTemplates).mockResolvedValue([{ ...definition, status: "PAUSED" }]);
+    await drain(id, 3);
+    const saved = await service.get(orgId, id);
+    expect(graph.sendMessage).not.toHaveBeenCalled();
+    expect(saved.status).toBe("paused"); expect(saved.recipients.every(row => row.status === "pending")).toBe(true);
+    expect(saved.recipients.find(row => row.safeError)?.safeError).toContain("template");
+  });
+  it("tarifa alterada no meio pausa para revisão e continuar aplica a tarifa atual aos restantes", async () => {
+    await extraRecipient("Segundo lead");
+    const id = await start();
+    await drain(id, 1);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(1);
+    await prisma.officialRate.updateMany({ where: { organizationId: orgId, wabaId: channel.wabaId! }, data: { unitRate: "0.0000099" } });
+    await drain(id, 1);
+    let saved = await service.get(orgId, id);
+    expect(saved.status).toBe("needs_review"); expect(saved.recipients.filter(row => row.status === "pending")).toHaveLength(1);
+    await service.changeState(orgId, id, "running", actor());
+    await drain(id, 2);
+    saved = await service.get(orgId, id);
+    expect(saved.status).toBe("done"); expect(saved.recipients.every(row => row.status === "sent")).toBe(true);
+    expect(graph.sendMessage).toHaveBeenCalledTimes(2);
+  });
+  it("lista importada com celular sem o nono dígito envia normalmente", async () => {
+    const digits = String(randomInt(10000000, 99999999)).replace(/^./, "8");
+    const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: `5543${digits}`, name: "Celular antigo" }] } };
+    const snapshot = await preview(orgId, request);
+    expect(snapshot.eligible).toBe(1);
+    const saved = await service.create(orgId, { ...request, name: "Lista antiga", idempotencyKey: randomUUID(), previewHash: snapshot.previewHash }, actor());
+    await service.approve(orgId, saved.id, snapshot.previewHash, true, actor());
+    await drain(saved.id, 2);
+    expect((await service.get(orgId, saved.id)).recipients[0]?.status).toBe("sent");
+    expect(vi.mocked(graph.sendMessage).mock.calls[0]![2].to).toBe(`55439${digits}`);
+  });
+  it("template pausado no catálogo local pausa a campanha em vez de marcar todos como falha", async () => {
+    await extraRecipient("Segundo lead");
+    const id = await start();
+    await prisma.officialTemplate.updateMany({ where: { organizationId: orgId, id: input.templateId }, data: { status: "PAUSED" } });
+    await drain(id, 3);
+    const saved = await service.get(orgId, id);
+    expect(graph.sendMessage).not.toHaveBeenCalled();
+    expect(saved.status).toBe("paused"); expect(saved.recipients.every(row => row.status === "pending")).toBe(true);
+    expect(saved.recipients.find(row => row.safeError)?.safeError).toContain("não está aprovado");
+  });
+  it("recusa da Graph antes da submissão pausa a campanha, mesmo com código desconhecido", async () => {
+    await extraRecipient("Segundo lead");
+    const id = await start();
+    vi.mocked(graph.readTemplates).mockRejectedValue(new graph.OfficialGraphError(2, false));
+    await drain(id, 3);
+    const saved = await service.get(orgId, id);
+    expect(graph.sendMessage).not.toHaveBeenCalled();
+    expect(saved.status).toBe("paused"); expect(saved.recipients.every(row => row.status === "pending")).toBe(true);
+    expect(saved.recipients.find(row => row.safeError)?.safeError).toContain("código 2");
+  });
+  it("tarifa alterada com a campanha pausada é reaplicada ao continuar", async () => {
+    const id = await start();
+    await service.changeState(orgId, id, "paused", actor());
+    await prisma.officialRate.updateMany({ where: { organizationId: orgId, wabaId: channel.wabaId! }, data: { unitRate: "0.0000077" } });
+    await service.changeState(orgId, id, "running", actor());
+    await drain(id, 2);
+    const saved = await service.get(orgId, id);
+    expect(saved.status).toBe("done"); expect(saved.recipients[0]?.status).toBe("sent");
+  });
+  it("lead com o telefone no lugar do nome é excluído quando o template usa o nome", async () => {
+    const phone = `55439${randomInt(10000000, 99999999)}`;
+    const named = await prisma.client.create({ data: { organizationId: orgId, name: formatBrPhone(phone)!, phone, phoneKey: phone.slice(2, 4) + phone.slice(-8) } });
+    const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
+    const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: named.id, pipelineId: input.pipelineId, stageId: original.stageId, title: "Negócio sem nome" } });
+    const result = await preview(orgId, { ...input, dealIds: [deal.id], parameters: { header: {}, body: {} }, parameterSources: { header: {}, body: { "1": "firstName" } } });
+    expect(result.eligible).toBe(0); expect(result.rows[0]!.exclusion).toContain("Corrigir nomes");
+  });
 });
