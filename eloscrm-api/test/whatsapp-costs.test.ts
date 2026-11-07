@@ -151,6 +151,20 @@ describe("custos oficiais, sem envios reais", () => {
     const response = await app.inject({ method: "POST", url: "/v1/whatsapp/costs/preview", headers: headers(), payload: { connectionId: channel.id, identityId: identity.id, type: "text", category: "UTILITY", amount: 0 } });
     expect(response.statusCode).toBe(422); expect(graph).not.toHaveBeenCalled();
   });
+  it("conversa aberta por campanha ganha telefone na resposta e o bsuid usa o país do telefone", async () => {
+    // Como o envio de campanha cria: conversa sem telefone, presa ao contato.
+    const phone = `55439${Math.floor(10000000 + Math.random() * 89999999)}`;
+    const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, displayName: "Lead de campanha" } });
+    const thread = await prisma.conversation.create({ data: { organizationId: orgId, connectionId: channel.id, messagingContactId: contact.id, chatid: `contact:${contact.id}` } });
+    const scope = `business:${channel.businessPortfolioId}`;
+    await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, source: "provider", kind: "wa_id", value: phone, scope, validFrom: new Date(0) } });
+    const userId = `BR.${randomUUID()}`;
+    await ingestMessage(channel, { id: randomUUID(), from: phone, from_user_id: userId, type: "text", text: { body: "Teste" }, timestamp: String(Math.floor(Date.now() / 1000)) }, [{ wa_id: phone, user_id: userId, profile: { name: "Lead" } }], "cloud_api", new Date());
+    expect((await prisma.conversation.findUniqueOrThrow({ where: { id: thread.id } })).phone).toBe(phone);
+    const bsuid = await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, contactId: contact.id, kind: "bsuid" } });
+    await costs.addRate(orgId, { ...rate, category: "SERVICE", validUntil: new Date(Date.now() + 365 * 864e5).toISOString() }, actorId);
+    expect(await costs.preview(orgId, { connectionId: channel.id, identityId: bsuid.id, type: "text" })).toMatchObject({ state: "estimated_base", amount: rate.unitRate });
+  });
   it("snapshot conserva moeda/valor em falha e recusa analytics parciais ou contraditórios", async () => {
     const start = Date.parse(period.start) / 1000;
     const point = { start, end: start + 86400, country: "BR", pricing_category: "MARKETING", volume: 1, cost: "0.01" };

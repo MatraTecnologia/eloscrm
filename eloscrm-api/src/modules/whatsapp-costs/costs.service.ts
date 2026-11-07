@@ -50,7 +50,8 @@ export const preview = async (orgId: string, input: PreviewInput) => {
   const template = input.type === "template" ? await repo.previewTemplate(orgId, channel.wabaId!, input.templateId!) : null;
   if (input.type === "template" && !template) throw notFound("Template aprovado não encontrado");
   const category = template?.category ?? "SERVICE";
-  const country = identity.recipientCountry ?? (["phone", "wa_id"].includes(identity.kind) && /^55\d{10,11}$/.test(identity.value) ? "BR" : null);
+  const phone = ["phone", "wa_id"].includes(identity.kind) ? identity.value : (await repo.contactPhone(orgId, identity.contactId, identity.scope))?.value;
+  const country = identity.recipientCountry ?? (phone && /^55\d{10,11}$/.test(phone) ? "BR" : null);
   if (!country) return { amount: null, currency: channel.currency, category, state: "missing_country" };
   const result = await simulate(orgId, { connectionId: channel.id, at: new Date().toISOString(), rows: [{ country, category, pricingType: "REGULAR", quantity: 1, volumeBefore: 0 }] });
   return { amount: result.total, currency: result.currency, category, state: result.total === null ? "missing_rate" : "estimated_base" };

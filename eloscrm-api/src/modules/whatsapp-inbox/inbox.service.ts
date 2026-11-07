@@ -24,7 +24,8 @@ export const get = async (orgId: string, id: string) => {
       number: conversation.connection?.displayPhoneNumber ?? conversation.instance?.ownerJid?.split("@")[0] ?? null,
       status: conversation.connection?.provider === "cloud_api" ? conversation.connection.status : conversation.instance?.status === "connected" ? "connected" : "disconnected",
       credentialExpired: !!conversation.connection?.tokenExpiresAt && conversation.connection.tokenExpiresAt <= new Date(),
-      serviceWindowExpiresAt: conversation.serviceWindowExpiresAt, phone: conversation.phone, isGroup: conversation.isGroup,
+      // Conversa aberta por campanha e ainda sem resposta não tem telefone gravado; a identidade tem.
+      serviceWindowExpiresAt: conversation.serviceWindowExpiresAt, phone: conversation.phone ?? identities.find(identity => identity.contactId === conversation.messagingContactId && ["wa_id", "phone"].includes(identity.kind))?.value ?? null, isGroup: conversation.isGroup,
       identities: identities.filter(identity => identity.contactId === conversation.messagingContactId && identity.scope === `business:${conversation.connection?.businessPortfolioId}`).map(identity => ({ id: identity.id, kind: identity.kind })),
     })),
   };

@@ -71,7 +71,7 @@ export const children = (orgId: string, id: string) => prisma.conversation.findM
     instance: { select: { id: true, name: true, ownerJid: true, status: true } },
   },
 });
-export const identities = (orgId: string, contactIds: string[]) => prisma.contactIdentity.findMany({ where: { organizationId: orgId, contactId: { in: contactIds }, validUntil: null, validFrom: { lte: new Date() }, source: "provider", kind: { in: ["phone", "wa_id", "bsuid", "parent_bsuid"] } }, select: { id: true, kind: true, contactId: true, scope: true } });
+export const identities = (orgId: string, contactIds: string[]) => prisma.contactIdentity.findMany({ where: { organizationId: orgId, contactId: { in: contactIds }, validUntil: null, validFrom: { lte: new Date() }, source: "provider", kind: { in: ["phone", "wa_id", "bsuid", "parent_bsuid"] } }, select: { id: true, kind: true, value: true, contactId: true, scope: true } });
 export const messageCursor = (orgId: string, conversationIds: string[], id: string) => prisma.whatsappMessage.findFirst({ where: { organizationId: orgId, conversationId: { in: conversationIds }, id }, select: { id: true, sentAt: true } });
 export const messages = (orgId: string, conversationIds: string[], limit: number, cursor?: { id: string; sentAt: Date }, q?: string) => prisma.whatsappMessage.findMany({
   where: { organizationId: orgId, conversationId: { in: conversationIds }, type: { not: "reaction" }, ...(q ? { deletedAt: null, text: { contains: q, mode: "insensitive" as const } } : {}), ...(cursor ? { OR: [{ sentAt: { lt: cursor.sentAt } }, { sentAt: cursor.sentAt, id: { lt: cursor.id } }] } : {}) },

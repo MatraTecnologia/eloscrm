@@ -19,6 +19,9 @@ export const ingestMessage = async (connection: ChannelConnection, raw: Record<s
         phone: message.aliases.find(alias => alias.kind === "wa_id")?.value,
       }, update: {},
     });
+    // A conversa aberta pelo envio de campanha nasce sem telefone; a primeira mensagem da Meta traz o wa_id.
+    const waId = message.aliases.find(alias => alias.kind === "wa_id")?.value;
+    if (!conversation.phone && waId) await tx.conversation.updateMany({ where: { id: conversation.id, organizationId: connection.organizationId, phone: null }, data: { phone: waId } });
     const where = { organizationId: connection.organizationId, connectionId: connection.id, providerMessageId: message.id };
     const existing = await tx.whatsappMessage.findFirst({ where });
     if (existing && (existing.conversationId !== conversation.id || existing.direction !== message.direction)) throw conflict("OFFICIAL_MESSAGE_CONFLICT", "A mensagem possui vínculo ou direção incompatível");
