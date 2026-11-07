@@ -331,6 +331,8 @@ Desde 2026-11-07 o gate (`gate.service.ts`) e o worker (`dispatch.service.ts`) s
 
 O `checkSubmission` compara o telefone da lista importada com a identidade nas duas grafias do celular (`officialPhoneVariants`). Entre 2026-11-07 09:32 e este ajuste, a identidade passou a ser gravada com o nono dígito e a comparação exata fazia falhar quem estava na lista sem ele.
 
+A prévia exclui quem já recebeu **o mesmo template** nos últimos 7 dias (`recentlyReceived`: destinatário `sent` ou `unknown`, pelo contato técnico; entrega que a Meta informou como falha não conta, porque a pessoa não recebeu e não houve cobrança), com o nome da campanha no motivo. Como o gate reexecuta a prévia antes de cada envio, a trava também impede que duas campanhas sobrepostas mandem o mesmo template para a mesma pessoa: a segunda pula esse destinatário. Template diferente não é afetado.
+
 Lead batizado pela automação (nome igual ao telefone formatado, `isAutoNamed`) fica excluído quando o template usa o nome, com o motivo apontando para **Leads › Corrigir nomes**. Sem isso, o template saía como "Olá (43), …".
 
 ### 12.2. Pausa, retomada e cancelamento
@@ -743,4 +745,4 @@ A configuração de Embedded Signup e as regras comerciais da Meta podem mudar. 
 
 Este documento registra a implementação presente. Melhorias futuras devem atualizar primeiro os contratos efetivos e depois as seções afetadas, sem transformar um plano em funcionalidade entregue.
 
-> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-11-07 10:04 (-03)
+> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-11-07 10:31 (-03)

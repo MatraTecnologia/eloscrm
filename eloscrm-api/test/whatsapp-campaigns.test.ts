@@ -62,6 +62,8 @@ const releaseSlot = (id: string) => prisma.officialCampaign.update({ where: { id
 
 describe("campanhas oficiais sem envio real", () => {
   it("pausa sem enviar e retoma uma única vez; encerramento bloqueia retomada", async () => {
+    // Encerrada antes de qualquer envio: depois dele, a mesma pessoa nem seria elegível de novo.
+    const canceled = await start(); await service.cancel(orgId, canceled, actor());
     const id = await start();
     await service.changeState(orgId, id, "paused", actor());
     await processCampaign({ orgId, campaignId: id });
@@ -73,7 +75,6 @@ describe("campanhas oficiais sem envio real", () => {
     expect(graph.sendMessage).toHaveBeenCalledTimes(1);
     expect((await service.get(orgId, id)).status).toBe("done");
     await expect(service.changeState(orgId, id, "running", actor())).rejects.toMatchObject({ code: "CAMPAIGN_STATE" });
-    const canceled = await start(); await service.cancel(orgId, canceled, actor());
     await expect(service.changeState(orgId, canceled, "running", actor())).rejects.toMatchObject({ code: "CAMPAIGN_STATE" });
   });
   it("falha em um destino não interrompe o seguinte e preserva o código do provedor", async () => {
@@ -251,7 +252,15 @@ describe("campanhas oficiais sem envio real", () => {
     const saved = await service.get(orgId, id); expect(saved.status).toBe("needs_review"); expect((saved.snapshot as { estimate: { amount: string } }).estimate.amount).toBe("0.0000012345");
   });
   it("duas campanhas no mesmo número respeitam slot persistido e não enviam juntas", async () => {
-    const first = await start(); const second = await start();
+    const first = await start();
+    // Pessoas diferentes: a mesma pessoa não recebe o mesmo template de duas campanhas.
+    const phone = `55439${randomInt(10000000, 99999999)}`;
+    const client = await prisma.client.create({ data: { organizationId: orgId, name: "Outra pessoa", phone } });
+    const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
+    const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: client.id, pipelineId: input.pipelineId, stageId: original.stageId, title: "Outro negócio" } });
+    input = { ...input, dealIds: [deal.id] };
+    vi.mocked(graph.sendMessage).mockImplementation(async () => ({ messages: [{ id: `wamid.${randomUUID()}` }] }));
+    const second = await start();
     await Promise.all([processCampaign({ orgId, campaignId: first }), processCampaign({ orgId, campaignId: second })]);
     expect(graph.sendMessage).toHaveBeenCalledTimes(1);
     const remaining = (await service.get(orgId, first)).recipients[0]!.status === "pending" ? first : second;
@@ -541,6 +550,21 @@ describe("disparo resiliente", () => {
     await drain(id, 2);
     const saved = await service.get(orgId, id);
     expect(saved.status).toBe("done"); expect(saved.recipients[0]?.status).toBe("sent");
+  });
+  it("quem já recebeu o template fica fora da campanha seguinte com o mesmo template", async () => {
+    const id = await start(); await drain(id, 2);
+    expect((await service.get(orgId, id)).recipients[0]?.status).toBe("sent");
+    const again = await preview(orgId, input);
+    expect(again.eligible).toBe(0); expect(again.rows[0]!.exclusion).toContain("Já recebeu este template na campanha \"Campanha fictícia\"");
+    expect(again.estimate.amount).toBeNull();
+    // Entrega que falhou depois do aceite libera o reenvio.
+    const command = await outbound.command(orgId, (await service.get(orgId, id)).recipients[0]!.commandId!);
+    await ingestReceipt(channel, { id: command!.externalMessageId!, status: "failed", timestamp: String(Math.floor(Date.now() / 1000)), errors: [{ code: 131026, title: "Não entregue" }] }, new Date());
+    expect((await preview(orgId, input)).eligible).toBe(1);
+    const other = { ...definition, id: String(Math.floor(Math.random() * 1e9)), name: "other_fixture" };
+    vi.mocked(graph.readTemplates).mockResolvedValue([definition, other]); await sends.syncTemplates(orgId, channel.id);
+    const otherTemplate = await prisma.officialTemplate.findFirstOrThrow({ where: { organizationId: orgId, wabaId: channel.wabaId!, name: "other_fixture" } });
+    expect((await preview(orgId, { ...input, templateId: otherTemplate.id })).eligible).toBe(1);
   });
   it("lead com o telefone no lugar do nome é excluído quando o template usa o nome", async () => {
     const phone = `55439${randomInt(10000000, 99999999)}`;

@@ -15,6 +15,7 @@ import { importedIdentity } from "../campaign-imports/imports.repo.js";
 import { toOfficialPhone } from "../../lib/phone.js";
 import type { ContactIdentity } from "../../generated/prisma/client.js";
 
+const RESEND_WINDOW_DAYS = 7;
 export const preview = async (orgId: string, input: CampaignInput) => {
   const [channel, pipeline] = await Promise.all([outbound.connection(orgId, input.connectionId), deals.findPipeline(orgId, input.pipelineId)]);
   if (!channel?.wabaId || !pipeline) throw notFound("Conexão ou funil não encontrado nesta imobiliária");
@@ -99,6 +100,14 @@ export const preview = async (orgId: string, input: CampaignInput) => {
     rows.push({ dealId: deal.id, clientId: deal.client.id, clientName: deal.client.name, contactId, identityId: identity?.id ?? null, identityHash: identity ? eventHash({ scope: identity.scope, kind: identity.kind, value: identity.value }) : null, parameters: resolved.parameters, text, exclusion, cost });
   }
   for (const id of input.dealIds) if (!targets.some(deal => deal.id === id)) rows.push({ dealId: id, clientId: "", clientName: "Negócio fora da seleção atual", contactId: null, identityId: null, identityHash: null, parameters: input.parameters, text: null, exclusion: "Negócio indisponível ou fora dos filtros", cost: { country: null, category: stored.category, currency: channel.currency, amount: null, rateId: null, state: "excluded", rate: null } });
+  const contactIds = [...new Set(rows.flatMap(row => !row.exclusion && row.contactId ? [row.contactId] : []))];
+  const received = contactIds.length ? new Map((await repo.recentlyReceived(orgId, contactIds, stored.id, new Date(at.getTime() - RESEND_WINDOW_DAYS * 86_400_000))).reverse().map(row => [row.contactId, row.campaign.name])) : new Map<string, string>();
+  for (const row of rows) {
+    const campaign = row.contactId ? received.get(row.contactId) : undefined;
+    if (row.exclusion || campaign === undefined) continue;
+    row.exclusion = `Já recebeu este template na campanha "${campaign}" nos últimos ${RESEND_WINDOW_DAYS} dias`;
+    row.cost = { ...row.cost, amount: null, rateId: null, state: "excluded", rate: null };
+  }
   const eligible = rows.filter(row => !row.exclusion);
   const result = { ...(headerMedia ? { headerMedia } : {}), connectionId: channel.id, pipelineId: pipeline.id, template: { id: stored.id, name: stored.name, category: stored.category, language: stored.language, definitionHash: eventHash(definition) }, parameters: input.parameters, text: built.preview, rows, eligible: eligible.length, excluded: rows.length - eligible.length,
     estimate: { currency: channel.currency, amount: eligible.length && eligible.every(row => row.cost.amount !== null) ? eligible.reduce((sum, row) => sum.plus(row.cost.amount!), new CostDecimal(0)).toFixed() : null, unresolved: eligible.filter(row => row.cost.amount === null).length, messagesPerPerson: 1, assumption: "Entrega de uma mensagem por pessoa elegível, pela tarifa base; impostos, câmbio e intermediários não incluídos." } };
