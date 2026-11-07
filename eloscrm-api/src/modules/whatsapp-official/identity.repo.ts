@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { Prisma, type ChannelConnection, type ContactIdentityKind } from "../../generated/prisma/client.js";
 import { httpError } from "../../lib/http-error.js";
+import { officialPhoneVariants } from "../../lib/phone.js";
 import { prisma } from "../../lib/prisma.js";
 
 export type Alias = { kind: ContactIdentityKind; value: string };
@@ -17,13 +18,17 @@ export const resolveAliases = async (tx: Prisma.TransactionClient, connection: C
   }
   const orgId = connection.organizationId;
   const scope = `business:${connection.businessPortfolioId}`;
-  const importedPhones = aliases.filter(alias => alias.kind === "wa_id").map(alias => ({ kind: "phone" as const, value: alias.value, source: "campaign_import" }));
-  const existing = await tx.contactIdentity.findMany({ where: { organizationId: orgId, scope, OR: [...aliases, ...importedPhones] } });
+  // A campanha grava o celular com o nono dígito; o wa_id da resposta costuma vir sem ele.
+  const importedPhones = aliases.filter(alias => alias.kind === "wa_id").flatMap(alias => officialPhoneVariants(alias.value).map(value => ({ kind: "phone" as const, value, source: "campaign_import" })));
+  const existing = await tx.contactIdentity.findMany({ where: { organizationId: orgId, scope, OR: [...aliases, ...importedPhones] }, orderBy: { id: "asc" } });
   if (existing.some(alias => alias.validUntil && (!occurredAt || occurredAt >= alias.validUntil))) throw httpError(409, "OFFICIAL_IDENTITY_RETIRED", "A identidade exige revisão");
-  const contactIds = [...new Set(existing.map(alias => alias.contactId))];
+  const direct = existing.filter(found => aliases.some(alias => alias.kind === found.kind && alias.value === found.value));
+  const contactIds = [...new Set(direct.map(alias => alias.contactId))];
   if (contactIds.length > 1) throw httpError(409, "OFFICIAL_IDENTITY_CONFLICT", "O evento possui identidades vinculadas a contatos diferentes");
-  const contact = contactIds.length
-    ? await tx.messagingContact.findFirstOrThrow({ where: { id: contactIds[0], organizationId: orgId } })
+  // Sem alias do provedor, a identidade de campanha mais antiga decide; as grafias são o mesmo celular.
+  const contactId = contactIds[0] ?? existing[0]?.contactId;
+  const contact = contactId
+    ? await tx.messagingContact.findFirstOrThrow({ where: { id: contactId, organizationId: orgId } })
     : await tx.messagingContact.create({ data: { organizationId: orgId, displayName } });
   await tx.contactIdentity.createMany({ data: aliases.map(alias => ({
     ...alias, scope, organizationId: orgId, connectionId: connection.id, contactId: contact.id, source: "provider",

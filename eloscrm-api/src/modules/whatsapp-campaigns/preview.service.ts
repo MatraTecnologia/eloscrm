@@ -12,6 +12,8 @@ import * as repo from "./campaigns.repo.js";
 import type { CampaignInput } from "./campaigns.schema.js";
 import { resolveParameters } from "./parameters.js";
 import { importedIdentity } from "../campaign-imports/imports.repo.js";
+import { toOfficialPhone } from "../../lib/phone.js";
+import type { ContactIdentity } from "../../generated/prisma/client.js";
 
 export const preview = async (orgId: string, input: CampaignInput) => {
   const [channel, pipeline] = await Promise.all([outbound.connection(orgId, input.connectionId), deals.findPipeline(orgId, input.pipelineId)]);
@@ -52,6 +54,8 @@ export const preview = async (orgId: string, input: CampaignInput) => {
       try { identity = await importedIdentity(channel, phone, imported.name); }
       catch { exclusion = "Identidade do telefone exige revisão"; }
     }
+    // As duas grafias do mesmo celular resolvem para o mesmo contato, e o destinatário é único por contato.
+    if (identity && used.has(identity.contactId)) exclusion = "Telefone repetido nesta lista";
     destinations.add(`import:${phone}`);
     const resolved = resolveParameters(input, undefined, undefined, imported.name);
     let text: string | null = null;
@@ -59,15 +63,26 @@ export const preview = async (orgId: string, input: CampaignInput) => {
     else { try { text = build(resolved.parameters).preview; } catch { exclusion ??= "Dados personalizados excedem os limites do template"; } }
     const rate = catalog.find(rate => rate.currency === channel.currency && rate.country === "BR" && rate.category === stored.category && rate.pricingType === "REGULAR" && rate.volumeFrom === 0 && rate.validFrom <= at && rate.validUntil > at);
     const cost = { country: "BR", category: stored.category, currency: channel.currency, amount: !exclusion && rate ? rate.unitRate.toFixed() : null, rateId: !exclusion && rate ? rate.id : null, state: exclusion ? "excluded" : !rate ? "missing_rate" : "estimated_base", rate: !exclusion && rate ? { id: rate.id, unitRate: rate.unitRate.toFixed(), country: rate.country, category: rate.category, currency: rate.currency, pricingType: rate.pricingType, sourceUrl: rate.sourceUrl, validFrom: rate.validFrom.toISOString(), validUntil: rate.validUntil.toISOString(), volumeFrom: rate.volumeFrom, volumeUntil: rate.volumeUntil } : null };
+    if (!exclusion && identity) used.add(identity.contactId);
     rows.push({ dealId: `import:${phone}`, clientId: "", clientName: imported.name || phone, contactId: identity?.contactId ?? null, identityId: identity?.id ?? null, identityHash: identity ? eventHash({ scope: identity.scope, kind: identity.kind, value: identity.value }) : null, parameters: resolved.parameters, text, exclusion, cost });
   }
   for (const deal of targets) {
     const contact = await repo.contact(orgId, deal.client.id, `business:${channel.businessPortfolioId}`);
-    const identity = contact?.identities.find(value => ["wa_id", "bsuid", "parent_bsuid", "phone"].includes(value.kind));
-    const destination = identity ? `${identity.scope}:${["phone", "wa_id"].includes(identity.kind) ? "to" : "recipient"}:${identity.value}` : null;
+    let identity: ContactIdentity | undefined = contact?.identities.find(value => ["wa_id", "bsuid", "parent_bsuid", "phone"].includes(value.kind));
     let exclusion: string | null = null;
-    if (!identity) exclusion = "Sem identidade oficial vigente neste portfolio";
-    else if (used.has(contact!.id) || destinations.has(destination!)) exclusion = "Pessoa já selecionada por outro negócio";
+    // Lead que nunca escreveu para o número oficial recebe o template pelo telefone do cadastro.
+    if (!identity) {
+      const phone = toOfficialPhone(deal.client.phone);
+      // Fixo raramente tem WhatsApp; o template só sai para celular.
+      if (!phone || !/^55\d{2}9\d{8}$/.test(phone)) exclusion = "Lead sem celular válido no cadastro";
+      else {
+        try { identity = await importedIdentity(channel, phone, deal.client.name, deal.client.id); }
+        catch { exclusion = "Identidade do telefone exige revisão"; }
+      }
+    }
+    const contactId = identity?.contactId ?? null;
+    const destination = identity ? `${identity.scope}:${["phone", "wa_id"].includes(identity.kind) ? "to" : "recipient"}:${identity.value}` : null;
+    if (identity && (used.has(identity.contactId) || destinations.has(destination!))) exclusion = "Pessoa já selecionada por outro negócio";
     const resolved = resolveParameters(input, deal, deal.ownerId ? owners.get(deal.ownerId) : undefined);
     let text: string | null = null;
     if (resolved.missing) exclusion ??= "Campo do CRM ausente para personalizar o template";
@@ -75,12 +90,12 @@ export const preview = async (orgId: string, input: CampaignInput) => {
       try { text = build(resolved.parameters).preview; }
       catch { exclusion ??= "Dados personalizados excedem os limites do template"; }
     }
-    if (!exclusion && contact && destination) { used.add(contact.id); destinations.add(destination); }
+    if (!exclusion && contactId && destination) { used.add(contactId); destinations.add(destination); }
     const country = identity?.recipientCountry ?? (identity && ["wa_id", "phone"].includes(identity.kind) && /^55\d{10,11}$/.test(identity.value) ? "BR" : null);
     const rate = catalog.find(rate => rate.currency === channel.currency && rate.country === country && rate.category === stored.category && rate.pricingType === "REGULAR" && rate.volumeFrom === 0 && rate.validFrom <= at && rate.validUntil > at);
     const cost = { country, category: stored.category, currency: channel.currency, amount: !exclusion && rate ? rate.unitRate.toFixed() : null, rateId: !exclusion && rate ? rate.id : null, state: exclusion ? "excluded" : !country ? "missing_country" : !rate ? "missing_rate" : "estimated_base",
       rate: !exclusion && rate ? { id: rate.id, unitRate: rate.unitRate.toFixed(), country: rate.country, category: rate.category, currency: rate.currency, pricingType: rate.pricingType, sourceUrl: rate.sourceUrl, validFrom: rate.validFrom.toISOString(), validUntil: rate.validUntil.toISOString(), volumeFrom: rate.volumeFrom, volumeUntil: rate.volumeUntil } : null };
-    rows.push({ dealId: deal.id, clientId: deal.client.id, clientName: deal.client.name, contactId: contact?.id ?? null, identityId: identity?.id ?? null, identityHash: identity ? eventHash({ scope: identity.scope, kind: identity.kind, value: identity.value }) : null, parameters: resolved.parameters, text, exclusion, cost });
+    rows.push({ dealId: deal.id, clientId: deal.client.id, clientName: deal.client.name, contactId, identityId: identity?.id ?? null, identityHash: identity ? eventHash({ scope: identity.scope, kind: identity.kind, value: identity.value }) : null, parameters: resolved.parameters, text, exclusion, cost });
   }
   for (const id of input.dealIds) if (!targets.some(deal => deal.id === id)) rows.push({ dealId: id, clientId: "", clientName: "Negócio fora da seleção atual", contactId: null, identityId: null, identityHash: null, parameters: input.parameters, text: null, exclusion: "Negócio indisponível ou fora dos filtros", cost: { country: null, category: stored.category, currency: channel.currency, amount: null, rateId: null, state: "excluded", rate: null } });
   const eligible = rows.filter(row => !row.exclusion);

@@ -51,10 +51,18 @@ export const createCommand = (channel: ChannelConnection, input: SendInput, requ
   const active = await tx.channelConnection.findFirst({ where: { organizationId: channel.organizationId, id: channel.id, status: "connected", disabledAt: null, tokenEnc: { not: null }, OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { gt: new Date() } }] }, select: { id: true } });
   if (!active) throw httpError(422, "OFFICIAL_CONNECTION_DISABLED", "A conexão oficial está desativada ou expirada");
   if (campaignRecipientId) await checkSubmission(tx, channel.organizationId, campaignRecipientId);
+  // Destinatário de campanha vindo do CRM: a conversa entra na ficha do lead já no envio, e a resposta
+  // cai nela. A prévia não faz esse vínculo porque não envia nada.
+  const recipientClientId = campaignRecipientId ? (await tx.officialCampaignRecipient.findFirst({ where: { organizationId: channel.organizationId, id: campaignRecipientId }, select: { clientId: true } }))?.clientId || null : null;
   const thread = await tx.conversation.upsert({
     where: { connectionId_messagingContactId: { connectionId: channel.id, messagingContactId: contactId } },
-    create: { organizationId: channel.organizationId, connectionId: channel.id, messagingContactId: contactId, chatid: `contact:${contactId}` }, update: {},
+    create: { organizationId: channel.organizationId, connectionId: channel.id, messagingContactId: contactId, chatid: `contact:${contactId}`, ...(recipientClientId ? { clientId: recipientClientId } : {}) }, update: {},
   });
+  if (recipientClientId) {
+    if (!thread.clientId) await tx.conversation.updateMany({ where: { organizationId: channel.organizationId, id: thread.id, clientId: null }, data: { clientId: recipientClientId } });
+    const linked = await tx.messagingContact.findFirst({ where: { organizationId: channel.organizationId, clientId: recipientClientId }, select: { id: true } });
+    if (!linked) await tx.messagingContact.updateMany({ where: { organizationId: channel.organizationId, id: contactId, clientId: null }, data: { clientId: recipientClientId } });
+  }
   const id = randomUUID();
   const message = await tx.whatsappMessage.create({ data: {
     organizationId: channel.organizationId, connectionId: channel.id, conversationId: thread.id,

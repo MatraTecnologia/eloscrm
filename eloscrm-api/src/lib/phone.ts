@@ -59,3 +59,26 @@ export const phoneKey = (value: string | null | undefined): string | null => {
 
   return national.slice(0, 2) + national.slice(-8);
 };
+
+/**
+ * Número para a Cloud API: DDI + DDD + assinante, com o nono dígito no celular. Cadastro antigo
+ * guarda o celular com 8 dígitos (`(43) 9918-2844`); assinante começando em 6–9 é celular, e é
+ * com o 9 que ele existe hoje. Fixo (2–5) passa como está; o resto não é número brasileiro válido.
+ */
+export const toOfficialPhone = (value: string | null | undefined): string | null => {
+  const number = toWaNumber(value);
+  if (!number || !/^55[1-9]\d(?:[2-9]\d{7}|9\d{8})$/.test(number)) return null;
+  return number.length === 12 && /^[6-9]$/.test(number[4]!) ? `${number.slice(0, 4)}9${number.slice(4)}` : number;
+};
+
+/**
+ * As duas grafias do mesmo celular, com e sem o nono dígito. O wa_id que a Meta devolve costuma
+ * vir sem o 9 (`554391834229`), enquanto a campanha grava com (`5543991834229`); sem casar as duas,
+ * a resposta do lead abriria um contato novo em vez de cair no da campanha.
+ */
+export const officialPhoneVariants = (value: string): string[] => {
+  // Só o inverso exato da inserção: celular 9[1-5] não tem grafia antiga e casaria com um fixo.
+  if (/^55[1-9]\d9[6-9]\d{7}$/.test(value)) return [value, value.slice(0, 4) + value.slice(5)];
+  if (/^55[1-9]\d[6-9]\d{7}$/.test(value)) return [value, `${value.slice(0, 4)}9${value.slice(4)}`];
+  return [value];
+};

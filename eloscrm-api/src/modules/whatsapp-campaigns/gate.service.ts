@@ -20,7 +20,11 @@ export const checkCampaign = async (orgId: string, recipientId: string) => {
   }
   const target = current.rows.find(value => value.dealId === row.dealId);
   const snapshot = row.campaign.snapshot as unknown as Awaited<ReturnType<typeof preview>>;
-  if (!target || target.exclusion || target.clientId !== row.clientId || target.contactId !== row.contactId || target.identityId !== row.identityId || target.identityHash !== row.identityHash || eventHash(target.parameters) !== eventHash(row.parameters) || eventHash(target.cost) !== eventHash(row.costSnapshot) || eventHash(current.template) !== eventHash(snapshot.template) || eventHash(current.headerMedia ?? null) !== eventHash(snapshot.headerMedia ?? null)) {
+  // Lead que escreve no meio do disparo ganha a identidade do provedor no mesmo contato. A pessoa e o
+  // destino são os mesmos: o envio segue pela identidade congelada, que o outbound revalida.
+  const sameIdentity = target?.identityId === row.identityId && target.identityHash === row.identityHash;
+  const promoted = !sameIdentity && !!target && target.contactId === row.contactId && !!await repo.activeIdentity(orgId, row.identityId, row.contactId);
+  if (!target || target.exclusion || target.clientId !== row.clientId || target.contactId !== row.contactId || (!sameIdentity && !promoted) || eventHash(target.parameters) !== eventHash(row.parameters) || eventHash(target.cost) !== eventHash(row.costSnapshot) || eventHash(current.template) !== eventHash(snapshot.template) || eventHash(current.headerMedia ?? null) !== eventHash(snapshot.headerMedia ?? null)) {
     await repo.pause(orgId, row.campaignId);
     throw httpError(422, "CAMPAIGN_CHANGED", "Público, dados personalizados, identidade, template, arquivo ou tarifa mudou; a campanha foi pausada para revisão");
   }

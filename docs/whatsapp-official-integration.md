@@ -137,7 +137,13 @@ Grupos não fazem parte do atendimento oficial implementado. Histórico importad
 
 As identidades oficiais incluem `wa_id`, `phone`, `bsuid` e `parent_bsuid`. O escopo do portfólio evita tratar um identificador de uma empresa como identidade universal de outra. As rotinas preservam origem e vigência e processam `user_id_update` para alterações de identidade.
 
-O envio oficial comum exige uma identidade vigente, informada pelo provedor e pertencente ao escopo da conexão. A exceção de identidade `campaign_import` existe para um template de campanha associado ao destinatário importado; ela não habilita envio livre arbitrário.
+O envio oficial comum exige uma identidade vigente, informada pelo provedor e pertencente ao escopo da conexão. A exceção de identidade `campaign_import` existe para um template de campanha associado ao destinatário importado ou ao lead do CRM que ainda não conversou pelo número oficial; ela não habilita envio livre arbitrário.
+
+Na campanha, o negócio do CRM usa primeiro a identidade `provider` do contato ligado ao lead. Sem ela, o preview cria (ou reaproveita) uma identidade `campaign_import` a partir do telefone do cadastro, normalizado com o nono dígito (`toOfficialPhone`). O contato técnico novo nasce **sem** `clientId`: o campo é único e a prévia não pode ocupar o vínculo que a conversa real do lead vai precisar. O contato que já estiver ligado ao lead é reaproveitado. Só celular entra; fixo ou telefone inválido fica excluído com "Lead sem celular válido no cadastro". O destinatário é único por contato, tanto no CRM quanto na lista importada: as duas grafias do mesmo celular resolvem para o mesmo contato e a segunda sai como repetida (sem isso, o `@@unique([campaignId, contactId])` derrubava a criação da campanha).
+
+Se o lead escreve para o número oficial no meio do disparo, ele ganha uma identidade `provider` no mesmo contato. O gate (`gate.service.ts`) aceita essa troca e envia pela identidade congelada, que o outbound revalida. No envio de um destinatário vindo do CRM, `createCommand` liga a conversa (e o contato, se o lead ainda não tiver outro) ao `clientId` do destinatário: a mensagem aparece na ficha do lead, o filtro "Retorno no WhatsApp" enxerga a resposta e a automação de entrada não cria lead nem card novo. Antes, a campanha pausava em `CAMPAIGN_CHANGED` e não podia mais ser retomada, porque já tinha envios. Até 2026-11-07 essa queda não existia, e todo lead que nunca tinha escrito para o número oficial saía como "Sem identidade oficial vigente neste portfolio". Num funil de prospecção, isso excluía quase o público inteiro.
+
+O mesmo celular pode estar gravado com e sem o nono dígito: a campanha grava com, e o `wa_id` da Meta costuma vir sem. A busca de identidade (`officialPhoneVariants`) considera as duas grafias (só para celular 9[6-9]: um 9[1-5] sem o nove casaria com um fixo), a identidade `provider` vence a de campanha e a resposta do lead cai no contato criado pela campanha (`resolveAliases`).
 
 Não se deve fundir contatos só porque os nomes coincidem. O histórico pode ser agregado por vínculo explícito ao lead. Quando há mais de um lead com o mesmo telefone, a automação evita escolher um deles silenciosamente.
 
@@ -727,4 +733,4 @@ A configuração de Embedded Signup e as regras comerciais da Meta podem mudar. 
 
 Este documento registra a implementação presente. Melhorias futuras devem atualizar primeiro os contratos efetivos e depois as seções afetadas, sem transformar um plano em funcionalidade entregue.
 
-> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-10-07 17:26 (-03)
+> Criado em 2026-10-07 17:11 (-03) · Última modificação: 2026-11-07 08:49 (-03)

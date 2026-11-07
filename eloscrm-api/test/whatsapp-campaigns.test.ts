@@ -23,6 +23,7 @@ import { processRecipient as processLegacyRecipient } from "../src/modules/broad
 import * as legacy from "../src/modules/broadcasts/broadcasts.service.js";
 import { campaignInputSchema } from "../src/modules/whatsapp-campaigns/campaigns.schema.js";
 import type { CampaignInput } from "../src/modules/whatsapp-campaigns/campaigns.schema.js";
+import { officialPhoneVariants } from "../src/lib/phone.js";
 import type { ChannelConnection } from "../src/generated/prisma/client.js";
 import type { TemplateDefinition } from "../src/modules/whatsapp-outbound/outbound.schema.js";
 
@@ -42,7 +43,7 @@ beforeEach(async () => {
   vi.mocked(queueEnabled).mockReturnValue(true); vi.mocked(graph.sendMessage).mockReset(); vi.mocked(graph.readTemplates).mockReset();
   const fixture = await createOfficialConnectionFixture(orgId); channel = (await outbound.connection(orgId, fixture.connection.id))!;
   const pipeline = await prisma.pipeline.create({ data: { organizationId: orgId, name: `Funil fictício ${randomUUID()}`, stages: { create: { organizationId: orgId, name: "Entrada", position: 0 } } }, include: { stages: true } });
-  const phone = `5543${randomInt(100000000, 999999999)}`; clientPhoneKey = phone.slice(2, 4) + phone.slice(-8);
+  const phone = `55439${randomInt(10000000, 99999999)}`; clientPhoneKey = phone.slice(2, 4) + phone.slice(-8);
   const client = await prisma.client.create({ data: { organizationId: orgId, name: "Pessoa fictícia", phone, phoneKey: clientPhoneKey } }); clientId = client.id;
   const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, clientId } });
   await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: contact.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: phone, source: "provider", validFrom: new Date(Date.now() - 60000) } });
@@ -196,7 +197,7 @@ describe("campanhas oficiais sem envio real", () => {
     expect(await prisma.communicationPermissionRevision.count({ where: { organizationId: orgId, permission: { clientId } } })).toBe(1);
     await permissions.save(orgId, clientId, { state: "allowed", evidence: "Nova permissão fictícia" }, actor());
     await prisma.contactIdentity.updateMany({ where: { organizationId: orgId, connectionId: channel.id }, data: { validUntil: new Date() } });
-    expect((await preview(orgId, input)).rows[0]!.exclusion).toMatch(/identidade/);
+    expect((await preview(orgId, input)).rows[0]!.exclusion).toMatch(/identidade/i);
   });
   it("não inicia sem Redis e exige novo snapshot quando tarifa muda", async () => {
     const saved = await draft(); const old = (saved.snapshot as { previewHash: string }).previewHash;
@@ -310,6 +311,114 @@ describe("campanhas oficiais sem envio real", () => {
     const received = await withConnectionLock(channel, tx => resolveAliases(tx, channel, [{ kind: "wa_id", value: phone }], "Nome confirmado"));
     expect(received.id).toBe(imported.contactId);
     expect((await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, id: identityId } })).source).toBe("campaign_import");
+  });
+  describe("lead do CRM que nunca conversou pelo número oficial", () => {
+    const crmDeal = async (name: string, phone: string | null) => {
+      const original = await prisma.deal.findUniqueOrThrow({ where: { id: input.dealIds[0]! } });
+      const client = await prisma.client.create({ data: { organizationId: orgId, name, phone } });
+      const deal = await prisma.deal.create({ data: { organizationId: orgId, clientId: client.id, pipelineId: input.pipelineId, stageId: original.stageId, title: `Negócio de ${name}` } });
+      return { client, deal };
+    };
+    const subscriber = () => String(randomInt(10000000, 99999999)).replace(/^./, "8");
+
+    it("recebe o template pelo telefone do cadastro, com o nono dígito, e a resposta cai no mesmo contato", async () => {
+      const digits = subscriber();
+      const { client, deal } = await crmDeal("Lead sem conversa", `(43) ${digits.slice(0, 4)}-${digits.slice(4)}`);
+      input = { ...input, dealIds: [deal.id] };
+      const snapshot = await preview(orgId, input);
+      expect(snapshot.eligible).toBe(1); expect(snapshot.estimate.amount).toBe("0.0000012345");
+      const identity = await prisma.contactIdentity.findFirstOrThrow({ where: { organizationId: orgId, id: snapshot.rows[0]!.identityId! }, include: { contact: true } });
+      expect(identity).toMatchObject({ source: "campaign_import", kind: "phone", value: `55439${digits}` });
+      expect(identity.contact.clientId).toBeNull();
+      expect(client.id).toBeTruthy();
+      const id = await start(); await processCampaign({ orgId, campaignId: id });
+      expect(graph.sendMessage).toHaveBeenCalledTimes(1); expect(vi.mocked(graph.sendMessage).mock.calls[0]![2].to).toBe(`55439${digits}`);
+      expect((await service.get(orgId, id)).recipients[0]?.status).toBe("sent");
+      const { withConnectionLock, resolveAliases } = await import("../src/modules/whatsapp-official/identity.repo.js");
+      const received = await withConnectionLock(channel, tx => resolveAliases(tx, channel, [{ kind: "wa_id", value: `5543${digits}` }], "Lead respondeu"));
+      expect(received.id).toBe(identity.contactId);
+    });
+    it("reaproveita o contato técnico que o lead já tem e mantém o identificador estável entre prévias", async () => {
+      const digits = subscriber();
+      const { client, deal } = await crmDeal("Lead com contato", `5543 9${digits}`);
+      const contact = await prisma.messagingContact.create({ data: { organizationId: orgId, clientId: client.id } });
+      const first = await preview(orgId, { ...input, dealIds: [deal.id] });
+      const second = await preview(orgId, { ...input, dealIds: [deal.id] });
+      expect(first.rows[0]).toMatchObject({ contactId: contact.id, exclusion: null });
+      expect(second.rows[0]!.identityId).toBe(first.rows[0]!.identityId); expect(second.previewHash).toBe(first.previewHash);
+    });
+    it("exclui telefone inválido e deduplica o mesmo celular gravado com e sem o nono dígito", async () => {
+      const digits = subscriber();
+      const without = await crmDeal("Sem telefone", null);
+      const old = await crmDeal("Formato antigo", `43${digits}`);
+      const current = await crmDeal("Formato atual", `+55 43 9${digits}`);
+      const result = await preview(orgId, { ...input, dealIds: [without.deal.id, old.deal.id, current.deal.id] });
+      expect(result.eligible).toBe(1);
+      expect(result.rows.find(row => row.dealId === without.deal.id)?.exclusion).toBe("Lead sem celular válido no cadastro");
+      expect(result.rows.filter(row => row.exclusion?.includes("já selecionada"))).toHaveLength(1);
+    });
+    it("exclui telefone fixo e não confunde celular 9[1-5] com o fixo de mesmos dígitos", async () => {
+      const landline = await crmDeal("Lead com fixo", "(11) 4324-1234");
+      expect((await preview(orgId, { ...input, dealIds: [landline.deal.id] })).rows[0]!.exclusion).toBe("Lead sem celular válido no cadastro");
+      expect(officialPhoneVariants("5511943241234")).toEqual(["5511943241234"]);
+      const imported = await preview(orgId, { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "551143241234", name: "Fixo importado" }] } });
+      const mobile = await crmDeal("Lead com celular 94", "(11) 94324-1234");
+      const result = await preview(orgId, { ...input, dealIds: [mobile.deal.id] });
+      expect(result.rows[0]).toMatchObject({ exclusion: null }); expect(result.rows[0]!.contactId).not.toBe(imported.rows[0]!.contactId);
+    });
+    it("lista importada com as duas grafias do mesmo celular vira um destinatário e a campanha é criada", async () => {
+      const digits = subscriber();
+      const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: `5543${digits}`, name: "Grafia antiga" }, { phone: `55439${digits}`, name: "Grafia atual" }] } };
+      const snapshot = await preview(orgId, request);
+      expect(snapshot.eligible).toBe(1); expect(snapshot.rows.find(row => row.exclusion)?.exclusion).toBe("Telefone repetido nesta lista");
+      const saved = await service.create(orgId, { ...request, name: "Lista com grafias", idempotencyKey: randomUUID(), previewHash: snapshot.previewHash }, actor());
+      expect((await service.get(orgId, saved.id)).recipients).toHaveLength(1);
+    });
+    it("lead que escreve no meio do disparo não pausa a campanha", async () => {
+      const digits = subscriber();
+      const { deal } = await crmDeal("Lead que respondeu antes", `(43) 9${digits.slice(0, 4)}-${digits.slice(4)}`);
+      input = { ...input, dealIds: [deal.id] };
+      const id = await start();
+      const { withConnectionLock, resolveAliases } = await import("../src/modules/whatsapp-official/identity.repo.js");
+      await withConnectionLock(channel, tx => resolveAliases(tx, channel, [{ kind: "wa_id", value: `5543${digits}` }], "Lead escreveu", new Date()));
+      await processCampaign({ orgId, campaignId: id });
+      const saved = await service.get(orgId, id);
+      expect(saved.status).not.toBe("needs_review"); expect(saved.recipients[0]?.status).toBe("sent");
+      expect(vi.mocked(graph.sendMessage).mock.calls[0]![2].to).toBe(`55439${digits}`);
+    });
+    it("envio entra na ficha do lead e a resposta pelo webhook real cai na mesma conversa, sem lead nem card novo", async () => {
+      const digits = subscriber();
+      const { client, deal } = await crmDeal("Lead da prospecção", `(43) 9${digits.slice(0, 4)}-${digits.slice(4)}`);
+      await prisma.client.update({ where: { id: client.id }, data: { phoneKey: `43${digits}` } });
+      const original = await prisma.deal.findUniqueOrThrow({ where: { id: deal.id } });
+      await prisma.leadAutomation.upsert({ where: { organizationId: orgId }, create: { organizationId: orgId, autoCreateClient: true, autoCreateDeal: true, pipelineId: original.pipelineId, stageId: original.stageId }, update: { autoCreateClient: true, autoCreateDeal: true, pipelineId: original.pipelineId, stageId: original.stageId } });
+      input = { ...input, dealIds: [deal.id] };
+      const id = await start(); await processCampaign({ orgId, campaignId: id });
+      const sent = await prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId, officialCommand: { campaignRecipientId: { not: null } }, conversation: { clientId: client.id } }, include: { conversation: true } });
+      const counts = [await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })];
+      const { capture } = await import("../src/modules/whatsapp-official/webhook.repo.js");
+      const { processEvent } = await import("../src/modules/whatsapp-official/webhook.service.js");
+      const { process: runAutomation } = await import("../src/modules/lead-automation/inbound-automation.repo.js");
+      const sender = randomUUID(); const replyId = `wamid.${randomUUID()}`;
+      const value = { messaging_product: "whatsapp", metadata: { phone_number_id: channel.phoneNumberId }, contacts: [{ user_id: sender, wa_id: `5543${digits}`, profile: { name: "Lead da prospecção" } }], messages: [{ id: replyId, from_user_id: sender, from: `5543${digits}`, type: "text", timestamp: String(Math.floor(Date.now() / 1000)), text: { body: "Tenho interesse" } }] };
+      await capture({ object: "whatsapp_business_account", entry: [{ id: channel.wabaId, changes: [{ field: "messages", value }] }] }, new Date());
+      const event = await prisma.officialWebhookEvent.findFirstOrThrow({ where: { organizationId: orgId, field: "messages", payload: { equals: value as never } } });
+      await processEvent(event.id);
+      const reply = await prisma.whatsappMessage.findFirstOrThrow({ where: { organizationId: orgId, providerMessageId: replyId } });
+      await runAutomation(orgId, reply.id);
+      expect(reply.conversationId).toBe(sent.conversationId);
+      expect((await prisma.conversation.findUniqueOrThrow({ where: { id: sent.conversationId } })).clientId).toBe(client.id);
+      expect([await prisma.client.count({ where: { organizationId: orgId } }), await prisma.deal.count({ where: { organizationId: orgId } })]).toEqual(counts);
+      await prisma.leadAutomation.deleteMany({ where: { organizationId: orgId } });
+    });
+    it("usa a identidade do provedor gravada sem o nono dígito em vez de criar outra", async () => {
+      const digits = subscriber();
+      const { deal } = await crmDeal("Lead com wa_id antigo", `(43) 9${digits.slice(0, 4)}-${digits.slice(4)}`);
+      const orphan = await prisma.messagingContact.create({ data: { organizationId: orgId } });
+      const provider = await prisma.contactIdentity.create({ data: { organizationId: orgId, contactId: orphan.id, connectionId: channel.id, scope: `business:${channel.businessPortfolioId}`, kind: "wa_id", value: `5543${digits}`, source: "provider", validFrom: new Date(Date.now() - 60000) } });
+      const result = await preview(orgId, { ...input, dealIds: [deal.id] });
+      expect(result.rows[0]).toMatchObject({ identityId: provider.id, exclusion: null });
+    });
   });
   it("telefone importado com descadastro histórico continua elegível para envio", async () => {
     const request: CampaignInput = { ...input, dealIds: [], importedAudience: { recipients: [{ phone: "5543999990002", name: "Pessoa importada" }] } };
