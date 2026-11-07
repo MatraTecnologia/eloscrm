@@ -150,7 +150,7 @@ export const BroadcastDialog = ({
       }}
     >
       <DialogTrigger render={trigger as React.ReactElement<Record<string, unknown>>} />
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-4 overflow-y-hidden sm:max-w-2xl">
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-4 overflow-y-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Disparo · {pipeline.name}</DialogTitle>
         </DialogHeader>
