@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
-import type { Client, ClientSource, ClientStatus, LeadTemperature, NurtureReason } from "@/lib/types";
+import type { Client, ClientListItem, ClientSource, ClientStatus, LeadTemperature, NurtureReason } from "@/lib/types";
 
 export type ClientFilters = {
   source?: ClientSource;
@@ -11,6 +11,8 @@ export type ClientFilters = {
   // "ALL" não é um ClientStatus: é o valor que a API aceita para não filtrar nada
   status?: ClientStatus | "ALL";
   overdue?: boolean;
+  // traz `dealCount`/`openDealCount` de cada lead, agregados no servidor
+  withStats?: boolean;
 };
 export type ClientInput = {
   name: string;
@@ -34,10 +36,14 @@ export const useClients = (filters?: ClientFilters, enabled = true) => {
   return useQuery({
     queryKey: ["clients", org?.id, filters ?? {}],
     queryFn: async () => {
-      const { data } = await api.get<Client[]>("/clients", { params: filters });
+      const { data } = await api.get<ClientListItem[]>("/clients", { params: filters });
       return data;
     },
     enabled: !!org?.id && enabled,
+    // mantém a lista anterior enquanto a busca nova carrega, em vez de piscar o skeleton a cada
+    // tecla — mas só dentro da mesma org: na troca de imobiliária a lista antiga não pode aparecer
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === org?.id ? previous : undefined,
   });
 };
 

@@ -35,6 +35,9 @@ export type Client = {
   updatedAt: string;
 };
 
+// opcionais: só vêm com `withStats=true`, e uma API anterior ao deploy não manda nenhum dos dois
+export type ClientListItem = Client & { dealCount?: number; openDealCount?: number };
+
 export type Stage = {
   id: string;
   organizationId: string;

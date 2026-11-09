@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -56,18 +57,21 @@ export const useOrgDeals = () => {
     enabled: !!org?.id,
   });
 
-  const stagesById = new Map((pipelines ?? []).flatMap((p) => p.stages.map((s) => [s.id, s] as const)));
-
-  const deals: EnrichedDeal[] = (dealsQuery.data ?? []).map((deal) => {
-    const stage = stagesById.get(deal.stageId);
-    return {
-      ...deal,
-      stageName: stage?.name ?? "—",
-      stageColor: stage?.color ?? null,
-      isOpen: stage ? !stage.isWon && !stage.isLost : false,
-      isLost: stage?.isLost ?? false,
-    };
-  });
+  // memo: sem ele cada render devolvia um array novo, e todo useMemo que dependia de `deals`
+  // (contagens, filtros por lead) recalculava a cada tecla
+  const deals = useMemo<EnrichedDeal[]>(() => {
+    const stagesById = new Map((pipelines ?? []).flatMap((p) => p.stages.map((s) => [s.id, s] as const)));
+    return (dealsQuery.data ?? []).map((deal) => {
+      const stage = stagesById.get(deal.stageId);
+      return {
+        ...deal,
+        stageName: stage?.name ?? "—",
+        stageColor: stage?.color ?? null,
+        isOpen: stage ? !stage.isWon && !stage.isLost : false,
+        isLost: stage?.isLost ?? false,
+      };
+    });
+  }, [dealsQuery.data, pipelines]);
 
   // isLoading e não isPending: sem organização ativa as queries ficam desabilitadas e isPending
   // continua true para sempre, prendendo a UI em skeleton

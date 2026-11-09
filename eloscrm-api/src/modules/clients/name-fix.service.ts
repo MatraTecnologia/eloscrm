@@ -28,19 +28,19 @@ export type NameFix = {
  * primeiro, e o resto por conversa mais recente: é a ordem em que compensa trabalhar.
  */
 export const listAutoNamed = async (orgId: string): Promise<NameFix[]> => {
-  const candidatos = (
+  const candidates = (
     await prisma.client.findMany({
       where: { organizationId: orgId },
       select: { id: true, name: true, phone: true },
     })
   ).filter(isAutoNamed);
 
-  if (candidatos.length === 0) return [];
-  const ids = candidatos.map((client) => client.id);
+  if (candidates.length === 0) return [];
+  const ids = candidates.map((client) => client.id);
 
   // Grupo fora: o `wa_name` de um grupo é o nome do grupo, e sugeri-lo como nome de pessoa é o mesmo
   // erro que a ingestão parou de cometer.
-  const conversas = await prisma.conversation.findMany({
+  const conversations = await prisma.conversation.findMany({
     where: { organizationId: orgId, isGroup: false, clientId: { in: ids } },
     select: { clientId: true, contactName: true, waName: true, lastMessageAt: true },
     orderBy: { lastMessageAt: "desc" },
@@ -53,24 +53,37 @@ export const listAutoNamed = async (orgId: string): Promise<NameFix[]> => {
     select: { clientId: true, title: true },
   });
 
-  const items = candidatos.map((client) => {
-    // conversas já vêm da mais recente para a mais antiga: a primeira com nome é a melhor informada
-    const comNome = conversas.find(
-      (conversa) => conversa.clientId === client.id && suggestedNameOf(conversa),
-    );
-    const recente = conversas.find((conversa) => conversa.clientId === client.id);
-    const suggestion = comNome ? suggestedNameOf(comNome) : null;
+  // índices por lead: um `.find`/`.filter` por candidato varreria as listas inteiras a cada lead
+  type ConversationRow = (typeof conversations)[number];
+  const latestByClient = new Map<string, ConversationRow>();
+  const namedByClient = new Map<string, ConversationRow>();
+  // conversas já vêm da mais recente para a mais antiga: a primeira de cada lead é a que fica
+  for (const conversation of conversations) {
+    if (!conversation.clientId) continue;
+    if (!latestByClient.has(conversation.clientId)) latestByClient.set(conversation.clientId, conversation);
+    if (!namedByClient.has(conversation.clientId) && suggestedNameOf(conversation)) {
+      namedByClient.set(conversation.clientId, conversation);
+    }
+  }
+  const titlesByClient = new Map<string, string[]>();
+  for (const deal of deals) {
+    const titles = titlesByClient.get(deal.clientId) ?? [];
+    titles.push(deal.title);
+    titlesByClient.set(deal.clientId, titles);
+  }
+
+  const items = candidates.map((client) => {
+    const named = namedByClient.get(client.id);
+    const autoTitle = autoDealTitle(client.name);
 
     return {
       clientId: client.id,
       currentName: client.name,
       phone: client.phone,
-      suggestion,
-      source: comNome ? ((comNome.contactName ? "CONTACT" : "PROFILE") as NameFixSource) : null,
-      deals: deals.filter(
-        (deal) => deal.clientId === client.id && deal.title === autoDealTitle(client.name),
-      ).length,
-      lastMessageAt: recente?.lastMessageAt ?? null,
+      suggestion: named ? suggestedNameOf(named) : null,
+      source: named ? ((named.contactName ? "CONTACT" : "PROFILE") as NameFixSource) : null,
+      deals: (titlesByClient.get(client.id) ?? []).filter((title) => title === autoTitle).length,
+      lastMessageAt: latestByClient.get(client.id)?.lastMessageAt ?? null,
     };
   });
 

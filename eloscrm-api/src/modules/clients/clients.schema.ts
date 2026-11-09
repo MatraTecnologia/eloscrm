@@ -44,6 +44,12 @@ export const listClientsQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => value === "true"),
+  // opt-in: só a tela de clientes mostra contagem de negócios; os combos que listam todos os
+  // clientes não devem pagar pelas duas agregações
+  withStats: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 /**

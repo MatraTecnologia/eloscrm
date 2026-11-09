@@ -402,6 +402,8 @@ model Deal {
 
   @@index([organizationId, pipelineId])
   @@index([stageId])
+  // contagem por lead na listagem de clientes e cascade do delete do cliente
+  @@index([organizationId, clientId])
 }
 
 enum BroadcastStatus {

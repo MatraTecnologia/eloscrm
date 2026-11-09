@@ -23,6 +23,35 @@ export const listClients = (orgId: string, filters: ListClientsQuery) => {
   return prisma.client.findMany({ where, orderBy: { createdAt: "desc" } });
 };
 
+export type DealStats = { dealCount: number; openDealCount: number };
+
+/**
+ * Contagem de negócios por lead, em duas agregações para a org inteira — sem isto a tela baixava
+ * todos os negócios com etiquetas só para contar. "Aberto" segue o `isOpen` do web: estágio que não
+ * é ganho nem perdido.
+ *
+ * Agrega a org inteira em vez de `clientId: { in: [...] }`: com milhares de leads a lista de ids
+ * viraria milhares de parâmetros, e o resultado já é limitado a quem tem negócio.
+ */
+export const dealStatsByClient = async (orgId: string) => {
+  const stats = new Map<string, DealStats>();
+  const where: Prisma.DealWhereInput = { organizationId: orgId };
+  const [all, open] = await Promise.all([
+    prisma.deal.groupBy({ by: ["clientId"], where, _count: { _all: true } }),
+    prisma.deal.groupBy({
+      by: ["clientId"],
+      where: { ...where, stage: { isWon: false, isLost: false } },
+      _count: { _all: true },
+    }),
+  ]);
+  for (const row of all) stats.set(row.clientId, { dealCount: row._count._all, openDealCount: 0 });
+  for (const row of open) {
+    const current = stats.get(row.clientId);
+    if (current) current.openDealCount = row._count._all;
+  }
+  return stats;
+};
+
 export const findClient = (orgId: string, id: string) =>
   prisma.client.findFirst({ where: { id, organizationId: orgId } });
 

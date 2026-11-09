@@ -38,15 +38,25 @@ export const ClientDialog = ({
   client,
   trigger,
   onCreated,
+  open: controlledOpen,
+  onOpenChange: onControlledOpenChange,
 }: {
   client?: Client
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
   onCreated?: (created: Client) => void
+  // modo controlado: a listagem monta um único dialog em vez de um por linha
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) => {
   const editing = !!client
   const create = useCreateClient()
   const update = useUpdateClient()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next)
+    onControlledOpenChange?.(next)
+  }
   const [name, setName] = useState(client?.name ?? '')
   const [email, setEmail] = useState(client?.email ?? '')
   // state guarda o telefone já mascarado; a conversão para E.164 acontece só no submit
@@ -116,9 +126,11 @@ export const ClientDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={trigger as React.ReactElement<Record<string, unknown>>}
-      />
+      {trigger && (
+        <DialogTrigger
+          render={trigger as React.ReactElement<Record<string, unknown>>}
+        />
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>

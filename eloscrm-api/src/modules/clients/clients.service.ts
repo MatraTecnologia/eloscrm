@@ -10,7 +10,17 @@ import * as comments from "../comments/comments.service.js";
 import * as repo from "./clients.repo.js";
 import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from "./clients.schema.js";
 
-export const list = (orgId: string, filters: ListClientsQuery) => repo.listClients(orgId, filters);
+export const list = async (orgId: string, filters: ListClientsQuery) => {
+  if (!filters.withStats) return repo.listClients(orgId, filters);
+  const [clients, stats] = await Promise.all([
+    repo.listClients(orgId, filters),
+    repo.dealStatsByClient(orgId),
+  ]);
+  return clients.map((client) => ({
+    ...client,
+    ...(stats.get(client.id) ?? { dealCount: 0, openDealCount: 0 }),
+  }));
+};
 
 export const getById = async (orgId: string, id: string) => {
   const client = await repo.findClient(orgId, id);
