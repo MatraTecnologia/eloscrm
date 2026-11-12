@@ -30,7 +30,7 @@ Trocar a integração direta com a WhatsApp Cloud API pelo hub, sem mudar o cont
 
 ### 1.3 Fora do escopo
 - Lead Ads pelo hub (fase separada, §7 F6).
-- Tipos de envio que o app não oferece hoje (reação, localização, interativos, sticker) e read receipt / "digitando" (Q6).
+- Tipos de envio que o app não oferece hoje (reação, localização, interativos, sticker) e read receipt / "digitando" (D12).
 - Recuperar mensagens, recibos e histórico do intervalo entre 2026-10-23 e a conexão nova: chegaram ao hub como `orphaned` e o hub descarta o que é anterior à conexão (hub:1234). A exceção é o histórico de 180 dias: se a Meta aceitar o pedido (hub:608, hub:613), ele pode trazer mensagens desse intervalo por `history.received`, porque o hub filtra o histórico pela hora em que o recebeu, não pela data de cada mensagem (código do hub, `apps/api/src/lib/handlers/whatsapp-coexistence.ts:453`, `apps/api/src/lib/whatsapp/routing.ts:94-96`). Nada é pedido para isso, mas o que chegar é ingerido (§3.2).
 - A integração uazapi não muda. Os pontos em que ela encosta na oficial estão em §1.4.
 
@@ -132,6 +132,15 @@ Trocar a integração direta com a WhatsApp Cloud API pelo hub, sem mudar o cont
 | Extensão da lease do destinatário de campanha | 20 min, acima dos cerca de 14 min de retry do hub com `131056` (código do hub) | §3.4, envio no worker |
 | Margem de renovação do upload | 2 dias: novo upload quando o `mediaId` tiver mais de 27 dos 29 dias (hub:837) | §3.3, mídia |
 | Janela de estabilidade do piloto | 7 dias | §7 F4.2 |
+
+**D10. "Reportado pela Meta" mensal e por número até o H-D4.** Decidido em 2026-11-12 (era a Q4).
+- O hub só expõe `/consumption?month=` por conexão (hub:1488-1515), e a conferência com a Meta na aba de custos passa de diária a mensal. O custo por mensagem calculado pelo app, do `pricing` de cada status (§3.6), continua no período livre de até 31 dias (`costs.schema.ts:4`).
+
+**D11. Sem `rejectionRecommendation` até o H-D2.** Decidido em 2026-11-12 (era a Q5).
+- O template rejeitado aparece sem a recomendação de correção (`template-status.service.ts:14,31`); o gestor a consulta no WhatsApp Manager. O H-D2 é pedido à equipe Matra: o hub já grava o campo e só não o expõe (§4).
+
+**D12. Confirmação de leitura e "digitando" fora da migração.** Decidido em 2026-11-12 (era a Q6).
+- O app não as envia hoje, então nada se perde. `POST …/read-receipts` (hub:796) muda o que o cliente final vê e exige decidir quando disparar; entra depois como funcionalidade própria (§1.3).
 
 ### 2.5 Mapeamentos de identidade
 
@@ -287,9 +296,9 @@ Nenhum item abaixo bloqueia o piloto nem a abertura: todos têm degradação ace
 
 | Id | Proposta | Por quê | Degradação sem ele | Bloqueante |
 |---|---|---|---|---|
-| H-D2 | `rejection_info` da Meta no template ou no `status_updated` | O app mostra `rejectionRecommendation` (`template-status.service.ts:14,31`). O hub já grava o campo, só não expõe (código do hub) | Recomendação some (Q5) | não |
+| H-D2 | `rejection_info` da Meta no template ou no `status_updated` | O app mostra `rejectionRecommendation` (`template-status.service.ts:14,31`). O hub já grava o campo, só não expõe (código do hub) | Recomendação some (D11) | não |
 | H-D3 | Cancelar envio `pending` no hub | "Encerrar" e o disable não alcançam a fila do hub | Sai no máximo o que já estava na fila (§3.4) | não |
-| H-D4 | `/consumption` por período diário de até 31 dias | Dashboard usa período livre (`costs.schema.ts:4`, `cost-dashboard.tsx:46`) | Dashboard mensal (Q4) | não |
+| H-D4 | `/consumption` por período diário de até 31 dias | Dashboard usa período livre (`costs.schema.ts:4`, `cost-dashboard.tsx:46`) | Dashboard mensal (D10) | não |
 | H-D5 | Itens crus no `meta` de `history.received` | Reaproveitar o parser como em D1 | `history-adapter` por tipo (§3.2) | não |
 | H-D6 | `GET /v1/events` com `connectionId` e período; redeliver em lote | Recuperação grande hoje é um POST por entrega (hub:1149) | Runbook manual com pausa | não |
 | H-D8 | `clientReference` ecoado no envio e nos status | Correlação direta com `OfficialSendCommand` | `message.id` no `202`, consulta por chave, `wamid` (§3.3) | não |
@@ -595,8 +604,6 @@ O módulo `whatsapp-official/` fica: `identity.repo.ts`, `ingest.repo.ts`, `mess
 
 ## 10. Questões em aberto
 
-- **Q4.** O dashboard de custos aceita ser mensal e por número até H-D4?
-- **Q5.** Perder `rejectionRecommendation` é aceitável até H-D2?
-- **Q6.** Read receipts e "digitando" (hub:796) entram no escopo? Mudam o que o cliente final vê.
+Nenhuma. As últimas viraram D10 a D12 em 2026-11-12 (§2.4).
 
-> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 18:13 (-03)
+> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 18:14 (-03)
