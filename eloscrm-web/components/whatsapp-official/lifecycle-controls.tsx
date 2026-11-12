@@ -22,9 +22,8 @@ export const LifecycleControls = ({ connection }: { connection: ChannelConnectio
     {disable.error && <p role="alert" className="text-destructive">Não foi possível desativar a conexão.</p>}
     {disable.data && <p role="status">Conexão desativada no elosCRM.{disable.data.uncertainCommands > 0 ? ` ${disable.data.uncertainCommands} envio(s) aguardam confirmação.` : ""}</p>}
     {(connection.status === "disabled" || confirming) && <>
-      <p className="text-muted-foreground">Para remover a conexão Coexistence na Meta, abra o WhatsApp Business no celular: Configurações → Conta → Plataforma empresarial → Desconectar conta. A desativação local não executa esse procedimento.</p>
-      <p className="text-muted-foreground">Para voltar a atender aqui, use Conectar com a Meta. Reconectar este número à mesma imobiliária preserva as conversas e os vínculos; não libera o número para outra imobiliária.</p>
-      <a className="w-fit underline underline-offset-4" href="https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users" target="_blank" rel="noopener noreferrer">Consultar orientação da Meta</a>
+      <p className="text-muted-foreground">Não use “Desconectar conta” no WhatsApp Business do celular nem remova o número da plataforma da Meta: isso derruba a integração oficial do número, e as mensagens do intervalo não voltam na reconexão. A desativação aqui só interrompe o atendimento no elosCRM; o número continua funcionando no celular.</p>
+      <p className="text-muted-foreground">A conexão oficial está mudando para um novo fluxo. Para voltar a atender aqui, fale com o suporte. Reconectar este número à mesma imobiliária preserva as conversas e os vínculos; não libera o número para outra imobiliária.</p>
     </>}
   </div>;
 };
