@@ -128,6 +128,11 @@ model Organization {
   communicationPermissions CommunicationPermission[]
   communicationPermissionRevisions CommunicationPermissionRevision[]
 
+  // workspace do Meta Hub que representa esta imobiliária (um por org)
+  hubWorkspaceId String? @unique
+  hubWebhookEvents HubWebhookEvent[]
+  costConsumptionSnapshots CostConsumptionSnapshot[]
+
   @@unique([slug])
   @@map("organization")
 }
@@ -725,6 +730,15 @@ model ChannelConnection {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Conexão do Meta Hub. Com hubConnectionId preenchido, o transporte é o hub (D4).
+  hubConnectionId String? @unique
+  hubErrorCode    String?
+  hubHealth       Json?
+  qualityRating   String? // foto da conclusão; o hub não relê (hub:606)
+  timezone        String? // IANA (hub:605); timezoneId fica para o id numérico legado
+  hubUpdatedAt    DateTime? // data.updatedAt da conexão no hub, do último evento ou GET aplicado
+  hubCheckedAt    DateTime?
+
   identities ContactIdentity[]
   conversations Conversation[]
   messages WhatsappMessage[]
@@ -735,6 +749,8 @@ model ChannelConnection {
   sendCommands OfficialSendCommand[]
   uploads OfficialUpload[]
   costReconciliations CostReconciliation[]
+  hubWebhookEvents HubWebhookEvent[]
+  costConsumptionSnapshots CostConsumptionSnapshot[]
 
   @@unique([id, organizationId])
   @@index([organizationId, provider, status])
@@ -1025,6 +1041,7 @@ model WhatsappMessage {
   origin WhatsappMessageOrigin @default(uazapi)
   recipientIdentity Json?
   officialMediaId String?
+  hubMediaId String? // mídia recebida pelo Meta Hub; officialMediaId fica nulo nesse caminho
   liveReceivedAt DateTime?
   officialStatusAt DateTime?
 
@@ -1111,6 +1128,7 @@ model WhatsappMessage {
   @@index([organizationId, providerMessageId])
   @@index([automationStatus, automationNextAttemptAt])
   @@index([mediaStatus, mediaNextAttemptAt])
+  @@index([hubMediaId])
   // a barra de fixadas e o filtro de favoritas leem por conversa, não a thread inteira
   @@index([conversationId, pinnedUntil])
   @@index([conversationId, favoritedAt])
@@ -1150,10 +1168,18 @@ model OfficialSendCommand {
   updatedAt DateTime @updatedAt
   campaignRecipientId String? @unique
   campaignRecipient OfficialCampaignRecipient? @relation(fields: [campaignRecipientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  // envio pelo Meta Hub: a Idempotency-Key é `${orgId}:${id}:${hubAttempt}`
+  hubMessageId String? @unique // da tentativa atual
+  hubAttempt Int @default(0)
+  hubRequest Json? // corpo exato enviado; entra na retenção e na exclusão
+  hubState String?
+  hubErrorCode String?
+  submittedAt DateTime?
   @@unique([campaignRecipientId, organizationId])
   @@unique([organizationId, idempotencyKey])
   @@unique([messageId, organizationId])
   @@index([status, leaseExpiresAt, createdAt])
+  @@index([status, submittedAt])
   @@index([organizationId, connectionId])
 }
 
@@ -1260,7 +1286,10 @@ model OfficialTemplate {
   rejectionReason String?
   rejectionDetail String?
   rejectionRecommendation String?
+  hubTemplateId String?
+  hubVersion Int?
   @@unique([organizationId, wabaId, externalId])
+  @@unique([organizationId, hubTemplateId])
   @@index([organizationId, wabaId, name, language])
 }
 
@@ -1276,6 +1305,8 @@ model OfficialUpload {
   digest String
   filename String
   createdAt DateTime @default(now())
+  hubMediaId String?
+  hubMediaExpiresAt DateTime?
   @@index([organizationId, connectionId])
 }
 
@@ -1596,4 +1627,47 @@ model CostReconciliation {
   snapshot Json
   createdAt DateTime @default(now())
   @@index([organizationId, wabaId, start, end])
+}
+
+// Volume mensal do /consumption do Meta Hub valorado pela tarifa local (§3.6 do plano).
+model CostConsumptionSnapshot {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ChannelConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  month String // YYYY-MM no fuso que o hub devolve em timezone
+  timezone String // timezone da resposta do /consumption
+  currency String?
+  items Json // meta.items do /consumption
+  amount Decimal? @db.Decimal(20, 10)
+  fetchedAt DateTime
+  @@unique([organizationId, connectionId, month])
+}
+
+// Journal dos eventos do Meta Hub: gravado antes do ACK e processado depois (D3).
+model HubWebhookEvent {
+  id String @id @default(cuid())
+  hubEventId String @unique // envelope.id
+  type String
+  envelopeAt DateTime
+  hubWorkspaceId String
+  hubConnectionId String?
+  organizationId String?
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId String?
+  connection ChannelConnection? @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  payload Json
+  status OfficialWebhookStatus @default(pending)
+  attempts Int @default(0)
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  nextAttemptAt DateTime @default(now())
+  lastErrorCode String?
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  payloadPurgedAt DateTime?
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, receivedAt])
+  @@index([hubConnectionId, envelopeAt])
 }

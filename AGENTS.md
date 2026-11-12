@@ -126,6 +126,73 @@ ALTER TABLE account ALTER COLUMN issuer SET DEFAULT 'local:credential';
 Se um dia houver, o namespace passa a ser `local:oauth:<providerId>` e a conta é outra conversa.
 Depois disso, `prisma db push` responde "already in sync" e não altera nada.
 
+### Schema do Meta Hub (F1.1 do plano): também antes da imagem, por SQL
+
+As colunas `hub*` (plano `docs/2026-11-10-metahub-migration-plan.md`, §6) trazem quatro índices
+únicos em tabelas com linhas, e o `db push` para pedindo `--accept-data-loss` mesmo com as colunas
+todas nulas. Não use a flag: rode o SQL abaixo no banco de produção e só então o `db push`, que
+responde "already in sync". Sem isso, a imagem nova responde 500 em toda rota que lê
+`ChannelConnection`, `WhatsappMessage`, `OfficialSendCommand` ou `organization`, uazapi inclusive.
+`CREATE INDEX CONCURRENTLY` não roda em transação: execute o arquivo sem `--single-transaction`.
+Tudo é idempotente; repetir não muda nada.
+
+```sql
+ALTER TABLE "ChannelConnection" ADD COLUMN IF NOT EXISTS "hubCheckedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "hubConnectionId" TEXT, ADD COLUMN IF NOT EXISTS "hubErrorCode" TEXT,
+  ADD COLUMN IF NOT EXISTS "hubHealth" JSONB, ADD COLUMN IF NOT EXISTS "hubUpdatedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "qualityRating" TEXT, ADD COLUMN IF NOT EXISTS "timezone" TEXT;
+ALTER TABLE "OfficialSendCommand" ADD COLUMN IF NOT EXISTS "hubAttempt" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "hubErrorCode" TEXT, ADD COLUMN IF NOT EXISTS "hubMessageId" TEXT,
+  ADD COLUMN IF NOT EXISTS "hubRequest" JSONB, ADD COLUMN IF NOT EXISTS "hubState" TEXT,
+  ADD COLUMN IF NOT EXISTS "submittedAt" TIMESTAMP(3);
+ALTER TABLE "OfficialTemplate" ADD COLUMN IF NOT EXISTS "hubTemplateId" TEXT, ADD COLUMN IF NOT EXISTS "hubVersion" INTEGER;
+ALTER TABLE "OfficialUpload" ADD COLUMN IF NOT EXISTS "hubMediaExpiresAt" TIMESTAMP(3), ADD COLUMN IF NOT EXISTS "hubMediaId" TEXT;
+ALTER TABLE "WhatsappMessage" ADD COLUMN IF NOT EXISTS "hubMediaId" TEXT;
+ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "hubWorkspaceId" TEXT;
+
+CREATE TABLE IF NOT EXISTS "CostConsumptionSnapshot" (
+  "id" TEXT NOT NULL, "organizationId" TEXT NOT NULL, "connectionId" TEXT NOT NULL, "month" TEXT NOT NULL,
+  "timezone" TEXT NOT NULL, "currency" TEXT, "items" JSONB NOT NULL, "amount" DECIMAL(20,10),
+  "fetchedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "CostConsumptionSnapshot_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "CostConsumptionSnapshot_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organization"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "CostConsumptionSnapshot_connectionId_organizationId_fkey" FOREIGN KEY ("connectionId", "organizationId") REFERENCES "ChannelConnection"("id", "organizationId") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "CostConsumptionSnapshot_organizationId_connectionId_month_key" ON "CostConsumptionSnapshot"("organizationId", "connectionId", "month");
+
+CREATE TABLE IF NOT EXISTS "HubWebhookEvent" (
+  "id" TEXT NOT NULL, "hubEventId" TEXT NOT NULL, "type" TEXT NOT NULL, "envelopeAt" TIMESTAMP(3) NOT NULL,
+  "hubWorkspaceId" TEXT NOT NULL, "hubConnectionId" TEXT, "organizationId" TEXT, "connectionId" TEXT,
+  "payload" JSONB NOT NULL, "status" "OfficialWebhookStatus" NOT NULL DEFAULT 'pending',
+  "attempts" INTEGER NOT NULL DEFAULT 0, "leaseToken" TEXT, "leaseExpiresAt" TIMESTAMP(3),
+  "nextAttemptAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastErrorCode" TEXT,
+  "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "processedAt" TIMESTAMP(3), "payloadPurgedAt" TIMESTAMP(3),
+  CONSTRAINT "HubWebhookEvent_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "HubWebhookEvent_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organization"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "HubWebhookEvent_connectionId_organizationId_fkey" FOREIGN KEY ("connectionId", "organizationId") REFERENCES "ChannelConnection"("id", "organizationId") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "HubWebhookEvent_hubEventId_key" ON "HubWebhookEvent"("hubEventId");
+CREATE INDEX IF NOT EXISTS "HubWebhookEvent_status_nextAttemptAt_idx" ON "HubWebhookEvent"("status", "nextAttemptAt");
+CREATE INDEX IF NOT EXISTS "HubWebhookEvent_organizationId_receivedAt_idx" ON "HubWebhookEvent"("organizationId", "receivedAt");
+CREATE INDEX IF NOT EXISTS "HubWebhookEvent_hubConnectionId_envelopeAt_idx" ON "HubWebhookEvent"("hubConnectionId", "envelopeAt");
+
+-- tabelas com linhas: sem travar escrita
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "ChannelConnection_hubConnectionId_key" ON "ChannelConnection"("hubConnectionId");
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "OfficialSendCommand_hubMessageId_key" ON "OfficialSendCommand"("hubMessageId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "OfficialSendCommand_status_submittedAt_idx" ON "OfficialSendCommand"("status", "submittedAt");
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "OfficialTemplate_organizationId_hubTemplateId_key" ON "OfficialTemplate"("organizationId", "hubTemplateId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "WhatsappMessage_hubMediaId_idx" ON "WhatsappMessage"("hubMediaId");
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "organization_hubWorkspaceId_key" ON "organization"("hubWorkspaceId");
+```
+
+Um `CONCURRENTLY` interrompido deixa o índice `INVALID`, e o `IF NOT EXISTS` o pularia na repetição.
+Antes do `db push`, a consulta abaixo tem de voltar vazia; se trouxer linha, `DROP INDEX CONCURRENTLY`
+nela e rode o `CREATE` de novo:
+
+```sql
+SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE NOT i.indisvalid;
+```
+
 ## Contrato entre os dois projetos
 
 - **Auth é servida pelo Fastify**, não pelo Next: `authHandler` monta o Better Auth em `/api/auth/*` na API. O web fala com ela via `lib/auth-client.ts` (`baseURL = NEXT_PUBLIC_API_URL`, default `http://localhost:3333`).
@@ -172,4 +239,4 @@ contratos ou executar procedimentos antigos.
 - Spec histórica do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano histórico da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-11-03 20:49 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-11-12 18:31 (-03)
