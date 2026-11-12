@@ -65,6 +65,16 @@ export const env = createEnv({
     // disparo em massa pela uazapi fica desligado enquanto os disparos saem pela API oficial;
     // `true` reabre a criação e a retomada em /v1/broadcasts sem precisar de deploy de código
     UAZAPI_BROADCASTS_ENABLED: z.stringbool().default(false),
+    // Matra Meta Hub (WhatsApp oficial). A URL é uma só para dev e produção: quem separa os dados é a
+    // chave, que pertence a um app consumidor. A chave de produção vive só no cofre do deploy.
+    HUB_API_URL: z.url().trim().default("https://api.metahub.matratecnologia.com/v1"),
+    HUB_API_KEY: z.string().trim().regex(/^mh_(live|test)_[A-Za-z0-9_-]+$/, "deve ser uma chave mh_live_ ou mh_test_").optional(),
+    // Sem o segredo o receptor /webhooks/meta-hub não sobe. O anterior só cobre o deploy da rotação.
+    HUB_WEBHOOK_SECRET: z.string().trim().min(16).optional(),
+    HUB_WEBHOOK_SECRET_PREVIOUS: z.string().trim().min(16).optional(),
+    // envio, sessões de conexão e jobs que chamam o hub; desligados até a fase que os liga
+    HUB_ENABLED: z.stringbool().default(false),
+    HUB_JOBS_ENABLED: z.stringbool().default(false),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

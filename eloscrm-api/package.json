@@ -15,6 +15,7 @@
     "typecheck": "cross-env NODE_ENV=development tsc --noEmit",
     "lint": "cross-env NODE_ENV=development oxlint",
     "db:generate": "cross-env NODE_ENV=development prisma generate",
+    "hub:types": "pnpm dlx openapi-typescript@7.13.0 https://metahub.matratecnologia.com/docs/openapi.json -o src/lib/meta-hub/openapi.d.ts",
     "db:push": "cross-env NODE_ENV=development prisma db push",
     "db:push:test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=.env.test prisma db push",
     "db:seed": "cross-env NODE_ENV=development tsx prisma/seed.ts",
