@@ -460,10 +460,10 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
 2. Equipe Matra: app de produção (chave e allowlist; endpoint e segredo passaram para F1.6) e app de dev (chave, túnel, `returnUrl`). → `GET /v1/me` com as duas chaves responde 200, rodado pelo usuário.
    - Resultado em 2026-11-12: o app consumidor de produção existe e `GET /v1/me` com a chave dele responde 200. Faltam o app de dev (chave `mh_live_` própria, túnel HTTPS e `returnUrl` próprio, hub:384-389; o hub não entrega chave `mh_test_`, hub:363) e a conferência da allowlist de retorno (hub:67). O endpoint de webhook do app de produção e o segredo `whsec_` (hub:66) só são cadastrados em F1, com o receptor no ar (§7 F1.6; cadastro em §4.1).
 3. Estado do legado, por SELECT só de leitura rodado pelo usuário: conexões `cloud_api` por status; comandos de conexões `cloud_api` fora de estado terminal (`pending`, `preparing`, `sending`, `uncertain`); WABAs com mais de uma org. → comandos não terminais encerrados por ação manual auditada antes de D5 reaproveitar a linha (o `knownResponses` só concilia `uncertain` com `externalMessageId`, `outbound.repo.ts:139`, e os `pending` voltam ao `executeSend`, que exige token, `outbound.service.ts:160`, e eles bloqueiam a exclusão do atendimento, `inbox.repo.ts:115-116`); WABA em duas orgs decidida antes da primeira sessão.
-   - Resultado em 2026-11-12: uma conexão `cloud_api`, `disabled`, sem `tokenEnc`, com `disabledAt`; nenhuma WABA em duas orgs (há uma conexão só). Quatro comandos `uncertain` de uma org, todos de campanha, sem `externalMessageId`, criados em 2026-11-10 entre 13:07 e 13:08. Nenhum caminho do app os concilia (sem `wamid`), e eles barram D5 e a exclusão do atendimento. Encerrar como `failed` com `safeError` de encerramento manual, sem mexer no `OfficialCampaignRecipient`. Na tela da campanha os quatro passam a aparecer como falha (`campaigns.service.ts:27`). Encerramento executado pelo usuário em 2026-11-12; a consulta dos comandos não terminais voltou vazia depois dele.
-   - UPDATE aplicado: só em `OfficialSendCommand`, os quatro de `uncertain` para `failed`, sem `externalMessageId`. O texto literal não está registrado aqui: se ele gravou `safeError` (o item anterior pedia um de encerramento manual), `leaseToken` e `leaseExpiresAt` fica **a confirmar** com o usuário, e a conferência abaixo lê as três colunas. Importa porque a retenção só purga comando com `leaseToken` nulo (`src/modules/whatsapp-maintenance/retention.repo.ts:8,13`) e a desativação local passa `sending` a `uncertain` mantendo a lease (`lifecycle.repo.ts:31-32`). `WhatsappMessage` e `OfficialCampaignRecipient` não foram tocados; os destinatários seguem `unknown`. As mensagens ligadas seguem `pending` (**a confirmar** pela consulta abaixo): o `finishFailure` com falha incerta não toca a mensagem (`src/modules/whatsapp-outbound/outbound.repo.ts:107-112`), e o UPDATE manual não fez o que os encerramentos do app fazem, que é passar a mensagem `pending` a `failed` junto do comando (`outbound.repo.ts:111`, `src/modules/whatsapp-campaigns/campaigns.repo.ts:54`, `src/modules/whatsapp-maintenance/lifecycle.repo.ts:30`).
-   - Decisão: sem UPDATE na `WhatsappMessage` enquanto a trava de 7 dias importar. `recentlyReceived` só tira da trava o destinatário cuja mensagem está `failed` (`campaigns.repo.ts:14`): passar as quatro mensagens a `failed` solta a trava que se quer manter. Custo aceito: as quatro aparecem como pendentes na conversa, sem nada que as conclua; no relatório da campanha, como falha (item anterior). A trava conta 7 dias a partir do `completedAt` do destinatário (`RESEND_WINDOW_DAYS`, `src/modules/whatsapp-campaigns/preview.service.ts:18,104`) e só vale com `completedAt` preenchido: o `settle` do disparo o grava (`campaigns.repo.ts:79`), a desativação local leva o destinatário a `unknown` sem gravá-lo (`lifecycle.repo.ts:35`). A consulta abaixo mostra qual dos dois casos é o destes quatro.
-   - SQL proposto, rodado pelo usuário (nós não acessamos produção). Primeiro a conferência, só leitura, que tem de devolver 4 linhas; o UPDATE é opcional, para alinhar as mensagens depois que a trava vencer (ou se `completedAt` vier nulo), em transação e só sobre `pending`. `createdAt` é `timestamp` sem fuso gravado em UTC (`DateTime` sem `@db.Timestamptz`, `eloscrm-api/prisma/schema.prisma`), daí a conversão para `America/Sao_Paulo`:
+   - Resultado em 2026-11-12: uma conexão `cloud_api`, `disabled`, sem `tokenEnc`, com `disabledAt`; nenhuma WABA em duas orgs (há uma conexão só). Quatro comandos `uncertain` de uma org, todos de campanha, sem `externalMessageId`, criados em 2026-11-10 entre 13:07 e 13:08 UTC (10:07 e 10:08 em -03). Nenhum caminho do app os concilia (sem `wamid`), e eles barram D5 e a exclusão do atendimento. Encerrar como `failed` com `safeError` de encerramento manual, sem mexer no `OfficialCampaignRecipient`. Na tela da campanha os quatro passam a aparecer como falha (`campaigns.service.ts:27`). Encerramento executado pelo usuário em 2026-11-12; a consulta dos comandos não terminais voltou vazia depois dele.
+   - UPDATE aplicado: só em `OfficialSendCommand`, os quatro de `uncertain` para `failed`, sem `externalMessageId`. Conferido em produção em 2026-11-12, pela consulta 1 abaixo (só leitura): 4 linhas, `updatedAt` 2026-11-12 18:55 UTC, `safeError` "Resultado não confirmado pela Meta; encerrado manualmente na migração para o Meta Hub", `leaseToken` e `leaseExpiresAt` nulos. O passo 3 não é necessário. A lease importa porque a retenção só purga comando com `leaseToken` nulo (`src/modules/whatsapp-maintenance/retention.repo.ts:8,13`) e a desativação local passa `sending` a `uncertain` mantendo a lease (`lifecycle.repo.ts:31-32`). `WhatsappMessage` e `OfficialCampaignRecipient` não foram tocados; os destinatários seguem `unknown`. As mensagens ligadas seguem `pending` (conferido na mesma consulta): o `finishFailure` com falha incerta não toca a mensagem (`src/modules/whatsapp-outbound/outbound.repo.ts:107-112`), e o UPDATE manual não fez o que os encerramentos do app fazem, que é passar a mensagem `pending` a `failed` junto do comando (`outbound.repo.ts:111`, `src/modules/whatsapp-campaigns/campaigns.repo.ts:54`, `src/modules/whatsapp-maintenance/lifecycle.repo.ts:30`).
+   - Decisão: sem UPDATE na `WhatsappMessage` enquanto a trava de 7 dias importar. `recentlyReceived` só tira da trava o destinatário cuja mensagem está `failed` (`campaigns.repo.ts:14`): passar as quatro mensagens a `failed` solta a trava que se quer manter. Custo aceito: as quatro aparecem como pendentes na conversa, sem nada que as conclua; no relatório da campanha, como falha (item anterior). A trava conta 7 dias a partir do `completedAt` do destinatário (`RESEND_WINDOW_DAYS`, `src/modules/whatsapp-campaigns/preview.service.ts:18,104`) e só vale com `completedAt` preenchido: o `settle` do disparo o grava (`campaigns.repo.ts:79`), a desativação local leva o destinatário a `unknown` sem gravá-lo (`lifecycle.repo.ts:35`). Nos quatro, o destinatário está `unknown` com `completedAt` preenchido (2026-11-10 13:07-13:08 UTC, conferido na consulta 1): a trava vale até 2026-11-17 e nenhum UPDATE foi aplicado à `WhatsappMessage`.
+   - SQL. Primeiro a conferência, só leitura, que tem de devolver 4 linhas; o UPDATE é opcional, para alinhar as mensagens depois que a trava vencer (ou se `completedAt` vier nulo), em transação e só sobre `pending`. `createdAt` é `timestamp` sem fuso gravado em UTC (`DateTime` sem `@db.Timestamptz`, `eloscrm-api/prisma/schema.prisma`; o banco roda em `Etc/UTC`), e o filtro compara direto em UTC. A versão anterior convertia para `America/Sao_Paulo` e não achava nenhuma linha, porque os horários registrados acima já eram UTC:
 
    ```sql
    -- 1. conferência: tem de devolver 4 linhas
@@ -474,8 +474,8 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
    WHERE c.status = 'failed'
      AND c."externalMessageId" IS NULL
      AND c."campaignRecipientId" IS NOT NULL
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' >= '2026-11-10 13:07'
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < '2026-11-10 13:09';
+     AND c."createdAt" >= '2026-11-10 13:07'
+     AND c."createdAt" < '2026-11-10 13:09';
 
    -- 2. opcional: espera "UPDATE 4"; com qualquer outro número, ROLLBACK em vez de COMMIT
    BEGIN;
@@ -488,8 +488,8 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
      AND c.status = 'failed'
      AND c."externalMessageId" IS NULL
      AND c."campaignRecipientId" IS NOT NULL
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' >= '2026-11-10 13:07'
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < '2026-11-10 13:09';
+     AND c."createdAt" >= '2026-11-10 13:07'
+     AND c."createdAt" < '2026-11-10 13:09';
    COMMIT;
 
    -- 3. só se a conferência mostrar leaseToken preenchido: espera "UPDATE N", com N = linhas com
@@ -501,8 +501,8 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
      AND c."leaseToken" IS NOT NULL
      AND c."externalMessageId" IS NULL
      AND c."campaignRecipientId" IS NOT NULL
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' >= '2026-11-10 13:07'
-     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < '2026-11-10 13:09';
+     AND c."createdAt" >= '2026-11-10 13:07'
+     AND c."createdAt" < '2026-11-10 13:09';
    COMMIT;
    ```
 
@@ -589,4 +589,4 @@ O módulo `whatsapp-official/` fica: `identity.repo.ts`, `ingest.repo.ts`, `mess
 - **Q7.** Um destinatário `unknown` que veio de `uncertain` do hub entra na trava de 7 dias (`campaigns.repo.ts:14`), como hoje, ou fica liberado para reenvio?
 - **Q8.** Parâmetros: janela de repetição do POST, prazo do "não confirmado", extensão da lease do destinatário (mínimo 15 min), margem de renovação do upload e janela de estabilidade do piloto.
 
-> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 17:56 (-03)
+> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 17:58 (-03)
