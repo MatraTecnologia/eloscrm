@@ -701,7 +701,15 @@ export type ChannelConnection = {
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // conexão pelo Meta Hub (hubConnectionId preenchido)
+  hubConnectionId: string | null;
+  hubErrorCode: string | null;
+  hubHealth: { status?: "AVAILABLE" | "LIMITED" | "BLOCKED" | string } | null;
+  qualityRating: string | null;
+  timezone: string | null;
 };
+export type HubConfig = { available: boolean };
+export type HubConnectSession = { url: string; expiresAt: string };
 
 export type MessagingContact = {
   id: string;

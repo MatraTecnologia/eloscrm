@@ -222,6 +222,10 @@ O `whatsapp` foge do formato em dois pontos, ambos deliberados e documentados em
 **uma rota fora de `/v1` e sem guards** — `/webhooks/uazapi/:instanceId/:secret`, receptor de eventos
 do provedor, autenticado por segredo na URL; o hash do token no corpo é conferido quando o campo está presente.
 
+O Meta Hub tem a outra rota sem guards: `POST /webhooks/meta-hub`, autenticada por HMAC do
+`x-hub-timestamp` com o corpo cru (`src/lib/meta-hub/webhook-auth.ts`). Ela só é registrada quando
+`HUB_WEBHOOK_SECRET` existe.
+
 ## Estrutura do web
 
 - `lib/queries/<recurso>.ts` — um arquivo por recurso com os hooks de TanStack Query (`useDeals`, `useCreateDeal`, …). Mutations invalidam por prefixo de key; `useUpdateDeal` faz optimistic update no move entre estágios do kanban.
@@ -239,4 +243,4 @@ contratos ou executar procedimentos antigos.
 - Spec histórica do MVP: `eloscrm-api/docs/superpowers/specs/2026-07-23-eloscrm-mvp-design.md`
 - Plano histórico da fundação: `eloscrm-api/docs/superpowers/plans/2026-07-23-api-fundacao.md`
 
-> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-11-12 18:31 (-03)
+> Criado em 2026-07-27 10:13 (-03) · Última modificação: 2026-11-12 19:45 (-03)

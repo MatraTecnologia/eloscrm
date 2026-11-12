@@ -6,6 +6,8 @@ export const publicConnectionSelect = {
   businessPortfolioId: true, wabaId: true, phoneNumberId: true,
   displayPhoneNumber: true, verifiedName: true, currency: true, timezoneId: true,
   isOnBusinessApp: true, uazapiInstanceId: true, tokenExpiresAt: true, disabledAt: true, createdAt: true, updatedAt: true,
+  // conexão pelo Meta Hub: o id do hub não é credencial; a saúde e o motivo do erro vão para a aba
+  hubConnectionId: true, hubErrorCode: true, hubHealth: true, qualityRating: true, timezone: true,
 } satisfies Prisma.ChannelConnectionSelect;
 
 export const list = (orgId: string) => prisma.channelConnection.findMany({

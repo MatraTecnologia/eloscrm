@@ -11,6 +11,7 @@ import { scheduleBroadcastRecovery } from "./modules/broadcasts/broadcasts.servi
 import { scheduleInboundAutomationRecovery } from "./modules/lead-automation/inbound-automation.service.js";
 import { scheduleWhatsappRetention } from "./modules/whatsapp-maintenance/maintenance.service.js";
 import { scheduleOfficialMediaRecovery } from "./modules/whatsapp-official/media.service.js";
+import { scheduleHubWebhookSweep } from "./modules/meta-hub/webhook.service.js";
 
 const start = async () => {
   const app = await buildApp();
@@ -34,6 +35,8 @@ const start = async () => {
   await scheduleWhatsappRetention();
   const stopMediaRecovery = scheduleOfficialMediaRecovery();
   app.addHook("onClose", async () => stopMediaRecovery());
+  const stopHubWebhookSweep = scheduleHubWebhookSweep();
+  app.addHook("onClose", async () => stopHubWebhookSweep());
   await app.listen({ port: env.PORT, host: "0.0.0.0" });
 };
 

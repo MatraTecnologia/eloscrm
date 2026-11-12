@@ -7,7 +7,8 @@ export const subscriptionFailed = async (orgId: string, id: string) => {
   await prisma.channelConnection.updateMany({ where: { id, organizationId: orgId, status: "pending" }, data: { updatedAt: new Date() } });
   await prisma.officialSyncRequest.updateMany({ where: { organizationId: orgId, connectionId: id, status: "pending" }, data: { lastErrorCode: "OFFICIAL_SUBSCRIPTION_FAILED" } });
 };
-export const requests = (orgId: string, connectionId: string) => prisma.officialSyncRequest.findMany({ where: { organizationId: orgId, connectionId } });
+// Conexão do hub tem o sync espelhado do hub (§3.1): os jobs antigos não leem nem escrevem essas linhas
+export const requests = (orgId: string, connectionId: string) => prisma.officialSyncRequest.findMany({ where: { organizationId: orgId, connectionId, connection: { hubConnectionId: null } } });
 export const claim = async (orgId: string, id: string) => {
   const result = await prisma.officialSyncRequest.updateMany({ where: { id, organizationId: orgId, status: "pending", deadlineAt: { gt: new Date() } }, data: { status: "requesting", requestedAt: new Date(), lastErrorCode: null } });
   return result.count === 1;
@@ -25,7 +26,7 @@ export const recoverStale = async () => {
   await prisma.officialSyncRequest.updateMany({ where: { status: "pending", deadlineAt: { lte: new Date() } }, data: { status: "expired", lastErrorCode: "OFFICIAL_SYNC_DEADLINE_EXPIRED" } });
 };
 export const dueConnections = () => prisma.channelConnection.findMany({ where: {
-  provider: "cloud_api", OR: [
+  provider: "cloud_api", hubConnectionId: null, OR: [
     { status: "pending", updatedAt: { lt: new Date(Date.now() - 30_000) } },
     { status: "connected", syncRequests: { some: { status: "pending", deadlineAt: { gt: new Date() } } } },
   ],
@@ -37,4 +38,4 @@ export const eventsFor = (orgId: string, connectionId: string, field: string, si
 export const setProgress = (orgId: string, id: string, status: OfficialSyncStatus, progress: number, lastErrorCode: string | null) => prisma.officialSyncRequest.updateMany({
   where: { organizationId: orgId, id, status: { notIn: ["pending", "expired", "failed"] } }, data: { status, progress, lastErrorCode },
 });
-export const activeSyncConnections = () => prisma.officialSyncRequest.findMany({ where: { status: { in: ["accepted", "receiving", "uncertain"] } }, orderBy: { updatedAt: "asc" }, distinct: ["connectionId"], select: { connectionId: true, organizationId: true }, take: 100 });
+export const activeSyncConnections = () => prisma.officialSyncRequest.findMany({ where: { status: { in: ["accepted", "receiving", "uncertain"] }, connection: { hubConnectionId: null } }, orderBy: { updatedAt: "asc" }, distinct: ["connectionId"], select: { connectionId: true, organizationId: true }, take: 100 });
