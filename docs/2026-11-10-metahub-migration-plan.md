@@ -451,6 +451,7 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
 1. Trocar os textos de `lifecycle-controls.tsx:25-26` (desconectar no celular derruba o número também no hub, hub:636; "Conectar com a Meta" aponta para um onboarding que responde 409). → `pnpm lint && pnpm typecheck` no web; deploy independente das outras fases.
 2. Equipe Matra: app de produção (chave, endpoint, segredo, allowlist) e app de dev (chave, túnel, `returnUrl`). → `GET /v1/me` com as duas chaves responde 200, rodado pelo usuário.
 3. Estado do legado, por SELECT só de leitura rodado pelo usuário: conexões `cloud_api` por status; comandos de conexões `cloud_api` fora de estado terminal (`pending`, `preparing`, `sending`, `uncertain`); WABAs com mais de uma org. → comandos não terminais encerrados por ação manual auditada antes de D5 reaproveitar a linha (o `knownResponses` só concilia `uncertain` com `externalMessageId`, `outbound.repo.ts:139`, e os `pending` voltam ao `executeSend`, que exige token, `outbound.service.ts:160`, e eles bloqueiam a exclusão do atendimento, `inbox.repo.ts:115-116`); WABA em duas orgs decidida antes da primeira sessão.
+   - Resultado em 2026-11-12: uma conexão `cloud_api`, `disabled`, sem `tokenEnc`, com `disabledAt`; nenhuma WABA em duas orgs (há uma conexão só). Quatro comandos `uncertain` de uma org, todos de campanha, sem `externalMessageId`, criados em 2026-11-10 entre 13:07 e 13:08. Nenhum caminho do app os concilia (sem `wamid`), e eles barram D5 e a exclusão do atendimento. Encerrar como `failed` com `safeError` de encerramento manual, sem mexer no `OfficialCampaignRecipient` (segue `unknown` e na trava de 7 dias, `campaigns.repo.ts:14`). Na tela da campanha os quatro passam a aparecer como falha (`campaigns.service.ts:27`). Encerramento executado pelo usuário em 2026-11-12; a consulta dos comandos não terminais voltou vazia depois dele.
 
 **F1. Release M1: schema, receptor e conexão**
 1. Schema da §6. → índices únicos criados antes; `pnpm db:push`, `pnpm db:push:test`, `pnpm typecheck`, `pnpm test` verdes; em produção, checagem por `information_schema` antes da imagem.
@@ -526,4 +527,4 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
 - **Q7.** Um destinatário `unknown` que veio de `uncertain` do hub entra na trava de 7 dias (`campaigns.repo.ts:14`), como hoje, ou fica liberado para reenvio?
 - **Q8.** Parâmetros: janela de repetição do POST, prazo do "não confirmado", extensão da lease do destinatário (mínimo 15 min), margem de renovação do upload e janela de estabilidade do piloto.
 
-> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 15:43 (-03)
+> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 15:53 (-03)
