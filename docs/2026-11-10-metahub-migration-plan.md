@@ -456,12 +456,42 @@ Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou
 
 **F0. Pré-requisitos**
 1. Trocar os textos de `lifecycle-controls.tsx:25-26` (desconectar no celular derruba o número também no hub, hub:636; "Conectar com a Meta" aponta para um onboarding que responde 409). → `pnpm lint && pnpm typecheck` no web; deploy independente das outras fases.
-   - Resultado em 2026-11-12: feito. Textos trocados em `24b93ee`. Em `6dccdba`, a aba deixou de mostrar o botão do onboarding antigo, que levava ao 409, e passou a encaminhar ao suporte (`eloscrm-web/components/whatsapp-official/official-tab.tsx:44-45`); o `OfficialSignup` fica no repositório até F5.
+   - Resultado em 2026-11-12: feito. Textos trocados em `24b93ee`. Em `6dccdba`, a aba deixou de mostrar o botão do onboarding antigo, que levava ao 409, e passou a encaminhar ao suporte (`eloscrm-web/components/whatsapp-official/official-tab.tsx:44-45`); o `OfficialSignup` (`official-signup.tsx`) fica no repositório para reversão até F5. O aviso (`official-tab.tsx:45`) e o texto de `lifecycle-controls.tsx:26` voltam a apontar para o fluxo do hub antes de F4.3 (§7 F4.3).
 2. Equipe Matra: app de produção (chave, endpoint, segredo, allowlist) e app de dev (chave, túnel, `returnUrl`). → `GET /v1/me` com as duas chaves responde 200, rodado pelo usuário.
+   - Resultado em 2026-11-12: o app consumidor de produção existe e `GET /v1/me` com a chave dele responde 200. Faltam o app de dev (chave `mh_live_` própria, túnel HTTPS e `returnUrl` próprio, hub:384-389; o hub não entrega chave `mh_test_`, hub:363) e a conferência da allowlist de retorno (hub:67). O endpoint de webhook do app de produção e o segredo `whsec_` (hub:66) só são cadastrados em F1, com o receptor no ar (§7 F1.5; cadastro em §4.1).
 3. Estado do legado, por SELECT só de leitura rodado pelo usuário: conexões `cloud_api` por status; comandos de conexões `cloud_api` fora de estado terminal (`pending`, `preparing`, `sending`, `uncertain`); WABAs com mais de uma org. → comandos não terminais encerrados por ação manual auditada antes de D5 reaproveitar a linha (o `knownResponses` só concilia `uncertain` com `externalMessageId`, `outbound.repo.ts:139`, e os `pending` voltam ao `executeSend`, que exige token, `outbound.service.ts:160`, e eles bloqueiam a exclusão do atendimento, `inbox.repo.ts:115-116`); WABA em duas orgs decidida antes da primeira sessão.
    - Resultado em 2026-11-12: uma conexão `cloud_api`, `disabled`, sem `tokenEnc`, com `disabledAt`; nenhuma WABA em duas orgs (há uma conexão só). Quatro comandos `uncertain` de uma org, todos de campanha, sem `externalMessageId`, criados em 2026-11-10 entre 13:07 e 13:08. Nenhum caminho do app os concilia (sem `wamid`), e eles barram D5 e a exclusão do atendimento. Encerrar como `failed` com `safeError` de encerramento manual, sem mexer no `OfficialCampaignRecipient`. Na tela da campanha os quatro passam a aparecer como falha (`campaigns.service.ts:27`). Encerramento executado pelo usuário em 2026-11-12; a consulta dos comandos não terminais voltou vazia depois dele.
-   - UPDATE aplicado: só em `OfficialSendCommand`, os quatro de `uncertain` para `failed`, sem `externalMessageId`. `WhatsappMessage` e `OfficialCampaignRecipient` não foram tocados. As mensagens ligadas seguem `pending` (**a confirmar** pela consulta abaixo): o `finishFailure` só leva a mensagem a `failed` quando a falha não é incerta (`src/modules/whatsapp-outbound/outbound.repo.ts:108-112`), e o UPDATE manual não passou por ele. Conferência, só leitura, rodada pelo usuário: `SELECT m.status, count(*) FROM "WhatsappMessage" m JOIN "OfficialSendCommand" c ON c."messageId" = m.id AND c."organizationId" = m."organizationId" WHERE c.id IN (<os 4 ids>) GROUP BY m.status`.
-   - Sem UPDATE na `WhatsappMessage`: `pending` mantém os quatro destinatários `unknown` na trava de 7 dias, porque `recentlyReceived` só deixa de contar o destinatário cuja mensagem está `failed` (`campaigns.repo.ts:14`). Um UPDATE para `failed` os tiraria da trava, contra a decisão de mantê-la. Custo aceito: as quatro mensagens continuam `pending` sem nada que as conclua. A trava conta 7 dias a partir do `completedAt` do destinatário (`RESEND_WINDOW_DAYS`, `src/modules/whatsapp-campaigns/preview.service.ts:18,104`). Passado esse prazo, o UPDATE já não muda a trava e pode ser aplicado pelo usuário: `UPDATE "WhatsappMessage" SET status = 'failed' WHERE id IN (<os 4 messageId>) AND status = 'pending'`.
+   - UPDATE aplicado: só em `OfficialSendCommand`, os quatro de `uncertain` para `failed`, sem `externalMessageId`. `WhatsappMessage` e `OfficialCampaignRecipient` não foram tocados; os destinatários seguem `unknown`. As mensagens ligadas seguem `pending` (**a confirmar** pela consulta abaixo): o `finishFailure` com falha incerta não toca a mensagem (`src/modules/whatsapp-outbound/outbound.repo.ts:107-112`), e o UPDATE manual não fez o que os encerramentos do app fazem, que é passar a mensagem `pending` a `failed` junto do comando (`outbound.repo.ts:111`, `src/modules/whatsapp-campaigns/campaigns.repo.ts:54`, `src/modules/whatsapp-maintenance/lifecycle.repo.ts:30`).
+   - Decisão: sem UPDATE na `WhatsappMessage` enquanto a trava de 7 dias importar. `recentlyReceived` só tira da trava o destinatário cuja mensagem está `failed` (`campaigns.repo.ts:14`): passar as quatro mensagens a `failed` solta a trava que se quer manter. Custo aceito: as quatro aparecem como pendentes na conversa e no relatório, sem nada que as conclua. A trava conta 7 dias a partir do `completedAt` do destinatário (`RESEND_WINDOW_DAYS`, `src/modules/whatsapp-campaigns/preview.service.ts:18,104`) e só vale com `completedAt` preenchido: o `settle` do disparo o grava (`campaigns.repo.ts:79`), a desativação local leva o destinatário a `unknown` sem gravá-lo (`lifecycle.repo.ts:35`). A consulta abaixo mostra qual dos dois casos é o destes quatro.
+   - SQL proposto, rodado pelo usuário (nós não acessamos produção). Primeiro a conferência, só leitura, que tem de devolver 4 linhas; o UPDATE é opcional, para alinhar as mensagens depois que a trava vencer (ou se `completedAt` vier nulo), em transação e só sobre `pending`. `createdAt` é `timestamp` sem fuso gravado em UTC (`DateTime` sem `@db.Timestamptz`, `eloscrm-api/prisma/schema.prisma`), daí a conversão para `America/Sao_Paulo`:
+
+   ```sql
+   -- 1. conferência: tem de devolver 4 linhas
+   SELECT c.id, c."messageId", m.status AS message_status, r.status AS recipient_status, r."completedAt"
+   FROM "OfficialSendCommand" c
+   JOIN "WhatsappMessage" m ON m.id = c."messageId" AND m."organizationId" = c."organizationId"
+   JOIN "OfficialCampaignRecipient" r ON r.id = c."campaignRecipientId" AND r."organizationId" = c."organizationId"
+   WHERE c.status = 'failed'
+     AND c."externalMessageId" IS NULL
+     AND c."campaignRecipientId" IS NOT NULL
+     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' >= '2026-11-10 13:07'
+     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < '2026-11-10 13:09';
+
+   -- 2. opcional: espera "UPDATE 4"; com qualquer outro número, ROLLBACK em vez de COMMIT
+   BEGIN;
+   UPDATE "WhatsappMessage" m
+   SET status = 'failed'
+   FROM "OfficialSendCommand" c
+   WHERE m.id = c."messageId"
+     AND m."organizationId" = c."organizationId"
+     AND m.status = 'pending'
+     AND c.status = 'failed'
+     AND c."externalMessageId" IS NULL
+     AND c."campaignRecipientId" IS NOT NULL
+     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' >= '2026-11-10 13:07'
+     AND (c."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < '2026-11-10 13:09';
+   COMMIT;
+   ```
 
 **F1. Release M1: schema, receptor e conexão**
 1. Schema da §6. → índices únicos criados antes; `pnpm db:push`, `pnpm db:push:test`, `pnpm typecheck`, `pnpm test` verdes; em produção, checagem por `information_schema` antes da imagem.
