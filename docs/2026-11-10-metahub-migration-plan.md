@@ -1,400 +1,390 @@
 # Plano de migração: integração oficial do WhatsApp para o Matra Meta Hub
 
 Convenções de citação:
-- `hub:N` = linha N da documentação completa do hub (`llms-full.txt`); `oa` = `openapi.json` do hub. Snapshot de 2026-11-10 de https://metahub.matratecnologia.com/llms-full.txt, sha256 `4ccb29dc2f5bc23069c02a8fa27451ccc6dd7c347eedb2074ac79d9a831b9a97`; as linhas valem só para essa versão.
+- `hub:N` = linha N da documentação completa do hub (`llms-full.txt`), snapshot de 2026-11-12 de https://metahub.matratecnologia.com/llms-full.txt, sha256 `c62fdbc16ce41bbd11ad40ef6f8c6679cd6115f7b836b7855959fcc1a93d025b`. As linhas valem só para essa versão. `oa` = `openapi.json` do hub no mesmo dia.
+- "Código do hub" marca o que a revisão de 2026-11-12 conferiu no repositório do hub e a doc não diz.
 - Caminhos da API são relativos a `eloscrm-api/`; os do web começam com `eloscrm-web/`.
-- Tudo foi lido sem acesso a rede, banco ou `.env`. Afirmações marcadas **a confirmar com o hub** não se provam lendo arquivos.
-- Valores marcados **(parâmetro)** são escolhas de desenho a calibrar no piloto, não fatos medidos.
+- Tudo foi lido sem acesso a banco ou `.env`. Afirmações marcadas **a confirmar** não se provam lendo arquivos.
+- Valores marcados **(parâmetro)** são escolhas de desenho a calibrar no piloto.
+
+**Revisão de 2026-11-12.** A versão de 2026-11-10 supunha duas vias (app próprio e hub) e um período de convivência por número. Três fatos mudaram o plano:
+- O hub usa o mesmo app da Meta que o elosCRM (`881452474733033`), e a callback do app aponta para o hub desde 2026-10-23. O webhook próprio não recebe nada desde então, e o onboarding próprio responde `409 OFFICIAL_WEBHOOK_NOT_READY` (`src/modules/whatsapp-onboarding/onboarding.service.ts:41`).
+- O elosCRM não tem conexão oficial ativa: a que existia foi desativada.
+- O hub entregou em 2026-11-12 a moeda e o fuso na conexão, `metaTemplateId`/`wabaId` no template, `previous.waId` na troca de número e a documentação de H1, H2, H-D7, H-D13, H-D14 e H-D15.
+
+Saíram: a convivência, a virada por WABA, o rollback por WABA, a importação de token (H4), a dedup entre vias e as colunas paralelas `hub*` de estado. A migração é uma conexão nova pelo `/connect` do hub, e o código direto vira remoção. Os eventos `orphaned` no hub desde 2026-10-23 não são recuperados (decisão do usuário).
 
 ---
 
 ## 1. Objetivo e escopo
 
 ### 1.1 Objetivo
-Trocar a integração direta do app com a WhatsApp Cloud API (Graph API, Embedded Signup próprio, webhook próprio da Meta) pelo Matra Meta Hub como intermediário, sem mudar o contrato que o web e os módulos de domínio usam para conversas, contatos, leads, disparos, templates e custos.
+Trocar a integração direta com a WhatsApp Cloud API pelo hub, sem mudar o contrato que o web e os módulos de domínio usam para conversas, contatos, leads, disparos, templates e custos.
 
 ### 1.2 Dentro do escopo
-- Onboarding (Embedded Signup e Coexistence), token, assinatura da WABA: passam para o hub.
-- Recebimento de mensagens, ecos, recibos, histórico, contatos e troca de identidade: chegam pelo webhook do hub.
-- Envio manual, envio de template e disparos: saem pela API de mensagens do hub.
-- Templates (sync, criação, exclusão, status), mídia recebida e enviada, custos.
-- Migração das conexões que já estão em produção, com convivência e rollback.
+- Onboarding (Embedded Signup e Coexistence), token e assinatura da WABA passam para o hub.
+- Recebimento de mensagens, ecos, recibos, histórico, contatos e troca de identidade pelo webhook do hub.
+- Envio manual, envio de template e disparos pela API de mensagens do hub.
+- Templates, mídia recebida e enviada, custos.
+- Remoção do código direto, que já não funciona em produção.
 
 ### 1.3 Fora do escopo
-- Lead Ads pelo hub (fase separada, §8 F11).
+- Lead Ads pelo hub (fase separada, §7 F6).
 - Tipos de envio que o app não oferece hoje (reação, localização, interativos, sticker) e read receipt / "digitando" (Q6).
-- A integração uazapi não muda. Os pontos em que ela encosta na oficial estão em §1.4 e precisam continuar funcionando.
+- Recuperar mensagens, recibos e histórico do intervalo entre 2026-10-23 e a conexão nova: chegaram ao hub como `orphaned` e o hub descarta o que é anterior à conexão (hub:1234).
+- A integração uazapi não muda. Os pontos em que ela encosta na oficial estão em §1.4.
 
 ### 1.4 Pontos de contato com a uazapi
 | Ponto | Onde | O que o plano garante |
 |---|---|---|
-| Exceção de envio manual pela uazapi na conversa oficial | `src/modules/whatsapp-inbox/uazapi-policy.repo.ts:15-21` (`legacyEligibility`, consulta em :18) e :32-38 (`resolveManualRoute`, checagem de `status`, `disabledAt`, `isOnBusinessApp`, `tokenExpiresAt` em :37 e `displayPhoneNumber` em :38) | Durante a convivência, `status`, `tokenExpiresAt` e `displayPhoneNumber` da linha `direct` **não** são sobrescritos pelo hub (§2.4 D5). Depois da virada, passam a espelhar o hub. `legacyEligibility` não olha `tokenEnc` (:18), então zerar o token no corte não afeta a exceção. `sameSenderNumber` remove `+`, espaço, parênteses, ponto e hífen (:6), o que cobre um `displayPhoneNumber` formatado. |
-| Escopo de identidade `business:<portfolio>` | `resolveManualRoute` lê identidades por `business:${connection.businessPortfolioId}` (`uazapi-policy.repo.ts:39`) | `businessPortfolioId` nunca é sobrescrito automaticamente (§10 R10). |
-| Lock por portfólio | `withConnectionLock` em `src/modules/whatsapp-official/identity.repo.ts`, usado também por `src/modules/campaign-imports/imports.repo.ts:4,9` | Os handlers do hub usam o mesmo lock. Nenhuma mudança de assinatura. |
-| `eventHash` | importado de `src/modules/whatsapp-official/webhook.schema.ts` por `src/modules/broadcasts/broadcasts.service.ts:16` (uso em :92) | Mover para `src/lib/` antes de apagar qualquer arquivo de `whatsapp-official/` (F10). |
+| Exceção de envio manual pela uazapi na conversa oficial | `src/modules/whatsapp-inbox/uazapi-policy.repo.ts:15-21` (`legacyEligibility`, consulta em :18) e :32-38 (`resolveManualRoute`, checagem de `status`, `disabledAt`, `isOnBusinessApp`, `tokenExpiresAt` em :37 e `displayPhoneNumber` em :38) | A exceção passa a ler a linha da conexão do hub, que espelha `status`, `isOnBusinessApp` (de `whatsapp.isOnBizApp`, hub:607), `displayPhoneNumber` e `tokenExpiresAt` (§2.4). Nenhuma das duas consultas olha `tokenEnc`. `sameSenderNumber` remove `+`, espaço, parênteses, ponto e hífen (:6), o que cobre o `displayPhoneNumber` formatado do hub (hub:571). |
+| Escopo de identidade `business:<portfolio>` | `uazapi-policy.repo.ts:39` | `businessPortfolioId` é gravado de `whatsapp.businessId` (hub:604) antes da primeira ingestão: nulo, o escopo vira `business:null`, um balde comum da org. Depois disso nunca é sobrescrito sozinho (§9 R6). |
+| Lock por portfólio | `withConnectionLock` em `src/modules/whatsapp-official/identity.repo.ts` | Os handlers do hub usam o mesmo lock. |
+| `eventHash` | `src/modules/whatsapp-official/webhook.schema.ts:24`, importado por `src/modules/broadcasts/broadcasts.service.ts` | Vai para `src/lib/` antes de apagar `whatsapp-official/` (F5). |
 | Desativação separada | `src/modules/whatsapp-maintenance/lifecycle.repo.ts:24` (`UAZAPI_DISCONNECT_SEPARATE`) | Sem mudança. |
-| Tabelas compartilhadas | `Conversation`, `WhatsappMessage` (`origin: "uazapi"` em `src/modules/whatsapp-inbox/uazapi-manual.repo.ts:15`), `ChannelConnection` (`ChannelProvider` `cloud_api`/`uazapi`, `prisma/schema.prisma:689-692`) | Só colunas aditivas e nulas; nenhum valor de enum novo (§2.4 D2). |
-| Eco da mensagem enviada pela uazapi | O eco Coexistence entra por `ingestMessage(..., "business_app")` (`src/modules/whatsapp-official/webhook-processing.service.ts:35-36`) | O eco pelo hub traz o mesmo item cru (hub:1295) e entra pelo mesmo `ingestMessage`. O comportamento atual de dedup se mantém. |
+| Tabelas compartilhadas | `Conversation`, `WhatsappMessage`, `ChannelConnection` (`ChannelProvider` em `prisma/schema.prisma:689-692`) | Só colunas aditivas e nulas; nenhum valor de enum novo (§2.4 D2). |
+| Eco da mensagem enviada pela uazapi | Eco Coexistence entra por `ingestMessage(..., "business_app")` | O eco pelo hub traz o item cru (hub:1319) e entra pelo mesmo caminho. Um cliente não oficial pode não gerar eco (hub:1321): sem eco, a mensagem da uazapi fica só como a uazapi a gravou, como hoje. |
 
 ---
 
 ## 2. Arquitetura alvo
 
-### 2.1 O que sai do app no fim da migração
-- Embedded Signup próprio: `src/modules/whatsapp-onboarding/`, `src/routes/v1/whatsapp/onboarding/index.ts`, `eloscrm-web/components/whatsapp-official/official-signup.tsx` e o SDK do Facebook no browser. O doc da Meta salvo no repo dá o ES v2 como descontinuado em 15/10/2026 (`docs/whatsapp-embedded-signup-implementation.md:7`); o código usa `sessionInfoVersion: "3"` (`official-signup.tsx:119`). Não verifiquei se o onboarding próprio ainda funciona.
-- Cliente Graph: `src/lib/whatsapp-official/graph.ts` (sobra um `unsubscribeWaba` temporário, §7.3), `media-download.ts`, `webhook-auth.ts` e, quando nenhum `tokenEnc` restar, `crypto.ts`.
-- Webhook próprio: `src/routes/webhooks/whatsapp-official/index.ts` e o journal `OfficialWebhookEvent` (fica em leitura e retenção até zerar).
-- Analytics da Graph: `src/modules/whatsapp-costs/analytics.service.ts:17-20`.
-- Jobs `scheduleOnboardingRecovery` (`src/server.ts:24`) e `scheduleOfficialWebhookRecovery` (`src/server.ts:22`).
-- Envs `META_WHATSAPP_*` (`src/env.ts:53-58`); a chave de criptografia do token sai por último.
+### 2.1 O que sai do app
+- Embedded Signup próprio: `src/modules/whatsapp-onboarding/`, `src/routes/v1/whatsapp/onboarding/index.ts`, `eloscrm-web/components/whatsapp-official/official-signup.tsx` e o SDK do Facebook no browser. Já não funciona: `start` e `exchange` passam por `checkSubscriptions` e respondem 409 (`onboarding.service.ts:41`).
+- Webhook próprio: `src/routes/webhooks/whatsapp-official/index.ts`. O journal `OfficialWebhookEvent` fica em leitura até a retenção esvaziá-lo.
+- Cliente Graph: `src/lib/whatsapp-official/graph.ts`, `media-download.ts`, `webhook-auth.ts` e `crypto.ts`.
+- Analytics da Graph: `src/modules/whatsapp-costs/analytics.service.ts:17-20`. O custo em dinheiro provavelmente nunca funcionou com esse token: o hub registra que a Meta recusa `COST` com erro 10 para o token de parceiro (hub:1515). **A confirmar** em produção antes de apagar.
+- Jobs `scheduleOnboardingRecovery` e `scheduleOfficialWebhookRecovery` (`src/server.ts:19-36`).
+- Envs `META_WHATSAPP_*` (`src/env.ts:53-58`). O Lead Ads não depende delas.
 
 ### 2.2 O que o hub passa a fazer
-- Embedded Signup e Coexistence, inclusive o pedido de sync de histórico e contatos (hub:475, hub:602-607).
+- Embedded Signup e Coexistence, inclusive o pedido de sync de histórico e contatos (hub:608-613).
 - Token da Meta, assinatura da WABA e registro do número.
-- Envio com fila e vazão por número (hub:404), conciliação de `uncertain` e idempotência por `Idempotency-Key` (hub:687, hub:734-747).
-- Upload de mídia: o arquivo não fica no hub e o `mediaId` vale 29 dias (hub:815, hub:831).
-- Mídia recebida: o hub baixa da Meta, entrega por URL assinada de 5 minutos e guarda por 30 dias (hub:846-857).
-- Cache de templates por WABA com `version` (hub:867, hub:881).
-- Saúde da conta e eventos de conta (hub:609, hub:1198-1215), que hoje o app ignora (`webhook-processing.service.ts:59`).
-- Volume mensal (`/consumption`) e franquia (`/usage`) (hub:1425-1491).
+- Envio com fila e vazão por número (hub:406), conciliação de `uncertain` (hub:753) e idempotência por `Idempotency-Key` (hub:693).
+- Upload de mídia, com `mediaId` válido por 29 dias (hub:837).
+- Mídia recebida: o hub baixa da Meta e entrega por URL assinada de 5 minutos, por 30 dias (hub:858, hub:863).
+- Cache de templates por WABA com `version` (hub:875, hub:889).
+- Saúde do número e avisos de conta (hub:615, hub:1215-1224), que hoje o app ignora.
+- Volume mensal (`/consumption`) e franquia (`/usage`) (hub:1449-1515).
 
 ### 2.3 O que fica no app
-- `ChannelConnection` como âncora das FKs compostas `(connectionId, organizationId)` com `Restrict` (`prisma/schema.prisma:739`).
-- Conversas, `WhatsappMessage`, `MessagingContact`/`ContactIdentity`, janela de 24 h calculada localmente, automação de lead, `OfficialSendCommand`, campanhas, templates locais (ids locais), `OfficialUpload`, R2 e tabela de tarifas.
+- `ChannelConnection` como âncora das FKs compostas `(connectionId, organizationId)` (`prisma/schema.prisma:739`).
+- Conversas, `WhatsappMessage`, `MessagingContact`/`ContactIdentity`, janela de 24 h calculada localmente, automação de lead, `OfficialSendCommand`, campanhas, templates locais, `OfficialUpload`, R2 e tabela de tarifas.
 
 ### 2.4 Decisões de desenho
 
-**D1. Os parsers atuais recebem o item cru de `envelope.meta`.**
-- O hub declara o `meta` estável e "sem alteração" em `whatsapp.message.received`, `whatsapp.message.echo` e `whatsapp.message.status` com `source:"meta"` (hub:1221). Em `received`/`echo` o formato é `{ message, contact }` (hub:1244, hub:1295). Para o status, a doc diz só "o status" (hub:1221), sem exemplo: **o formato exato é bloqueante** (§4.1 H1).
-- Com o item cru, o contrato de `message-parser.ts`, `ingest.repo.ts`, `receipts.repo.ts` e `assessMessage` continua o mesmo. As correções pontuais nesses arquivos são três: `played` como no-op (`receipts.repo.ts:9`), `category` com hífen e `free_group_customer_service` (`src/modules/whatsapp-costs/message-cost.repo.ts:11,33`). Valem para as duas vias.
-- Que o item que a Meta entrega ao app do hub seja byte a byte igual ao que entrega ao app próprio é **hipótese**: a doc não diz a versão da Graph (hub:1289 mostra que o formato muda por versão) e os envios do hub levam `biz_opaque_callback_data` (hub:747). Por isso a dedup de recibo passa a ser semântica (D6), e não depende de o hash coincidir.
-- Do `data` normalizado saem só: `data.message.media.id` (id do hub; o id que vem no `meta` é da Meta e o app não baixa, hub:1221), `data.message.from.name` como fallback de nome quando `meta.contact` vier `null` (hub:1244; hoje o nome sai só de `contacts[].profile.name` em `message-parser.ts` `profileFor`, e alimenta `waName`/`automationSuggestedName`, `ingest.repo.ts:18,43`), e os campos de correlação do hub.
-- Precisam de adaptador próprio: `history.received` (o `meta` dele é só diagnóstico, hub:1221), `contacts.synced`, `identity.updated`, `template.*`, `connection.*`, `media.updated` e `status source:"hub"`.
+**D1. Os parsers atuais recebem o item cru de `envelope.meta` onde ele existe.**
+- O `meta` é contrato estável em `whatsapp.message.received`, `whatsapp.message.echo` e `whatsapp.message.status` com `source:"meta"` (hub:1232). Em `received`/`echo` o formato é `{ message, contact }`, com `contact` um objeto único ou `null` (hub:1255; código do hub): embrulhar em lista antes de `profileFor`.
+- No status, o `meta` é o item de `value.statuses[]` sem embrulho, com `timestamp` em string e `pricing` com os nomes da Meta (hub:1303-1315). É o que `receiptSchema` já espera (`src/modules/whatsapp-official/receipts.repo.ts:8-10`), salvo `played`.
+- Como o app da Meta é o mesmo, a versão do webhook também é: o item é o que o elosCRM recebia, mais `biz_opaque_callback_data` nos envios feitos pelo hub (hub:1303).
+- Correções pontuais no caminho cru:
+  - `played` vira no-op `processed` antes do `receiptSchema.parse`: não é chave de `priority` (`receipts.repo.ts:11`) nem valor de `WhatsappMessageStatus`.
+  - `timestamp` do eco pode vir inteiro (a Meta documenta assim; o hub repassa como veio): `messageSchema` aceita string e número (`src/modules/whatsapp-official/message-parser.ts:8`).
+  - `category` com hífen e `free_group_customer_service` (`src/modules/whatsapp-costs/message-cost.repo.ts:11,33`).
+- Do `data` normalizado sai só `data.message.media.id` (id do hub; o id do `meta` é da Meta e não é baixável, hub:1232). O `fallbackName` da versão anterior saiu: `from.name` vem do mesmo casamento que `meta.contact`, e os dois são nulos juntos (código do hub).
+- `history.received`, `contacts.synced` e `identity.updated` chegam com `meta: null` (código do hub; a doc diz só que o contrato é o `data`, hub:1232, e que `identity.updated` não tem `meta`, hub:1359). Precisam de adaptador do formato normalizado (§3.2).
 
 **D2. Nenhum valor novo em enum existente.**
-- O Prisma de uma imagem antiga falha ao ler um valor de enum desconhecido. Não testei; o plano parte desse pressuposto.
-- Ficam intocados `ChannelProvider` (`prisma/schema.prisma:689-692`), `OfficialSendStatus` (:1119-1126), `WhatsappMessageStatus` (:949-955), `WhatsappMessageOrigin` (:923-928), `OfficialWebhookStatus` (:865-872) e `OfficialSyncStatus` (:753-763).
-- A rota por conexão é `String` (`officialRoute`: `"direct"` | `"hub"`). O provider continua `cloud_api` e as mensagens do hub continuam `origin: "cloud_api"`, valor de que dependem a automação de lead (`src/modules/lead-automation/inbound-automation.repo.ts:16`), o custo (`message-cost.repo.ts:5`) e a promoção de histórico para ao vivo (`ingest.repo.ts:27`).
+- O Prisma 7 lança `Value 'X' not found in enum 'Y'` ao ler um valor fora do enum gerado, quando o campo é selecionado (conferido no runtime instalado, 7.10.0).
+- Ficam intocados `ChannelProvider`, `ChannelConnectionStatus` (`prisma/schema.prisma:694-699`), `OfficialSendStatus`, `WhatsappMessageStatus`, `WhatsappMessageOrigin`, `OfficialWebhookStatus` e `OfficialSyncStatus`.
+- Conexão do hub continua `provider: cloud_api`, e as mensagens dela continuam `origin: "cloud_api"`, valor de que dependem a automação de lead (`src/modules/lead-automation/inbound-automation.repo.ts:16`) e o custo (`message-cost.repo.ts:5`).
 
 **D3. Journal próprio para eventos do hub (`HubWebhookEvent`).**
-- No `OfficialWebhookEvent`, a imagem antiga marcaria o evento `unsupported` (`webhook-processing.service.ts:59`), e `wabaId` é NOT NULL (`prisma/schema.prisma:881`) enquanto os eventos de template chegam com `connectionId: null` (hub:1219).
+- `OfficialWebhookEvent.wabaId` é NOT NULL, e os eventos de template chegam com `connectionId: null` (hub:1230). O journal antigo fica para leitura e retenção.
 
-**D4. Rota gravada por conexão e por comando.**
-- `OfficialSendCommand.route` é lido de `officialRoute` dentro de `createCommand`, sob o lock da conexão (`src/modules/whatsapp-outbound/outbound.repo.ts:50-51`). Um comando termina sempre no transporte em que nasceu.
+**D4. Transporte único: a conexão oficial é do hub.**
+- Sem conexão direta viva, não há escolha de rota. Saem `officialRoute` (por conexão) e `route` (por comando) da versão anterior.
+- O código de envio, mídia, template e custo troca a Graph pelo hub no lugar, sem ramificação. O gate passa a exigir `hubConnectionId` em vez de `tokenEnc` (§3.3).
+- Uma conexão `cloud_api` com `hubConnectionId` nulo é legado desativado e nunca opera.
 
-**D5. Um escritor por conexão (e por WABA para templates).**
-- Enquanto `officialRoute = "direct"`, os handlers do hub escrevem **só** colunas `hub*` (`hubConnectionId`, `hubStatus`, `hubErrorCode`, `hubTokenExpiresAt`, `hubHealth`, `qualityRating`, `hubEventAt`, `hubTemplateId`, `hubVersion`). `status`, `tokenExpiresAt`, `displayPhoneNumber`, `verifiedName`, `isOnBusinessApp`, `OfficialSyncRequest` e o `status`/`definition` de template ficam com o caminho direto.
-  - Motivo: `connection.created` nasce `pending` (hub:612), `onboarding_incomplete` vira `error` em 2 h (hub:598), e qualquer um desses no `status` local derruba o envio direto (`outbound.repo.ts:51,92`), a mídia (`src/modules/whatsapp-official/media.repo.ts:25-27`), a exceção uazapi (`uazapi-policy.repo.ts:18,37`) e ativa `dueConnections` (`src/modules/whatsapp-onboarding/sync-request.repo.ts:29`), que chamaria `graph.subscribeWaba` com o token antigo (`sync-request.service.ts:30`). O `tokenExpiresAt` do hub é do token do app do hub, não do token local.
-- Depois da virada, o caminho direto vira no-op para aquela conexão: o handler de template direto não chama `syncTemplates` nem `applyStatus` quando todas as conexões da WABA na org estão em `hub`. Hoje um template desconhecido dispara `syncTemplates` (`src/modules/whatsapp-templates/template-status.service.ts:19-21`), e `saveTemplates` marca toda a WABA `MISSING` (`outbound.repo.ts:21`).
-- A virada de rota é **por WABA**: só vira quando todas as conexões `cloud_api` daquela `wabaId` na org têm `hubStatus = active`. Templates são da WABA (`prisma/schema.prisma:1263`), e a inscrição `subscribed_apps` também (hub:627).
-- Uma conexão que nasce pelo hub (`officialRoute = "hub"` desde a criação) espelha tudo desde o primeiro evento.
+**D5. Reaproveitar a linha da mesma org; nunca criar outra para o mesmo número.**
+- `phoneNumberId` é `@unique` global (`prisma/schema.prisma:712`), e a desativação local não o limpa (`lifecycle.repo.ts:38`). Uma linha nova para um número que já teve linha colidiria.
+- Conversas, mensagens, comandos e identidades apontam para a conexão por FK composta com `Restrict` (`prisma/schema.prisma:739`, relação em :1133). Reaproveitar a linha mantém o histórico na mesma conversa, como o texto do web já promete (`eloscrm-web/components/whatsapp-official/lifecycle-controls.tsx:26`).
+- Regra no primeiro `connection.*` com id desconhecido:
+  1. Procurar `cloud_api` da org do workspace pelo `whatsapp.phoneNumberId`.
+  2. Achou com `wabaId` e `businessPortfolioId` iguais aos do hub: liga `hubConnectionId`, limpa `disabledAt` e `tokenEnc` e espelha o resto (§2.5). Antes, exige zero comandos fora de estado terminal nessa linha (§7 F0). Na mesma transação, as linhas de `OfficialSyncRequest` da conexão (únicas por `(connectionId, syncType)`, `prisma/schema.prisma:808`), que o disable deixou `failed` (`lifecycle.repo.ts:37`), são regravadas a partir do `sync[]` do hub; a regra de "estado terminal não é sobrescrito" (§3.1) vale só depois da ligação.
+  3. Achou com `wabaId` ou `businessPortfolioId` diferente: não liga. O evento fica `failed WHATSAPP_ASSET_CHANGED`, com alerta e revisão manual, como o onboarding próprio faz hoje (`src/modules/whatsapp-onboarding/onboarding.repo.ts:42-43`): outro portfólio muda o escopo do BSUID e duplicaria contatos.
+  4. Achou em outra org: não liga. O evento fica `failed WHATSAPP_NUMBER_UNAVAILABLE`, com alerta, mantendo a regra de produto de não liberar o número para outra imobiliária (`lifecycle-controls.tsx:26`).
+  5. Não achou: cria a linha.
+- As linhas antigas de outros números continuam `disabled` como histórico. A remoção de `tokenEnc` como coluna fica para F5.
 
-**D6. Dedup de recibo semântica, nas duas vias.**
-- Hoje `dedupKey = eventHash({ connectionId, receipt: raw })` (`src/modules/whatsapp-official/receipts.repo.ts:42`), o item cru inteiro. Se as duas vias trouxerem itens diferentes para o mesmo evento, o recibo duplica e `failedReceipts` (`src/modules/whatsapp-campaigns/campaigns.repo.ts:118`) duplica códigos.
-- `ingestReceipt` passa a conferir `(connectionId, externalMessageId, status, occurredAt)` antes do `createMany`. A regra entra nas duas vias porque qualquer uma pode chegar primeiro.
+**D6. Versão mínima de rollback.**
+- A primeira release com o receptor do hub e o schema (release M1, §7 F1) é a versão mínima de rollback a partir da criação da primeira conexão no hub. Fica registrada no `AGENTS.md`.
+- Motivo: abaixo dela não há receptor nem caminho de envio para a conexão do hub. Uma imagem antiga reprovaria comando do hub no `createCommand`/`markSending`, que exigem `tokenEnc` (`src/modules/whatsapp-outbound/outbound.repo.ts:51,92`), e o `recover` global (:134-135) mexeria em comandos que não são dela.
+- Não precisa de release N0 separada: antes do piloto não existe trabalho do hub para uma imagem antiga estragar.
 
-**D7. Release N0 (expand) é a versão mínima de rollback.**
-- A imagem antiga não conhece `route` e trataria comando do hub como direto: `recover` devolve todo `pending` manual para execução pela Graph (`outbound.repo.ts:136`) e passa todo `sending` vencido para `uncertain` (:135); o worker de campanha liquida qualquer comando fora de `pending`/`preparing` como `unknown` (`src/modules/whatsapp-campaigns/dispatch.service.ts:20-24`).
-- Por isso a primeira release (N0) só acrescenta schema, filtros `route = "direct"` no código direto e o receptor do hub gravando no journal. Nenhum código grava `route = "hub"` antes de N0 estar estável, e nenhum rollback desce abaixo de N0. Registrar no `AGENTS.md` como "versão mínima de rollback".
+**D7. Só número Coexistence (`requireCoexistence: true`).** Decidido em 2026-11-12 (era a Q3).
+- Toda sessão de conexão pede `requireCoexistence: true` (hub:495), como o onboarding atual (`onboarding.service.ts:78-80`).
+- Motivo: número só Cloud API não funciona com a exceção manual da uazapi, que exige `isOnBusinessApp` (`uazapi-policy.repo.ts:18`).
 
 ### 2.5 Mapeamentos de identidade
 
 | Hub | App | Regra |
 |---|---|---|
-| Workspace (`externalId`) | `Organization` | `externalId = organization.id` (cabe em `[A-Za-z0-9._:-]{1,128}`, hub:440-446). `POST /v1/workspaces` é idempotente por `externalId` (hub:448). Grava `Organization.hubWorkspaceId`. |
-| Conexão `kind:"whatsapp"` | `ChannelConnection` (`provider: cloud_api`) | `hubConnectionId @unique`. Casa com a linha da **mesma org** por `phoneNumberId` + `wabaId` (hub:625), em **qualquer** `connection.*` cujo id ainda não exista localmente, porque a reconexão emite `connection.updated` e não `created` (hub:612). Antes de ligar, exige `whatsapp.businessId === businessPortfolioId`; divergente, não liga e marca `hubErrorCode = BUSINESS_CHANGED`. |
-| Tenant do evento | `organizationId` + `connectionId` | `organizationId` por `hubWorkspaceId = workspace.id`, conferido com `externalId`. `connectionId` só é gravado se `connection.organizationId` for a org do workspace; senão `unresolved`. |
-| `whatsapp.businessId` | `businessPortfolioId` | Mesmo escopo do BSUID (hub:600). Pode mudar sem evento (hub:600): o refresh diário só alerta, nunca sobrescreve (§10 R10). |
-| `isOnBizApp`, `displayPhoneNumber`, `verifiedName`, `tokenExpiresAt` | `isOnBusinessApp`, `displayPhoneNumber`, `verifiedName`, `tokenExpiresAt` | Espelhados só depois da virada (D5). Antes, `tokenExpiresAt` do hub vai para `hubTokenExpiresAt`. O `displayPhoneNumber` pode vir formatado (exemplo em hub:569; o `oa` só diz `string`). `tokenExpiresAt: null` = sem prazo (hub:608), e todos os gates já tratam `null` assim. |
-| `status` `active`/`pending`/`error`/`disconnected` | `status` `connected`/`pending`/`disconnected`/`disconnected` | Só depois da virada. `hubStatus`/`hubErrorCode` sempre. `disabled` continua só local. |
+| Workspace (`externalId`) | `Organization` | `externalId = organization.id` (cabe em hub:448). `POST /v1/workspaces` é idempotente por `externalId` (hub:450). Grava `Organization.hubWorkspaceId`. A WABA pertence a um workspace só no hub: uma segunda org com a mesma WABA recebe `WABA_ALREADY_CONNECTED` (hub:540). |
+| Conexão `kind:"whatsapp"` | `ChannelConnection` (`provider: cloud_api`) | `hubConnectionId @unique`, ligado por D5 em **qualquer** `connection.*` com id desconhecido, porque a reconexão emite `connection.updated` (hub:618). `kind` desconhecido ou `lead_ads`: `unsupported` (hub:603). |
+| Tenant do evento | `organizationId` + `connectionId` | `organizationId` por `hubWorkspaceId = workspace.id`, conferido com `externalId`. `connectionId` só se `connection.organizationId` for a org do workspace; senão `unresolved`. |
+| `whatsapp.businessId` | `businessPortfolioId` | Escopo do BSUID (hub:651). Gravado na ligação; depois, o hub pode mudar o valor sem evento (hub:604): a releitura diária só alerta (§9 R6). |
+| `whatsapp.currency`, `whatsapp.timezone` | `currency`, `timezone` (coluna nova, IANA) | Nulos até a Meta informar, relidos todo dia pelo hub, nulos numa conexão `disconnected` cuja conta passou para outro workspace (hub:605). Nulo no hub não apaga o valor local. `timezoneId` (`prisma/schema.prisma:716`) guarda o id numérico da Meta e fica nulo nas conexões do hub. |
+| `isOnBizApp`, `displayPhoneNumber`, `verifiedName` | `isOnBusinessApp`, `displayPhoneNumber`, `verifiedName` | Espelho direto. São lidos pelo hub na conclusão e na reconexão. |
+| `qualityRating` | `qualityRating` (coluna nova) | Foto do momento da conexão, não atualizada (hub:606). Na UI, o estado atual vem de `health` (hub:615). |
+| `tokenExpiresAt` | `tokenExpiresAt` | Espelhar só com `status: active`. `null` significa "sem prazo" (hub:614), mas também sai `null` quando a credencial foi apagada (`token_expired`, `credential_invalid`, desconexão; código do hub): em `error`/`disconnected`, não sobrescrever. |
+| `status` `active`/`pending`/`error`/`disconnected` | `connected`/`pending`/`disconnected`/`disconnected` | `errorCode` vai para `hubErrorCode`. `disabled` continua só local. |
 
 ---
 
 ## 3. Mapeamento capacidade → hub
 
-Legenda: **C** = coberto; **CA** = coberto com adaptação no app; **H** = depende de item a implementar no hub (§4).
+Legenda: **C** = coberto; **CA** = coberto com adaptação no app; **H** = depende de item aberto no hub (§4).
 
 ### 3.1 Conexão e ciclo de vida
 
 | Capacidade atual | Hub | Mudança no app | Status |
 |---|---|---|---|
-| Disponibilidade do onboarding (`GET /v1/whatsapp/onboarding/config`, gate de envs em `src/modules/whatsapp-onboarding/onboarding.service.ts:15-16`) | Chave do app configurada; `503 META_WEBHOOK_NOT_READY` na sessão (hub:515) | `GET /v1/whatsapp/hub/config` → `{available}`; o web troca `useOfficialConfig` (`eloscrm-web/lib/queries/whatsapp-official.ts:12-17`) | CA |
-| Conferência da assinatura (`checkSubscriptions`, `onboarding.service.ts:31,36-43`) | O hub assina a WABA | Remover | C |
-| Embedded Signup próprio (`onboarding.service.ts:29-120`) | `POST /v1/workspaces` + `POST /v1/workspaces/:id/connect-sessions {kind:"whatsapp", returnUrl, requireCoexistence:true}` → `{url}` (hub:483-506) | `POST /v1/whatsapp/hub/connect-sessions {connectionId?}` (gestor, Origin pinado e rate limit como em `src/routes/v1/whatsapp/onboarding/index.ts:11-24`). A `url` não vai para log. O web redireciona. | CA |
-| Retorno do popup (`official-signup.tsx:16,78-86`) | `returnUrl?status=connected&connectionId=…` \| `cancelled` \| `error&code=…`, lista de códigos aberta (hub:519-534); a fonte da verdade é o evento (hub:536) | A página `eloscrm-web/app/(app)/integracoes/whatsapp/page.tsx` abre na aba oficial quando houver `status` na query, sem depender de `?tab=` no `returnUrl` (a allowlist compara `origin + pathname` e normaliza a URL, hub:479; não diz se a query própria sobrevive). Código desconhecido = erro genérico. | CA |
-| Somente Coexistence (`onboarding.service.ts:78-80`) | `requireCoexistence: true` (default `false`, hub:493-495) | Manter `true` (Q3) | C |
-| Número/WABA em outra org (`src/modules/whatsapp-onboarding/onboarding.repo.ts:38-41`, `phoneNumberId @unique` em `prisma/schema.prisma:712`) | `PHONE_ALREADY_CONNECTED`/`WABA_ALREADY_CONNECTED` entre workspaces (hub:538) | Colisão com linha `direct` de outra org: evento `failed WHATSAPP_NUMBER_UNAVAILABLE`, alerta, sem efeito | CA |
-| `pending → connected` (`sync-request.service.ts:23-45`) | `connection.created` (pending) → `connection.updated` (active) (hub:1193-1198) | `applyHubConnection` com a regra D5 | CA |
-| Sync Coexistence (`OfficialSyncRequest`) | `connection.sync[] {type, status, progress, errorCode}` (hub:602-607) | Só em conexão nascida pelo hub (D5). `requested → accepted` (não `pending`: `pending` é "vá pedir" para `dueConnections`, `sync-request.repo.ts:30`, e `recoverStale` o expira, :25); `accepted → accepted`; `completed → complete`; `failed + declined_by_business → declined`; `failed + sync_window_expired → expired`; `failed + sync_uncertain → uncertain`; outros `failed → failed`. `smb_app_state_sync` fica `accepted` para sempre (hub:604) e a UI trata isso como final para contatos. Estado terminal (`complete`, `declined`) nunca é sobrescrito; `deadlineAt` (NOT NULL, `prisma/schema.prisma:801`) = ativação + 24 h (hub:602). Um `failed` em conexão migrada vai só para `hubHealth` (hub:633). | CA |
-| Saúde e qualidade (hoje ignoradas) | `health`, `qualityRating`, `accountEvent` (hub:609, hub:1198-1213) | `hubHealth`, `qualityRating`; exibição opcional | C |
-| Token expirando | `connection.token_expiring` (hub:1215); `error token_expired` | Espelhar depois da virada; `credentialExpired` (`src/modules/whatsapp-inbox/inbox.service.ts:26`) continua | C |
-| Desconexão remota (hoje não tratada) | `connection.disconnected {reason, accountEvent}` (hub:1202) | Só `status = disconnected` (depois da virada). **Não** reaproveita `disableConnection`, que cancela campanhas `draft`/`needs_review`/`running` (`src/modules/whatsapp-maintenance/lifecycle.repo.ts:32`); as campanhas pausam pelo gate global (`WHATSAPP_CONNECTION_UNAVAILABLE`, `src/modules/whatsapp-campaigns/failures.ts:8`) e voltam com `ACCOUNT_RECONNECTED` (hub:1204-1213) | CA |
-| Desativar local (`lifecycle.repo.ts:20-41`) | `DELETE /v1/connections/:id` apaga a credencial e perde mensagens do intervalo (hub:614-618) | Disable continua local, sem `DELETE`. Com `hubConnectionId` e `route = direct` (convivência), o disable responde `409 HUB_MIGRATION_IN_PROGRESS`, porque zera `tokenEnc` (:38) e mataria o rollback. Em conexão `hub`, eventos de status de **comandos existentes** continuam sendo aplicados com a conexão `disabled` (hoje `src/modules/whatsapp-official/webhook.service.ts:31` barra tudo); só conteúdo novo é descartado. O reconcile consulta `GET …/messages/:id` dos `uncertain` criados pelo disable (:31). Uma sessão do hub aberta para conexão `disabled` limpa `disabledAt` no `active`, como o onboarding faz hoje (`onboarding.repo.ts:50`). | CA / H (cancelamento) |
-| Orientação "Desconectar conta" (`eloscrm-web/components/whatsapp-official/lifecycle-controls.tsx:25`) | Nunca desconectar no app do celular, offboard ou deregister (hub:630) | Trocar o texto antes de qualquer migração | CA |
+| Disponibilidade do onboarding (`GET /v1/whatsapp/onboarding/config`, hook `useOfficialOnboardingConfig` em `eloscrm-web/lib/queries/whatsapp-official.ts:12-17`) | `503 META_WEBHOOK_NOT_READY` na sessão (hub:517) | `GET /v1/whatsapp/hub/config` → `{available}` pela presença da chave | CA |
+| Embedded Signup próprio (`onboarding.service.ts:29-120`) | `POST /v1/workspaces` + `POST /v1/workspaces/:id/connect-sessions {kind:"whatsapp", returnUrl, requireCoexistence:true}` → `{url}` (hub:485-505); corpo estrito (hub:497) | `POST /v1/whatsapp/hub/connect-sessions` (gestor, Origin pinado e rate limit como em `src/routes/v1/whatsapp/onboarding/index.ts:11-24`). Nenhum campo além dos três. A `url` leva token e não vai para log (hub:507) | CA |
+| Retorno do popup (`official-signup.tsx:16,78-86`) | `returnUrl` sem query nem fragmento, igual à allowlist; a volta traz só `status`, `connectionId`, `code` (hub:481, hub:531-536) | O app manda exatamente `https://<WEB_ORIGIN>/integracoes/whatsapp`. A página `eloscrm-web/app/(app)/integracoes/whatsapp/page.tsx` abre na aba oficial quando houver `status` na query. Código desconhecido = erro genérico | CA |
+| Fonte da verdade da conexão | Evento `connection.created` e `GET /v1/connections` (hub:538) | No retorno `status=connected`, `GET /v1/connections/:id` e aplica (D5). Varredura `GET /v1/connections?workspaceId=` no job de refresh para id desconhecido ou `pending` parado: a emissão do evento da conclusão é best-effort no hub (código do hub) | CA |
+| Somente Coexistence (`onboarding.service.ts:78-80`) | `requireCoexistence: true` (hub:495); `COEXISTENCE_REQUIRED` só sai depois do fluxo da Meta (hub:542) | Sempre `true` (D7). Texto de erro orienta abrir um link novo e escolher o app existente | C |
+| Número/WABA em outra org | `PHONE_ALREADY_CONNECTED`/`WABA_ALREADY_CONNECTED` entre workspaces (hub:540, hub:618) | D5. A recusa do hub chega só pelo retorno do navegador, sem evento (hub:618) | CA |
+| `pending → connected` | `connection.created` (`pending`) → `connection.updated` (`active`) (hub:1208-1209) | `applyHubConnection`, monotônico por `createdAt` do envelope (hub:1204) | CA |
+| Sync Coexistence (`OfficialSyncRequest`) | `connection.sync[] {type, status, progress, errorCode}` (hub:608-613) | `requested → accepted` (não `pending`: `pending` é "vá pedir" para `dueConnections`, `src/modules/whatsapp-onboarding/sync-request.repo.ts:30`); `accepted → accepted`; `completed → complete`; `failed + declined_by_business → declined`; `failed + sync_window_expired → expired`; `failed + sync_uncertain → uncertain`; outros `failed → failed`. `smb_app_state_sync` fica `accepted` para sempre (hub:610). Estado terminal nunca é sobrescrito. `deadlineAt` = `connection.createdAt + 24 h` (hub:608; o hub conta da conclusão, código do hub). Número que já passou pelo Coexistence do elosCRM no mesmo app deve receber `failed sync_failed:<código>`, sem afetar a conexão (hub:613, hub:639): o histórico desse número não volta | CA |
+| Saúde | `health` (hub:615), `connection.updated` com `meta.health: "changed"` | `hubHealth`; exibição na aba | C |
+| Qualidade | `qualityRating` é foto (hub:606) | Exibir como "na conexão", ou não exibir. Releitura: H-D11 | H (desejável) |
+| Token expirando | `connection.token_expiring` (hub:1226); `error token_expired` | Aviso na aba; `credentialExpired` (`src/modules/whatsapp-inbox/inbox.service.ts:26`) passa a ler `hubErrorCode` | CA |
+| Offboard e volta | `ACCOUNT_OFFBOARDED` → `error offboarded`; `ACCOUNT_RECONNECTED` só desfaz esse caso (hub:1219-1220) | `status = disconnected` e campanhas pausam pelo gate global (`WHATSAPP_CONNECTION_UNAVAILABLE`, `src/modules/whatsapp-campaigns/failures.ts:8`). Voltam sozinhas com o `active` | CA |
+| Desconexão remota | `connection.disconnected {reason, accountEvent}` é terminal; só uma sessão nova traz a conexão de volta, com o mesmo id (hub:1213, hub:618) | `status = disconnected`, aviso "reconecte" na aba. Não reaproveita `disableConnection`, que cancela campanhas (`lifecycle.repo.ts:33`) | CA |
+| Restrição da conta | `DISABLED_UPDATE`, `ACCOUNT_RESTRICTION`, `ACCOUNT_VIOLATION`, um evento por conexão, repetível (hub:1221) | Alerta deduplicado por `(conexão, accountEvent, dia)` (parâmetro) | CA |
+| Desativar local (`lifecycle.repo.ts:20-41`) | `DELETE /v1/connections/:id` perde as mensagens do intervalo e não as recupera na reconexão (hub:620, hub:624) | Disable continua local, sem `DELETE`: o número fica preso à org, como hoje (`lifecycle-controls.tsx:26`). Eventos de status de comandos existentes continuam sendo aplicados com a conexão `disabled` (hoje `src/modules/whatsapp-official/webhook.service.ts:31` barra tudo); conteúdo novo é descartado. Sessão nova para conexão `disabled` limpa `disabledAt` no `active` | CA / H (cancelamento) |
+| Orientação "Desconectar conta" (`lifecycle-controls.tsx:25-26`) | Nunca desconectar no celular, offboard ou deregister (hub:636) | Trocar os dois textos no próximo deploy, antes de qualquer conexão no hub (§8 F0) | CA |
 | Multi-conexão por org (`prisma/schema.prisma:740`) | N conexões por workspace | Sem mudança | C |
-| Moeda e fuso da WABA (`onboarding.service.ts:86`) | Ausentes no recurso de conexão (`oa`, `additionalProperties:false`); fuso em `/usage` (hub:1441) com padrão `America/Sao_Paulo` indistinguível; moeda só em `/consumption.currency`, que pode ser `null` (hub:1490) | Migrada: mantém o valor gravado. Nova: §4.1 H3 | H |
-| Purga de organização (`src/lib/auth.ts:132-133`) | Conexão continua `active` no hub e prende o número (hub:612) | Purga chama `DELETE /v1/connections/:id` e `POST /v1/workspaces/:id/deactivate`, idempotente, com nova tentativa | CA |
+| Moeda e fuso (`onboarding.service.ts:86`) | `whatsapp.currency`/`timezone` (hub:605) | §2.5 | C |
+| Purga de organização | Conexão continua `active` no hub e prende o número | Em `purgeOrganizationAssets` (`src/modules/audit/organization-purge.service.ts:17`, chamado por `src/modules/organization/organization.service.ts:131`): `DELETE` de cada conexão (hub:620) e depois `deactivate` do workspace (hub:440), que sozinho não desconecta nada (código do hub). Cada `DELETE` captura o próprio erro e soma no `organizationPurgeFailures` (`organization-purge.service.ts:48`) para expurgo manual: `organization.service.ts:131` chama `purgeOrganizationAssets` sem o `purgeOrganizationAssetsSafely` (só `src/lib/auth.ts:133` usa o wrapper), então uma exceção ali travaria a exclusão | CA |
 
 ### 3.2 Recebimento
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Autenticação (`src/lib/whatsapp-official/webhook-auth.ts:16-22`) | `x-hub-signature: sha256=HMAC(secret, "${ts}.${raw}")`, ±5 min (hub:1054, hub:1075) | Receptor novo (§5.2) | CA |
-| Dedup de entrega (`src/modules/whatsapp-official/webhook.repo.ts:37`) | `id` do envelope (hub:1097) | `HubWebhookEvent.hubEventId @unique` | CA |
-| Tipos suportados (`message-parser.ts:33-54`) | `received` com `meta.message` cru (hub:1221, hub:1244) | `ingestMessage(conn, meta.message, contacts(meta.contact), "cloud_api", receivedAt, {hubMediaId, fallbackName})`; `meta.contact` aceito como objeto ou array; `null` → nome de `data.message.from.name` | CA / H1 |
-| interactive, button, order, revoke, edit (hoje `unsupported`) | Normalizados em `data` (hub:1245) | Paridade: continuam `unsupported` | C |
-| Eco do app Business | `whatsapp.message.echo`, `meta` cru (hub:1293-1298) | `ingestMessage(..., "business_app")`; dedup por wamid e remoção do eco em `accept` (`outbound.repo.ts:115-130`) já existem | C |
-| Histórico de 180 dias (`webhook-processing.service.ts:37-54`) | `history.received` normalizado, `meta` não contratual (hub:1300-1318) | Adaptador hub → item do parser: converte `timestamp` ISO para epoch em segundos (`messageSchema` exige dígitos, `message-parser.ts:8`); passa `direction` explícita e monta `from`/`from_user_id` ou `to`/`to_user_id` a partir de `thread` (hub:1310). Com `thread.waId: null` (hub:647), usa `thread.userId` e **não** força alias `wa_id` (hoje o parser força `wa_id = threadId`, `message-parser.ts:28-32`). Aceita bloco com `phase/chunkOrder/progress` nulos (mídia dos últimos 14 dias, um evento por mensagem, hub:1317), que enriquece o `media_placeholder` sem tocar `OfficialSyncRequest.progress`. | CA |
-| Recusa de histórico (erro `2593109`, `webhook-processing.service.ts:40`) | `sync[].errorCode = declined_by_business` (hub:606) | Via `applyHubConnection` | CA |
-| Contatos do app (`src/modules/whatsapp-official/sync.repo.ts:10-22`) | `whatsapp.contacts.synced` (hub:1320-1322) | Adaptador: `phone → wa_id`, `userId → bsuid`, `fullName → displayName`. Contato só com `userId` (sem telefone) entra por `bsuid`: hoje `ingestContactSync` exige `phone_number` (:13-14) e geraria `failed` em loop | CA |
-| Troca de BSUID (`sync.repo.ts:24-65`) | `identity.updated kind:user_changed_user_id` (hub:1324-1335) | Reaproveita `ingestIdentityUpdate`; `timestamp` ISO → epoch (`eventDate` em :30) | CA |
-| Troca de número (não existe hoje) | `kind:user_changed_number`, `previous` sem `waId` (hub:1329), `current.waId` (hub:1330) | Novo: acha o contato por `previous.userId`, fecha o `wa_id` atual dele (`validUntil`) e abre `current.waId`, com auditoria `WEBHOOK_RECONCILED` | CA |
-| Recibos (`receipts.repo.ts:8-48`) | `status source:"meta"` com `meta` cru (hub:1221, hub:1272-1291) | `ingestReceipt(conn, <item cru>, receivedAt)` conforme o formato confirmado em H1. `played` (hub:1272) → no-op `processed` nas duas vias (hoje o enum de :9 falha o item). Dedup semântica (D6). | CA / H1 |
-| Recibo antes da mensagem | Status com `messageId: null` (hub:1288) | Correlação por wamid, como já faz (`ingest.repo.ts:71`) | C |
-| Mídia recebida (`src/modules/whatsapp-official/media.service.ts:16-45`, `src/lib/whatsapp-official/media-download.ts:6-55`) | `data.message.media.id` + `media.updated` (pode chegar antes) + `GET /v1/media/:id` → URL assinada de 5 min; `409 MEDIA_NOT_READY`, `410 MEDIA_UNAVAILABLE` (hub:846-857) | `WhatsappMessage.hubMediaId`; no caminho do hub `officialMediaId` fica nulo, então o worker antigo nunca pega a mensagem (`media.repo.ts:10,25`). `mediaStatus: "pending"` (`ingest.repo.ts:44`), o enriquecimento do placeholder (:49-52) e `hasMedia` (:72,75) passam a considerar `hubMediaId`. Worker novo: `409` **não** conta tentativa (hoje o claim incrementa e exige `< 3`, `media.repo.ts:10,12`, e `expireExhaustedMedia` marca `failed`, :29); `media.updated` com mídia pronta zera `mediaAttempts`. Download sem `Authorization`, host em allowlist (H2), IP fixado, `redirect: "error"`, teto de bytes, sha256 conferido com `media.sha256`; `url` e resposta nunca em log. Mesma chave no R2. | CA / H2 |
-| Retry pelo front (`src/routes/v1/whatsapp/official-media/index.ts:17-22`) | idem | `resetMedia` (`media.repo.ts:23`) aceita `hubMediaId`; `410` → `failed` com texto próprio | CA |
-| Janela de 24 h (`ingest.repo.ts:66-67`) | `data.window.expiresAt` | Cálculo local mantido; `window` só diagnóstico | C |
-| Grupo | `groupId`, `window: null` (hub:1249) | Comportamento atual | C |
-| Mensagem anterior à conexão | Descartada pelo hub (hub:1223) | Nenhuma | C |
-| Ordem fora de sequência (hub:1098) | `createdAt` do envelope | Handlers idempotentes e monotônicos (§5.2). Evento `unresolved` (ex.: `received` antes do `connection.*` que liga a conexão) é resolvido de novo na varredura, como `dueEvents` já faz (`webhook.repo.ts:49-67`) | CA |
+| Autenticação | `x-hub-signature: sha256=HMAC(secret, "${ts}.${raw}")`, ±5 min (hub:1062, hub:1070) | Receptor novo (§5.2) | CA |
+| Dedup de entrega | `id` do envelope (hub:1105) | `HubWebhookEvent.hubEventId @unique` | CA |
+| Tipos suportados (`message-parser.ts:33-54`) | `received` com `meta.message` cru (hub:1255) | `ingestMessage(conn, meta.message, [meta.contact].filter(Boolean), "cloud_api", receivedAt, {hubMediaId})` | CA |
+| interactive, button, order, revoke, edit (hoje `unsupported`) | Normalizados em `data` (hub:1256) | Paridade: continuam `unsupported` | C |
+| Eco do app Business | `whatsapp.message.echo`, `meta` cru; o evento não diz a origem (hub:1319-1322) | `ingestMessage(..., "business_app")`. Eco de envio feito pelo próprio app via hub dedup por wamid; a remoção do eco no aceite já existe (`outbound.repo.ts:120-124`) e passa para `acceptByHub` | CA |
+| Histórico de 180 dias | `history.received` normalizado, sem `meta` (hub:1326-1342) | `history-adapter` reconstrói o item que o parser lê, por `type`: `media` → `<type>: {id, mime_type, caption, filename}` com `hubMediaId` e sem id da Meta; `context.wamid` → `context.id`; `contacts` camelCase → formato da Meta; `from`/`to` a partir de `direction` e `thread`; `timestamp` ISO → epoch em segundos (`message-parser.ts:8`). Com `thread.waId: null`, usa `thread.userId` e não força o alias `wa_id` (hoje forçado em `message-parser.ts:28-32`). Bloco com `phase/chunkOrder/progress` nulos (mídia dos últimos 14 dias, hub:1341) enriquece o `media_placeholder` sem tocar o progresso. H-D5 dispensaria o adaptador | CA / H (desejável) |
+| Recusa de histórico (`2593109`) | `sync[].errorCode = declined_by_business` (hub:612) | Via `applyHubConnection`. Outros erros de histórico só vão para o log do hub: o app deixa de ver `OFFICIAL_HISTORY_FAILED` | CA |
+| Contatos do app (`src/modules/whatsapp-official/sync.repo.ts:10-22`) | `whatsapp.contacts.synced`, sem `type` nem `meta`, `phone` só com dígitos, `timestamp` pode ser `null` (hub:1346) | Função nova que recebe o contato normalizado: `phone → wa_id`, `userId → bsuid`, `parentUserId → parent_bsuid`, `fullName → displayName`. Contato só com `userId` entra por `bsuid` (hoje `ingestContactSync` exige `phone_number`, :13-14) | CA |
+| Troca de BSUID (`sync.repo.ts:24-65`) | `identity.updated kind:user_changed_user_id` (hub:1359) | Adaptador monta `{user_id:{previous, current}, parent_user_id?, timestamp: <epoch>}`, omitindo `parent_user_id` quando um dos lados é `null` (`identityValue.parse(null)` lança) e tratando `previous.userId: null` como `unresolved` | CA |
+| Troca de número (não existe hoje) | `kind:user_changed_number` com `previous.waId` (telefone antigo) e `current` (hub:1350-1359); evento reentregue de antes de 2026-11-12 não traz `previous.waId` | Acha o contato por `previous.userId`, senão por `previous.waId`. Fecha o `wa_id` antigo (`validUntil`), abre `current.waId` e cria o alias `bsuid = current.userId` quando difere. Auditoria `WEBHOOK_RECONCILED`. `kind` desconhecido → `processed` sem efeito | CA |
+| Recibos (`receipts.repo.ts:8-48`) | `status source:"meta"`, `meta` = item cru (hub:1303) | `ingestReceipt(conn, envelope.meta, receivedAt)`. `played` → no-op. A dedup atual (`eventHash` do item, :42) basta: há uma entrega só | C |
+| Recibo antes da mensagem | Status com `messageId: null`, não reemitido (hub:1299) | Em envio pelo hub, `providerMessageId` só é gravado no `accepted`. `acceptByHub` chama `reconcileReceipts(tx, channel, wamid)` como o `accept` faz (`outbound.repo.ts:129`) | CA |
+| Mídia recebida (`src/modules/whatsapp-official/media.service.ts:16-45`) | `data.message.media.id` + `media.updated` (pode chegar antes) + `GET /v1/media/:id` → URL de 5 min; `409 MEDIA_NOT_READY`, `410 MEDIA_UNAVAILABLE`, `404` depois de 30 dias (hub:852-863) | `WhatsappMessage.hubMediaId`; `officialMediaId` forçado a nulo no `create` e no `enrichment` (`src/modules/whatsapp-official/ingest.repo.ts:31,50`); `mediaStatus` (:45) e `hasMedia` (:73,76) olham `hubMediaId`. Worker novo: `409` não conta tentativa; `410` e `404` terminais; `media.updated` com `stored` zera tentativas. Download sem `Authorization`, host `*.r2.cloudflarestorage.com`, sem redirect (hub:865), teto de bytes, `sha256` conferido com o do `GET`/`media.updated`, nunca com o do `received` (hub:865). `url` e resposta fora do log. O teto de 16 MB e a lista de 7 MIME do worker atual ficam como estão (decisão explícita: o hub aceita até 100 MB) | CA |
+| Retry pelo front (`src/routes/v1/whatsapp/official-media/index.ts:17-22`) | idem | `resetMedia` aceita `hubMediaId`; `410`/`404` → `failed` com texto próprio | CA |
+| Janela de 24 h (`ingest.repo.ts:66-67`) | `data.window.expiresAt` (hub:807) | Cálculo local mantido | C |
+| Grupo | `groupId`, `window: null` (hub:1260) | Comportamento atual | C |
+| Ordem fora de sequência | `createdAt` do envelope (hub:1106) | Handlers idempotentes e monotônicos (§5.2). Evento `unresolved` (ex.: `received` antes do `connection.*` que liga a conexão) é resolvido de novo na varredura | CA |
 
 ### 3.3 Envio
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Texto (`src/modules/whatsapp-outbound/outbound.service.ts:34`) | `{type:"text", text:{body, previewUrl:false}}` (hub:664-677) | `buildHubBody` em `src/modules/whatsapp-outbound/hub-payload.ts` | CA |
-| Mídia (`src/modules/whatsapp-outbound/media.service.ts:10-12`) | `{mediaId, caption?, filename?}`, `mediaId` do hub e da mesma conexão (hub:677) | Upload preguiçoso uma vez por `OfficialUpload` (`hubMediaId`, `hubMediaExpiresAt`), reaproveitado entre destinatários; renovar perto de expirar (margem: parâmetro). Limite de 30 uploads/min e 2 simultâneos por app, compartilhado por todas as orgs (hub:398, hub:400). `429 MEDIA_UPLOAD_BUSY` e `502 META_UNAVAILABLE` (hub:840-842) devolvem o comando a `pending` com nova tentativa; hoje um erro antes de `markSending` vira `failed` | CA |
-| Template (`src/modules/whatsapp-outbound/template.ts:4-40`) | `{templateId, parameters}` (id do hub) ou `{name, language, parameters}` (hub:675); `parameters` com `header`, `body[]`, `buttons[{index, type, value}]` (hub:778-782) | Mapeador a partir do payload local. Envia por `templateId` quando há `hubTemplateId`, senão por `name`+`language`. Serialização canônica gravada em `hubRequest`: `parameters` omitido e `{}` contam como corpos diferentes (hub:778) | CA |
-| Reply (`outbound.service.ts:28-30`) | `replyTo: <wamid>` (hub:677) | Mapear | CA |
-| Destinatário (BSUID ou telefone, `outbound.service.ts:30`) | `to:{userId}` ou `to:{phone}`; com os dois vale o telefone (hub:677). `AUTHENTICATION` exige telefone (`400 RECIPIENT_PHONE_REQUIRED`, hub:706) | Mandar um só, preservando a preferência atual por BSUID | CA |
-| Idempotência (`outbound.service.ts:65-86`) | `Idempotency-Key` única por app; mesmo corpo → `200`; corpo diferente → `409 IDEMPOTENCY_KEY_REUSED`; vale 30 dias (hub:660, hub:687). O header não está no `oa` | Chave `${orgId}:${command.id}`. Todo reenvio com corpo corrigido roda a chave (campanha já roda por tentativa, `dispatch.service.ts:30`) | CA |
-| Envio síncrono com wamid (`outbound.service.ts:138-140`) | `202 {message}`; o wamid chega em `status source:"hub" accepted` (hub:660, hub:1256-1270) | `executeSend` (rota hub) termina em `sending` com `hubMessageId`. A liquidação vai para `acceptByHub`/`failByHub` (novos, sem lease, idempotentes, monotônicos): `accept` e `finishFailure` exigem o `leaseToken` (`outbound.repo.ts:108,116`), que o webhook não tem. Evento sem comando correspondente (202 perdido, ou evento antes de gravar `hubMessageId`) fica `pending` com nova tentativa. `sentAt` da bolha e `lastMessageAt` vêm do `timestamp` do evento, não de `new Date()` (`outbound.repo.ts:125,128`) | CA |
-| Falha de rede ou 5xx no POST | Mesma chave e mesmo corpo é seguro (hub:687) | Reenvio automático só com `now − submittedAt` abaixo de 2 min (parâmetro) e depois de rodar de novo o `finalCheck` (conexão, campanha `running`, janela, identidade). Fora disso, `GET …/messages?idempotencyKey=<chave>` (hub:773): achou → grava `hubMessageId`/estado; não achou → `failed` "não chegou ao hub". Comando `hub` com mais de 24 h (parâmetro, sempre bem abaixo dos 30 dias da chave) sem `hubMessageId` nunca é reenviado. | CA |
-| `recover` (`outbound.repo.ts:133-137`) | `GET …/messages/:id` (hub:774) | Filtra `route`. Para `hub`: `sending` sem `hubMessageId` → regra acima; com `hubMessageId` e sem evento há mais de 2 min (parâmetro) → `GET` e conciliação | CA |
-| `uncertain` com wamid (`outbound.service.ts:151-161`, `knownResponses` em `outbound.repo.ts:139`) | Conciliação do hub: `accepted` com `meta.reconciled` (hub:747, hub:1270) | `acceptByHub` aceita `uncertain → accepted`; `knownResponses` filtra `route = "direct"` | C |
-| `abandoned` | `status abandoned`; `accepted` com `overridesAdminResolution` vence (hub:740-747, hub:1098) | `uncertain` com `safeError: HUB_ABANDONED`; o `accepted` posterior vence | CA |
-| Classificação de `uncertain` | O hub classifica `131000`/`131016`/`133004` como `uncertain` (hub:740); hoje uma resposta HTTP com esses códigos vira `failed` | Mudança de invariante documentada (§10 R4); Q7 decide se `unknown` vindo de `uncertain` do hub entra na trava de 7 dias (`campaigns.repo.ts:14`) | CA |
-| Recusas síncronas | `code` decide (hub:656) | Tabela em §3.4 | CA |
-| Gate de conexão (`outbound.repo.ts:51,92`, `src/modules/channel-connections/channel-connections.service.ts:43-57`, `src/modules/whatsapp-campaigns/preview.service.ts:22`) | conexão `active` | `getOfficialChannel(orgId, id)`: com `route = hub`, exige `status connected` + `hubConnectionId`; `hubErrorCode = token_expired` → `WHATSAPP_TOKEN_EXPIRED`; senão `WHATSAPP_CONNECTION_UNAVAILABLE`. `tokenEnc: {not: null}` passa a depender da rota. Substitui `getOfficialCredentials` nos 9 chamadores (§5.3) | CA |
-| Janela no envio (`outbound.service.ts:23`) | `422 OUTSIDE_SERVICE_WINDOW`; `failed outside_service_window` (hub:707, hub:753) | Checagem local mantida; códigos do hub → `OFFICIAL_WINDOW_CLOSED` | C |
-| Revalidação do template (`outbound.service.ts:114-119`) | `GET …/templates/:templateId` (cache; 404 em hub:872) | `definition` reconstruída no formato Meta e comparada por `templateHash`. `GET` só quando o `hubVersion` local for menor que o de um evento, ou no início/retomada de campanha: 600 req/min por chave para as rotas em geral, compartilhado por todas as orgs (hub:396). O envio tem balde próprio de 4 000/min (hub:397) | CA |
-| "Aceita pela Meta" (`eloscrm-web/.../official-composer.tsx:73-75`, `inbox-thread.tsx:14,68`) | `accepted` = a Meta aceitou, `wamid` preenchido (hub:738); `held_for_quality_assessment` é pacing da Meta dentro do `accepted` (hub:743) | Texto atual continua correto. `pacing` pode ser exibido à parte | C |
-| Envio manual uazapi na conversa oficial | n/a | §1.4 | C |
+| Texto (`src/modules/whatsapp-outbound/outbound.service.ts:34`) | `{type:"text", text:{body, previewUrl:false}}` (hub:672) | `buildHubBody` em `src/modules/whatsapp-outbound/hub-payload.ts` | CA |
+| Mídia (`src/modules/whatsapp-outbound/media.service.ts:10-12`) | Um formato estrito por tipo: `image`/`video` `{mediaId, caption?}`; `document` `{mediaId, caption?, filename?}`; `audio` `{mediaId, voice?}`; `sticker` `{mediaId}` (hub:673-676). `caption`/`filename` vazios são recusados (código do hub) | Um ramo por tipo, omitindo campo vazio. Upload preguiçoso uma vez por `OfficialUpload` (`hubMediaId`, `hubMediaExpiresAt`), reaproveitado entre destinatários da mesma conexão; novo upload perto dos 29 dias (margem: parâmetro). Limites: 30 uploads/min por chave e 2 simultâneos por app, 8 no hub inteiro (hub:400, hub:402). Qualquer `429` reagenda pelo `Retry-After` (hub:404); `502 META_UNAVAILABLE` também reagenda | CA |
+| Template (`src/modules/whatsapp-outbound/template.ts:4-40`) | `{templateId, parameters}` ou `{name, language, parameters}` (hub:681, hub:786-788) | Envia por `templateId` (`hubTemplateId`). `parameters` sempre na mesma forma: omitido e `{}` são corpos diferentes para a chave (hub:784) | CA |
+| Reply | `replyTo: <wamid>` (hub:683) | Mapear | CA |
+| Destinatário | `to:{userId}` ou `to:{phone}`; com os dois vale o telefone; `AUTHENTICATION` exige telefone (hub:683, hub:712) | Mandar um só, preservando a preferência atual por BSUID | CA |
+| Idempotência | `Idempotency-Key` única por app, 30 dias; recusa síncrona não consome a chave; depois do `202` ela fica presa ao corpo, mesmo em `failed` (hub:693) | Chave `${orgId}:${command.id}` (cabe em hub:666). Reenvio com corpo corrigido depois de `4xx` usa a mesma chave; depois de `202`, chave nova | CA |
+| Envio com wamid (`outbound.service.ts:138-140`) | `202 {message}`; o wamid chega em `status source:"hub" accepted` (hub:666, hub:1267-1281) | `executeSend` termina em `sending` com `hubMessageId`. A liquidação vai para `acceptByHub`/`failByHub` (novos, sem lease, idempotentes, monotônicos): `accept` e `finishFailure` exigem `leaseToken` (`outbound.repo.ts:108,116`), que o webhook não tem. Evento antes de gravar `hubMessageId` fica `pending` e aplica na retentativa. `sentAt` e `lastMessageAt` vêm do `timestamp` do evento, não de `new Date()` (:125,128) | CA |
+| Falha de rede ou 5xx no POST | Mesma chave e mesmo corpo é seguro (hub:693) | Repetir o POST com a mesma chave e o mesmo corpo é a prova sem corrida: um `GET …/messages?idempotencyKey=` vazio só prova ausência naquele instante (hub:779). Repetição automática só com `now − submittedAt` abaixo de 2 min (parâmetro) e depois do `finalCheck` (conexão, campanha `running`, janela, identidade). Fora disso, `failed` local "não confirmado pelo hub", que aceita promoção por evento posterior com o mesmo `messageId` ou `wamid` | CA |
+| `recover` (`outbound.repo.ts:133-137`) | `GET …/messages/:id` (hub:780) | `sending` sem `hubMessageId` → regra acima; com `hubMessageId` e sem evento há mais de 2 min (parâmetro) → `GET` e conciliação | CA |
+| `uncertain` | Conciliação pelo `biz_opaque_callback_data` (hub:753); `abandoned` só por ação da equipe Matra, sem prazo (hub:746) | `acceptByHub` aceita `uncertain → accepted`. Sem evento depois de 24 h (parâmetro), o inbox mostra "não confirmado" sem esperar `abandoned` | CA / H (desejável) |
+| `abandoned` | `accepted` com `overridesAdminResolution` vence (hub:753, hub:1281) | `uncertain` com `safeError: HUB_ABANDONED`; o `accepted` posterior vence | CA |
+| Classificação de `uncertain` | `131000`/`131016`/`133004` viram `uncertain` (hub:746) | Muda o invariante só para 4xx com esses códigos; com 5xx já era `uncertain` (§9 R3) | CA |
+| Gate de conexão | conexão `active` (hub:660) | `getOfficialChannel(orgId, id)`: exige `status connected`, `disabledAt` nulo e `hubConnectionId`; `hubErrorCode = token_expired` → `WHATSAPP_TOKEN_EXPIRED`. Substitui `getOfficialCredentials` nos 9 chamadores (§5.3) e os filtros `tokenEnc: {not: null}` de `outbound.repo.ts:51,92` e a checagem `!channel.tokenEnc` de `src/modules/whatsapp-campaigns/preview.service.ts:22` | CA |
+| Janela no envio (`outbound.service.ts:23`) | `422 OUTSIDE_SERVICE_WINDOW`; `failed outside_service_window`; `131047` vindo da Meta (hub:683, hub:713) | Checagem local mantida; os três → `OFFICIAL_WINDOW_CLOSED` | C |
+| Revalidação do template (`outbound.service.ts:114-119`) | `GET …/templates/:templateId` (hub:880) | Comparação local por `version` (hub:889); `GET` só quando um evento trouxer `version` maior que `hubVersion` ou no início/retomada de campanha. Balde geral de 600/min por chave, compartilhado por todas as orgs (hub:398) | CA |
+| "Aceita pela Meta" no web (`eloscrm-web/components/whatsapp-official/official-composer.tsx:73-75`, `inbox-thread.tsx:14,68`) | `accepted` = a Meta aceitou (hub:744); `pacing` à parte (hub:749) | Texto atual continua correto | C |
 
 ### 3.4 Disparos e campanhas
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Preview, público, parâmetros, custo estimado, trava de 7 dias (`preview.service.ts:19-115`, `campaigns.repo.ts:12-14`) | local | Nenhuma | C |
-| Gate por destinatário (`src/modules/whatsapp-campaigns/gate.service.ts:9-43`) | local | Nenhuma além do hash do template | C |
-| Envio inline no worker (`dispatch.service.ts:30-31`) | `202` + evento | Hoje o worker liquida `sending` como `unknown` na hora (`dispatch.service.ts:39`). Para `route = hub`: depois do `executeSend` que termina em `sending`, o worker **não** liquida; estende a lease do destinatário (função nova `extendLease` em `campaigns.repo.ts`; lease atual de 180 s em :110; extensão: parâmetro) e o destinatário continua `preparing`, segurando o slot da conexão (`campaigns.repo.ts:101`). `checkCampaign` não é chamado de novo para esse destinatário. | CA |
-| Liquidação (`campaigns.repo.ts:73-79`, `holdForRetry` :83-91) | `failed {error:{code, metaCode}}` (hub:1270) | `applyHubSendStatus` em `src/modules/whatsapp-campaigns/settle.service.ts`: lê o destinatário pelo `campaignRecipientId` do comando e liquida com o `leaseToken` lido na linha (`settle`/`holdForRetry` exigem `status: "preparing"` e o token). `failed` global pausa a fila (`globalFailure`). Evento que chega depois da lease promove `unknown → sent`/`failed`. No reentry (`dispatch.service.ts:20-24`), comando `sending` com `route = hub` e `hubMessageId` faz `GET …/messages/:id` antes de liquidar | CA |
-| Classificação por código (`failures.ts:10-18`, `providerErrorCode` é `Int`, decisão numérica em :27) | `errorCode` string + `metaCode` (hub:751-767) | `providerErrorCode = metaCode ?? parse("meta:<n>") ?? mapa`. Mapa: `credential_invalid→190`, `permission_denied→10`, `payment_method_required→131042`, `template_paused→132015`, `template_not_found_at_meta→132001`, `outside_service_window→131047`, `user_opted_out→131050`, `bsuid_not_supported→131062`, `marketing_disabled_on_cloud_api→131063`; `rate_limited→130429` é convenção local (hub:764 não dá código). `meta:unknown` → genérico. Internos: `connection_inactive`/`credential_unavailable` → `WHATSAPP_CONNECTION_UNAVAILABLE`; `template_not_approved` → `CAMPAIGN_TEMPLATE_CHANGED`; `media_expired` → novo upload e chave nova. Em `uncertain`, `error` vem `null` e o código só em `metaErrorCode` do `GET` (hub:1270). Rótulos do web (`eloscrm-web/.../campaign-error-labels.ts:5-27`) continuam numéricos | CA |
-| Recusas síncronas no POST | Por `code` (hub:656, hub:693-708) | `409 CONNECTION_NOT_ACTIVE` → global (pausa); `422 TEMPLATE_NOT_APPROVED`, `400 TEMPLATE_PARAMETERS_MISMATCH`, `400 TEMPLATE_COMPONENT_UNSUPPORTED`, `404 TEMPLATE_NOT_FOUND` → `needs_review`; `422 OUTSIDE_SERVICE_WINDOW` → `OFFICIAL_WINDOW_CLOSED`; `410 MEDIA_EXPIRED`, `404 MEDIA_NOT_FOUND` → novo upload e chave nova; `400 MEDIA_KIND_MISMATCH` → `needs_review`; `400 RECIPIENT_PHONE_REQUIRED` → falha do destinatário; `429` → reagendar pelo `Retry-After` sem falha (hub:402; não está no `oa`). Todas são `preSubmissionFailure` (`failures.ts:32`) | CA |
-| Encerrar (`campaigns.repo.ts:45-58`) | Sem rota de cancelamento (`oa`) | Sem cancelamento, o que estiver na fila `pending` do hub (vazão do número ou retry por limite da Meta, hub:736, hub:404) ainda sai depois de "Encerrar". Com 1 em voo por conexão, é no máximo 1 mensagem de campanha. O pacing da Meta (hub:743) fica fora do alcance de qualquer cancelamento | H (desejável) |
-| Recibos e relatório (`campaigns.service.ts:12-28`, `failedReceipts` em `campaigns.repo.ts:118`) | `meta` cru com `errors[]` | Sem mudança (D1, D6) | C |
-| Campanha no momento da virada | n/a | A virada exige nenhuma campanha `running`, `paused` ou `needs_review` na WABA, **ou** a conferência de hash de cada template pelas duas fontes sem divergência. O snapshot vem de `readTemplates` (`src/lib/whatsapp-official/graph.ts:43`) e qualquer diferença nos `components` do hub (hub:911, hub:913) leva a `CAMPAIGN_TEMPLATE_CHANGED` com "encerre e crie outra" (`campaigns.service.ts:73`) | CA |
+| Preview, público, parâmetros, custo estimado, trava de 7 dias (`preview.service.ts:19-115`, `src/modules/whatsapp-campaigns/campaigns.repo.ts:12-14`) | local | Nenhuma além do gate (§3.3) | C |
+| Envio inline no worker (`src/modules/whatsapp-campaigns/dispatch.service.ts:30-31`) | `202` + evento | Hoje o worker liquida `sending` como `unknown` na hora (:39). Agora não liquida: estende a lease do destinatário (`extendLease`, novo em `campaigns.repo.ts`) por pelo menos 15 min (parâmetro), o teto do retry do hub antes de `failed rate_limited` (1+4+16+64+256+256+256 s com `131056`, código do hub) mais a espera de vazão. No reentry (:20-24), comando `sending` com `hubMessageId` faz `GET …/messages/:id`: `pending`/`sending` reestende a lease sem liquidar. Durante a espera, o slot por conexão (`campaigns.repo.ts:101`) segura as campanhas daquela conexão | CA |
+| Liquidação (`campaigns.repo.ts:73-91`) | `failed {error:{code, metaCode}}` (hub:1281) | `applyHubSendStatus` em `src/modules/whatsapp-campaigns/settle.service.ts`: lê o destinatário pelo `campaignRecipientId` do comando e liquida com o `leaseToken` lido na linha (`settle`/`holdForRetry` exigem `preparing` e o token). Evento que chega depois da lease promove `unknown → sent`/`failed` | CA |
+| Classificação por código (`failures.ts:10-32`, `providerErrorCode` `Int`) | `errorCode` + `metaCode` (hub:757-773); toda falha vinda da Meta traz `metaCode`, inclusive `rate_limited` com o último código real (código do hub) | Pausa global pela classe do `errorCode`: `credential_invalid`, `permission_denied`, `payment_method_required`, `marketing_disabled_on_cloud_api`, `rate_limited`, `connection_inactive`, `credential_unavailable`. `providerErrorCode = metaCode` (o mapa de `errorCode → número` só como fallback). `template_not_approved` → `CAMPAIGN_TEMPLATE_CHANGED`; `media_expired` → novo upload e chave nova; `meta:unknown` → genérico. Em `uncertain`, `error` vem `null` e o código só em `metaErrorCode` do `GET` (hub:1281). Rótulos do web (`eloscrm-web/components/whatsapp-official/campaign-error-labels.ts:5-27`) continuam numéricos | CA |
+| Recusas síncronas no POST | Por `code` (hub:699-714) | Cada `code` tem destino próprio, nunca o fallback `preSubmissionFailure` (`failures.ts:32`): `409 CONNECTION_NOT_ACTIVE` e `404 CONNECTION_NOT_FOUND` → pausa global; `422 TEMPLATE_NOT_APPROVED`, `400 TEMPLATE_PARAMETERS_MISMATCH`, `400 TEMPLATE_COMPONENT_UNSUPPORTED`, `404 TEMPLATE_NOT_FOUND`, `400 MEDIA_KIND_MISMATCH` → `needs_review`; `422 OUTSIDE_SERVICE_WINDOW` → `OFFICIAL_WINDOW_CLOSED`; `410 MEDIA_EXPIRED`, `404 MEDIA_NOT_FOUND` → novo upload e chave nova; `400 RECIPIENT_PHONE_REQUIRED` → falha do destinatário; `409 IDEMPOTENCY_KEY_REUSED` → já existe envio com a chave: `GET ?idempotencyKey=` e adotar, nunca chave nova às cegas; `400 IDEMPOTENCY_KEY_REQUIRED` e `400` sem `code` (validação) → bug do mapeador, `needs_review` sem retry; `429` → reagendar pelo `Retry-After` sem falha | CA |
+| Template na conexão recém-ativada | O cache só existe depois da sync assíncrona da ativação; até lá todo envio de template dá `404 TEMPLATE_NOT_FOUND` (código do hub) | Campanha só começa com `syncedAt` da listagem não nulo (hub:887) | CA |
+| Encerrar (`campaigns.repo.ts:45-58`) | Sem cancelamento (`oa`) | O que estiver `pending` no hub ainda sai depois de "Encerrar", até cerca de 14 min depois se estiver em retry por limite. Com 1 em voo por conexão, é no máximo 1 mensagem de campanha | H (desejável) |
+| Recibos e relatório (`campaigns.service.ts:12-28`, `failedReceipts` em `campaigns.repo.ts:118`) | `meta` cru com `errors[]` (hub:1301) | Sem mudança (D1) | C |
 
 ### 3.5 Templates
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Sync (`outbound.service.ts:88-94` → `saveTemplates`, `outbound.repo.ts:19-35`) | `GET …/templates` paginado (cache) + `POST …/templates/sync` `202 queued\|recent`, fim só visível por `syncedAt` (hub:871-889) | `syncTemplates` (rota hub) lê a listagem inteira e também dispara `POST …/sync`, devolvendo `syncRequested: true`. Só marca `MISSING` com `syncedAt` da listagem não nulo e posterior à ativação, depois de paginar tudo. Os chamadores (`campaigns.service.ts:54,67`, `src/routes/v1/whatsapp/outbound/index.ts:43`) mantêm o contrato síncrono | CA |
-| `definition` formato Graph (`prisma/schema.prisma:1256`), validada por `templateSchema` com `id: /^\d+$/` (`src/modules/whatsapp-outbound/outbound.schema.ts:14`) | `components` cru, `parameterFormat` camelCase (hub:877, hub:911); sem id Meta e sem `wabaId` (`oa`) | `definition = {id, name, language, category, status, parameter_format, components, rejected_reason}`. `outbound.schema.ts:14` passa a aceitar `^\d+$` **ou** `^hub:[A-Za-z0-9._-]+$`; sem isso, todo template novo quebra em `prepare`/`executeSend` com `ZodError` | CA |
-| Chave `(organizationId, wabaId, externalId)` (`prisma/schema.prisma:1263`) | idem | Colunas `hubTemplateId`, `hubVersion`. Casamento no **primeiro contato** (sync ou evento): `hubTemplateId`, depois `(wabaId, name, language)` (índice em :1264). Template novo sem linha local: `externalId = "hub:<id>"`. Enquanto a WABA estiver `direct`, o hub só preenche `hubTemplateId`/`hubVersion` (D5) | CA |
-| Status por webhook (`template-status.service.ts:17-34`) | `template.status_updated {template, event, reason, otherInfo, disableDate}`, `connectionId: null` (hub:1219, hub:1341-1343); ordenar por `version`, sem `version` = 0 (hub:1349) | `applyHubTemplate`: acha por `(org, hubTemplateId)`, depois `(wabaId, name, language)`; desconhecido → upsert com o `template` do evento, sem sync. Para descobrir a WABA, `GET …/templates/:id` em cada conexão hub da org (404 nas outras, hub:872); a WABA não fica em dois workspaces (hub:538). `DELETED → MISSING`, `REINSTATED → APPROVED` | CA |
-| Edição, categoria, qualidade (não tratadas) | `template.updated {change}` (hub:1345-1347) | Atualiza `definition`/`category`; `components` → campanha vai a `needs_review` pelo hash | C |
-| Criação MARKETING/UTILITY com header TEXT (`src/modules/whatsapp-templates/templates.schema.ts:3-16`, `templates.service.ts:23-29`) | `POST …/templates` (hub:891; `oa`) | Builder `{name, language, category, parameterFormat:"POSITIONAL", header?, body{text, examples}, footer?}`; sai o regex de `templates.service.ts:29`. `TEMPLATE_NAME_TAKEN` → 409; `META_UNAVAILABLE` → conferir a lista antes de repetir (hub:895-907) | CA |
-| Header de mídia na criação | Recusado (hub:898) | O CRM não cria hoje: sem impacto | C |
-| Botão de telefone | A prosa (hub:891) não enumera tipos; o `oa` aceita `QUICK_REPLY`, `URL`, `PHONE_NUMBER`, `COPY_CODE` | Hoje a criação não oferece; testar no dev antes de oferecer | C |
-| Exclusão (`templates.service.ts:33-42`) | `DELETE …/templates/:templateId`, só aquele idioma (hub:871-875) | Usa `hubTemplateId` | CA |
-| Motivo e recomendação de rejeição (`template-status.service.ts:13-14,29-31`) | Só `rejectedReason` + `otherInfo{title, description}` (hub:877, hub:1343) | `otherInfo.description` → `rejectionDetail`; recomendação some até H-D2 | H (desejável) |
+| Sync (`outbound.service.ts:88-94` → `saveTemplates`, `outbound.repo.ts:19-35`) | `GET …/templates` paginado (cache mantido pelos webhooks) + `POST …/templates/sync` → `202 {status: "queued" \| "recent", syncedAt}` (hub:879-897) | `syncTemplates` lê a listagem inteira e pede o `/sync`, devolvendo o `status`. Os chamadores (`src/modules/whatsapp-campaigns/campaigns.service.ts:54,67`, `src/routes/v1/whatsapp/outbound/index.ts:43`, `src/modules/whatsapp-templates/template-status.service.ts:21`) passam a ler o cache: "sincronizar antes de iniciar" vira "ler o cache". O `/sync` divide com criar e excluir o balde de 30/min por chave, para todas as orgs (hub:401): `429` sem `code` segue só com a listagem. `409 CREDENTIAL_UNAVAILABLE`/`CONNECTION_NOT_ACTIVE` não apagam o cache local. `MISSING` só depois de paginar tudo e com o `syncedAt` da conta posterior à ligação | CA |
+| `definition` formato Graph, `templateSchema` com `id: /^\d+$/` (`src/modules/whatsapp-outbound/outbound.schema.ts:14`) | `components` cru, `parameterFormat` camelCase, `metaTemplateId` (hub:885, hub:919) | `definition = {id: metaTemplateId, name, language, category, status, parameter_format, components, rejected_reason}`. O `id` continua numérico e `templateSchema` não muda. Grava a `definition` de forma determinística (chaves fixas, `rejected_reason` normalizado) e só com `version` maior, porque o hash da campanha cobre a `definition` inteira (`preview.service.ts:112`, `gate.service.ts:30`) | CA |
+| Chave `(organizationId, wabaId, externalId)` | `metaTemplateId`, `wabaId` no template e nos eventos (hub:885) | `externalId = metaTemplateId`, como hoje. Colunas `hubTemplateId`, `hubVersion`. Linha antiga da mesma org e WABA casa por `externalId` | CA |
+| Status por webhook (`template-status.service.ts:17-34`) | `template.status_updated {template, event, reason, otherInfo, disableDate}`, `connectionId: null`, ordem por `version` (hub:1367, hub:1373) | `applyHubTemplate`: acha por `(org, wabaId, metaTemplateId)` com `wabaId` do próprio evento; desconhecido → upsert, sem sync. `DELETED → MISSING`, `REINSTATED → APPROVED`. `FLAGGED`, `LOCKED` e `UNARCHIVED` não sobem `version` (código do hub): o aviso de qualidade é tratado fora do filtro de `version`, sem mexer no estado. Evento reentregue de antes de 2026-11-12 sem `metaTemplateId`/`wabaId`: `GET …/templates/:id` em cada conexão da org até achar (hub:885) | CA |
+| Edição, categoria, qualidade | `template.updated {change}` (hub:1371) | Atualiza `definition`/`category`; `components` → campanha vai a `needs_review` pelo hash | C |
+| Criação MARKETING/UTILITY com header TEXT (`src/modules/whatsapp-templates/templates.schema.ts:3-16`, `templates.service.ts:23-29`) | `POST …/templates` (hub:899) | Builder `{name, language, category, parameterFormat:"POSITIONAL", header?, body{text, examples}, footer?}`. `templates.schema.ts` passa a recusar variáveis coladas (`{{1}}{{2}}`), que o hub recusa com `400` sem `code` (hub:905). Recusas: `409 TEMPLATE_NAME_TAKEN`, `403 META_PERMISSION_DENIED`, `422 META_REJECTED`, `429 META_RATE_LIMITED` (`Retry-After: 60`), `502 META_UNAVAILABLE` → conferir a lista antes de repetir (hub:903-915) | CA |
+| Exclusão (`templates.service.ts:33-42`) | `DELETE …/templates/:templateId` → `204`, sem evento; `409 TEMPLATE_NOT_DELETABLE` em `DISABLED` (hub:882, hub:909) | Usa `hubTemplateId`; marca o registro local no `204`, como o `markDeleted` faz hoje | CA |
+| Motivo e recomendação de rejeição (`template-status.service.ts:13-14,29-31`) | `rejectedReason` + `otherInfo{title, description}` (hub:885, hub:1367) | `otherInfo.description` → `rejectionDetail`; a recomendação some até H-D2 | H (desejável) |
 
 ### 3.6 Custos
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Custo por mensagem (`message-cost.repo.ts:4-45`) | `pricing` cru no `meta` do status (hub:1285-1291) | Nenhuma além das correções abaixo | C |
-| `category` com hífen (`authentication-international`, hub:1415) | idem | `toUpperCase` também troca `-` por `_` (`message-cost.repo.ts:11`); o bug já existe no caminho direto | CA |
-| `free_group_customer_service` (hub:1416) | idem | Na lista de gratuitos (`message-cost.repo.ts:33`) e no enum de `src/modules/whatsapp-costs/costs.schema.ts:6,13` | CA |
-| `billable` obsoleto (hub:1418) | "decida por `type`" | Gratuidade derivada de `type` quando `billable` faltar (hoje depende de `billable`, `message-cost.repo.ts:13,30,33`) | CA |
-| Moeda (`ChannelConnection.currency`) | `/consumption.currency`, pode ser `null` (hub:1490) | §4.1 H3 | H |
-| "Reportado pela Meta" (`analytics.service.ts:20`, `CostAnalyticsSnapshot`) | `/consumption?month=` só com volume, mensal (hub:1464-1491; `oa` só tem `month`) | Rota hub: `/costs/sync` calcula `Σ volume × OfficialRate` das linhas `type: "REGULAR"` (hub:1491). `CostAnalyticsSnapshot` ganha `source` (`meta_cost` \| `computed`): hoje a chave `(org, wabaId, start, end)` (`prisma/schema.prisma:1565`) misturaria valor reportado e calculado. Textos "waba" → "número" (`costs.service.ts:75,111,115`, `eloscrm-web/lib/cost-types.ts:7,16`, `cost-dashboard.tsx:49,60`) | CA / H (desejável) |
-| Franquia de 1.000/mês | `GET …/usage`, `whatsapp.usage.free_tier` (hub:1425-1458) | Opcional: aviso na aba de custos | C |
+| Custo por mensagem (`message-cost.repo.ts:4-45`) | `pricing` cru no `meta` do status (hub:1303) | Alimentar com o `meta`, nunca com `data.pricing`, que renomeia `pricing_model` para `model` (hub:1294) | C |
+| `category` com hífen (`authentication-international`, hub:1439) | idem | `toUpperCase` também troca `-` por `_` (`message-cost.repo.ts:11`); sem isso não casa com o regex das tarifas (`src/modules/whatsapp-costs/costs.schema.ts:6`) | CA |
+| `free_group_customer_service` (hub:1440) | idem | Na lista de gratuitos (`message-cost.repo.ts:33`) e no enum de `costs.schema.ts:6,13` | CA |
+| `billable` obsoleto (hub:1442) | "decida por `type`" | `type: regular` = cobrada, `free_*` = grátis, nos dois ramos (`message-cost.repo.ts:13,30,33,34`); `billable` só como conferência | CA |
+| Moeda | `whatsapp.currency` (hub:605) | §2.5. Sem moeda, os 422 atuais (`costs.service.ts:20`) com texto "a Meta ainda não informou a moeda" | C |
+| "Reportado pela Meta" (`analytics.service.ts:20`, `CostAnalyticsSnapshot`) | `/consumption?month=` por número, mensal, só volume; `meta.items` em maiúsculas com `tier` (hub:1488-1515) | Tabela nova `CostConsumptionSnapshot` por `(organizationId, connectionId, month)`: `Σ volume × OfficialRate` das linhas `REGULAR`, com a faixa da tarifa escolhida pelo `tier` da linha (hoje `message-cost.repo.ts:37` usa só `volumeFrom: 0`). Não mexe na chave de `CostAnalyticsSnapshot` (`prisma/schema.prisma:1565`). Textos "waba" → "número" (`costs.service.ts:75,111,115`, `eloscrm-web/lib/cost-types.ts:7,16`, `cost-dashboard.tsx:49,60`) | CA / H (desejável) |
+| Franquia de 1.000/mês | `GET …/usage`, `whatsapp.usage.free_tier` (hub:1447-1482) | Opcional: aviso na aba de custos | C |
 
 ### 3.7 Manutenção e jobs
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Journal + replay (`src/routes/v1/whatsapp/events/index.ts:12-17`) | `GET /v1/events` (só `status` e `type`), `POST /v1/events/:deliveryId/redeliver` (hub:1137-1159) | Listagem e replay cobrem os dois journals (parâmetro `source`) | CA |
-| Retenção (`src/modules/whatsapp-maintenance/retention.repo.ts:6-16`) | O hub retém 30 dias (hub:1117) | `HubWebhookEvent` no expurgo, incluindo `unsupported`, `failed` esgotado e `unresolved` sem org (hoje só `processed` com org, :7,12). `hubRequest` entra no expurgo de comandos (:13) | CA |
-| Exclusão de atendimento (`src/modules/whatsapp-inbox/inbox.repo.ts:115-129`) | n/a | Limpa também `hubRequest` (:124) e `hubMediaId` (:129); `hubMediaId` permite baixar a mídia no hub por 30 dias (hub:857) | CA |
-| Recuperação após indisponibilidade nossa | 8 tentativas em cerca de 22 h, depois `failed` (hub:1103-1115) | Runbook: `GET /v1/events?status=failed` → `redeliver` por `deliveryId` | CA / H (desejável) |
-| Jobs (`src/server.ts:19-36`) | n/a | Novos: `scheduleHubWebhookRecovery`, `scheduleHubSendReconcile`, `scheduleHubConnectionRefresh` (diário, `GET /v1/connections`). Só iniciam com `NODE_ENV === "production"` ou `HUB_JOBS_ENABLED`. Mais tarde saem `scheduleOnboardingRecovery` e `scheduleOfficialWebhookRecovery` | CA |
+| Journal + replay (`src/routes/v1/whatsapp/events/index.ts:12-17`) | `GET /v1/events` (filtros `status`, `type`), `POST /v1/events/:deliveryId/redeliver` (hub:1148-1170) | Listagem e replay do `HubWebhookEvent`; o `OfficialWebhookEvent` fica só em leitura | CA |
+| Retenção (`src/modules/whatsapp-maintenance/retention.repo.ts:6-16`) | O hub retém 30 dias (hub:1125) | `HubWebhookEvent` no expurgo, incluindo `unsupported`, `failed` esgotado e `unresolved` sem org. `hubRequest` entra no expurgo de comandos (:13) | CA |
+| Exclusão de atendimento (`src/modules/whatsapp-inbox/inbox.repo.ts:115-129`) | Mídia no hub por 30 dias, sem exclusão sob demanda (hub:863) | Limpa também `hubRequest` (:124) e `hubMediaId` (:129). A política de privacidade do elosCRM registra que a cópia no hub sai pela retenção de 30 dias | CA |
+| Recuperação após indisponibilidade nossa | 8 tentativas em cerca de 22 h (hub:1115-1123) | Runbook: `GET /v1/events?status=failed` → `redeliver` por `deliveryId`, com pausa entre os POSTs (balde de 600/min, hub:398). Para pausar o recebimento, o receptor responde `503`; nunca pedir a desativação do endpoint, que faria os eventos nascerem sem entrega (hub:1143) | CA / H (desejável) |
+| Jobs (`src/server.ts:19-36`) | n/a | Novos: `scheduleHubWebhookSweep` (lê só o banco local; roda sempre), `scheduleHubSendReconcile` e `scheduleHubConnectionRefresh` (diário, `GET /v1/connections`). Os dois que chamam o hub rodam só com `HUB_JOBS_ENABLED=true`, nunca derivado de `NODE_ENV` | CA |
 
 ### 3.8 Identidade do contato
 
 | Capacidade | Hub | Mudança | Status |
 |---|---|---|---|
-| Escopo `business:<portfolio>` (`identity.repo.ts:14,20`) | `businessId` (hub:645-647) | Nenhuma | C |
+| Escopo `business:<portfolio>` (`identity.repo.ts:14,20`) | `businessId` (hub:651) | Nenhuma | C |
 | Aliases bsuid/parent_bsuid/wa_id (`message-parser.ts:17-22`) | Crus no `meta` | Nenhuma | C |
-| `username` | `from.username`, telefone pode faltar (hub:647) | Sem `ContactIdentityKind` para isso (`prisma/schema.prisma:829-836`); ignorar (D2) | C |
+| `username` | `from.username`, telefone pode faltar (hub:653-655) | Sem `ContactIdentityKind` para isso (D2); ignorar | C |
 | Nono dígito e `campaign_import` (`identity.repo.ts:22`, `src/lib/phone.ts:79-84`) | n/a | Nenhuma | C |
 
 ---
 
-## 4. Itens a implementar no hub
+## 4. Itens abertos no hub
 
-### 4.1 Bloqueantes para o corte
+Entregues em 2026-11-12 e retirados desta lista: H1 (formato do `meta` do status, hub:1303), H2 (host da URL de mídia, hub:865), H3 e H-D12 (moeda e fuso, hub:605), H-D1 (`metaTemplateId`/`wabaId`, hub:885), H-D7 (chave em `4xx`, hub:693), H-D13 (`Idempotency-Key` e `429` no `oa`), H-D14 (`returnUrl`, hub:481) e H-D15 nas chaves (várias ativas, hub:365). O cliente gerado pelo `oa` pede o header como `idempotency-key`, em minúsculas. H4 não se aplica: não há conexão a importar.
 
-**H1. Contrato do `meta` em `whatsapp.message.status` `source:"meta"` e versão da Graph.**
-- Proposta: documentar com exemplo se o `meta` do status é o item cru (`{id, status, timestamp, recipient_id, pricing, errors, …}`) ou embrulhado (como `{message, contact}` em `received`/`echo`, hub:1244, hub:1295). Documentar a versão da Graph em que a Meta entrega os webhooks ao app do hub.
-- Por quê: `receiptSchema` exige `id`, `status` e `timestamp` numérico no nível de cima (`receipts.repo.ts:8-10`); o D1 inteiro depende disso. Hoje a doc diz só "o status" (hub:1221).
-- Verificação: payload real capturado no app de dev em F0.
+Nenhum item abaixo bloqueia o piloto nem a abertura: todos têm degradação aceitável.
 
-**H2. Host estável da URL de mídia.**
-- Proposta: documentar o host fixo da `url` assinada de `GET /v1/media/:id`, ou expor `GET /v1/media/:id/content` em streaming com o mesmo `Authorization`.
-- Por quê: o downloader tem allowlist de host, fixa IP e recusa redirect (`media-download.ts:6-55`); sem host conhecido, não há proteção contra SSRF.
+| Id | Proposta | Por quê | Degradação sem ele | Bloqueante |
+|---|---|---|---|---|
+| H-D2 | `rejection_info` da Meta no template ou no `status_updated` | O app mostra `rejectionRecommendation` (`template-status.service.ts:14,31`). O hub já grava o campo, só não expõe (código do hub) | Recomendação some (Q5) | não |
+| H-D3 | Cancelar envio `pending` no hub | "Encerrar" e o disable não alcançam a fila do hub | Sai no máximo o que já estava na fila (§3.4) | não |
+| H-D4 | `/consumption` por período diário de até 31 dias | Dashboard usa período livre (`costs.schema.ts:4`, `cost-dashboard.tsx:46`) | Dashboard mensal (Q4) | não |
+| H-D5 | Itens crus no `meta` de `history.received` | Reaproveitar o parser como em D1 | `history-adapter` por tipo (§3.2) | não |
+| H-D6 | `GET /v1/events` com `connectionId` e período; redeliver em lote | Recuperação grande hoje é um POST por entrega (hub:1149) | Runbook manual com pausa | não |
+| H-D8 | `clientReference` ecoado no envio e nos status | Correlação direta com `OfficialSendCommand` | `message.id` no `202`, consulta por chave, `wamid` (§3.3) | não |
+| H-D9 | Evento de fim de sync de templates | Hoje o fim só é visível por polling de `syncedAt` (hub:893) | Polling com teto | não |
+| H-D10 | Encerrar `uncertain` pelo `/v1` | Só a equipe Matra encerra (hub:746) | Prazo local "não confirmado" (§3.3) | não |
+| H-D11 | Releitura de `quality_rating` e limite de mensagens, com evento | `qualityRating` é foto (hub:606) | A aba mostra `health` | não |
+| H-D16 | Exclusão sob demanda de mídia e eventos por `wamid` | LGPD: hoje só a retenção de 30 dias apaga (hub:863, hub:1125) | Política declara os 30 dias | não |
 
-**H3. Moeda da WABA no recurso de conexão (bloqueante só para conexões novas).**
-- Proposta: `whatsapp.currency` (ISO 4217) no recurso de conexão, lido na ativação e no refresh.
-- Por quê: sem moeda, `addRate`/`importRates` e a conferência respondem 422 e a apuração fica `missing_currency` (`costs.service.ts:20,81,103`; `message-cost.repo.ts:29-30`). Hoje a moeda só existe em `/consumption.currency`, que pode vir `null` (hub:1490). Conexões migradas mantêm o valor gravado.
-- Até lá: fuso por `/usage` (hub:1441); moeda pela `consumption` quando houver, senão a UI pede ao gestor.
-
-**H4. Importar conexão existente sem refazer o fluxo (só se Q1 = mesmo app Meta).**
-- Proposta: rota administrativa interna `POST /admin/connections/import {workspaceId, wabaId, phoneNumberId, accessToken}`, sem a chave do app; o hub valida por `debug_token`, cria como `active` e não refaz o sync.
-- Com app diferente (cenário B), o item não existe.
-
-### 4.2 Desejáveis
-
-| Id | Proposta | Por quê | Degradação sem ele |
-|---|---|---|---|
-| H-D1 | `template.metaTemplateId` e `template.wabaId` no objeto de template e nos eventos `template.*` | Casar evento com template sem varrer conexões (hub:1219) e manter `externalId` homogêneo | Varredura por `GET` em cada conexão hub da org; `externalId = "hub:<id>"` em template novo |
-| H-D2 | `template.rejection: {reason, recommendation}` (do `rejection_info` da Meta) | O app grava e mostra `rejectionRecommendation` (`template-status.service.ts:14,31`) | A recomendação some (Q5) |
-| H-D3 | `POST /v1/connections/:id/messages/:messageId/cancel`: `200` com `state: "canceled"` só em `pending`; `409 MESSAGE_NOT_CANCELABLE` depois; emite `status source:"hub" canceled` | Fila `pending` do hub (hub:736, hub:404) | Depois de "Encerrar" ou do disable, sai no máximo o que já estava na fila do hub |
-| H-D4 | `GET …/consumption?start&end&granularity=day` (até 31 dias), com `items[{date, category, type, country, tier, volume}]` | O dashboard usa período livre de até 31 dias, diário (`costs.schema.ts:4`; `cost-dashboard.tsx:46`) | Dashboard mensal (Q4) |
-| H-D5 | `meta.messages[]` cru em `history.received` como contrato estável | Reaproveitar o parser cru como no D1 | Adaptador hub → item (§3.2) |
-| H-D6 | `GET /v1/events` com `connectionId`, `createdAfter`, `createdBefore`; `POST /v1/events/redeliver` em lote | Hoje é um POST por `deliveryId` (hub:1137) e não há leitura de mensagens recebidas (hub:769-774) | Recuperação manual por entrega |
-| H-D7 | Documentar que um `4xx` síncrono não consome a `Idempotency-Key` | Repetir com corpo corrigido sem `409 IDEMPOTENCY_KEY_REUSED` (hub:687) | O app roda a chave em todo reenvio com corpo corrigido |
-| H-D8 | `clientReference` no `POST …/messages`, ecoado no objeto e em todos os `status` | Correlação direta com `OfficialSendCommand` | `202` já traz `message.id` (hub:660); 202 perdido → `GET …?idempotencyKey=` (hub:773); status com `messageId: null` → wamid (hub:1288) |
-| H-D9 | Evento `whatsapp.templates.synced {wabaId, syncedAt, count}` | Fim do sync sem polling de `syncedAt` (hub:885) | Polling |
-| H-D10 | `POST …/messages/:id/resolve {outcome:"not_sent"}` | Hoje só a equipe Matra encerra `uncertain` (hub:740-741) | Espera pelo `abandoned` |
-| H-D11 | `whatsapp.messagingLimitTier` no recurso de conexão e evento de mudança de `qualityRating` | Diagnóstico na aba; nome em análise já aparece em `health.issues` (hub:587, hub:609) | Sem limite e sem aviso de qualidade |
-| H-D12 | Marcar se o `timezone` de `/usage` é real ou o padrão `America/Sao_Paulo` (hub:1441) | Distinguir dado da Meta de default | Fuso pode estar errado em silêncio |
-| H-D13 | `Idempotency-Key` e `429` no `oa` do `POST …/messages` | O `oa` só declara `connectionId` e as respostas `200, 202, 400, 404, 409, 410, 422` | Cliente escrito à mão a partir da prosa |
-| H-D14 | Documentar se o `returnUrl` preserva a própria query | hub:479 só fala de `origin + pathname` | A página não depende de query no `returnUrl` |
-| H-D15 | Janela com dois segredos `whsec_` válidos durante a rotação, e duas chaves `mh_live_` ativas por um tempo | A rotação existe (hub:1133) e a revogação da chave é imediata (hub:363) | O app aceita `HUB_WEBHOOK_SECRET_PREVIOUS`; a troca de chave exige deploy coordenado |
-
-### 4.3 Operacional (não é API)
-- Cadastrar com a equipe Matra o endpoint de produção, o segredo `whsec_` e a allowlist de `returnUrl` `https://<WEB_ORIGIN>/integracoes/whatsapp` (hub:65-66, hub:479).
-- Segundo app consumidor para dev, com chave, túnel e `returnUrl` próprios (hub:64, hub:380-389). Não há ambiente de teste do hub e a URL é a mesma (hub:362, hub:24).
-- Confirmar que o Embedded Signup do hub está na versão atual da Meta.
-- Perguntar se, na migração de um número Coexistence de outro app, o cliente precisa fazer algo no celular (hub:624 diz só "nada é criado do zero").
+### 4.1 Operacional (não é API)
+- Cadastrar com a equipe Matra: endpoint de produção, segredo `whsec_` (gerado pelo hub, hub:1141) e a allowlist `https://<WEB_ORIGIN>/integracoes/whatsapp` (hub:61-66, hub:481).
+- Segundo app consumidor para dev, com chave `mh_live_` própria, túnel HTTPS e `returnUrl` próprio (hub:384-389). Não há ambiente de teste (hub:363).
+- Troca de chave sem janela: pedir a nova, publicar, pedir a revogação da antiga (hub:365).
+- Rotação do segredo: o hub guarda um só e assina tudo com o novo (hub:1144). Publicar o segredo novo logo depois; o que for recusado volta pelas reentregas. `HUB_WEBHOOK_SECRET_PREVIOUS` só cobre o rolling deploy do próprio app.
 
 ---
 
 ## 5. Mudanças no app por módulo
 
 ### 5.1 Arquivos novos
-- `src/lib/meta-hub/client.ts`: `fetch` com `redirect: "error"`, timeout e Bearer; `HubError(status, code, retryAfter, uncertain)` sem a `message` traduzida; `ensureWorkspace`, `createConnectSession`, `getConnection`, `listConnections`, `sendMessage(connId, key, body)`, `getMessage`, `findMessageByKey`, `uploadMedia`, `getMedia`, `listTemplates`, `getTemplate`, `createTemplate`, `deleteTemplate`, `requestTemplateSync`, `getConsumption`, `getUsage`, `deleteConnection`, `deactivateWorkspace`. Recusa chave fora do formato `mh_live_` antes de qualquer rede. Escrito a partir da prosa, não só do `oa` (H-D13).
+- `src/lib/meta-hub/client.ts`: `fetch` com `redirect: "error"`, timeout e Bearer; `HubError(status, code, retryAfter, uncertain)` sem a `message` traduzida (hub:377); `ensureWorkspace`, `createConnectSession`, `getConnection`, `listConnections`, `sendMessage(connId, key, body)`, `getMessage`, `findMessageByKey`, `uploadMedia`, `getMedia`, `listTemplates`, `getTemplate`, `createTemplate`, `deleteTemplate`, `requestTemplateSync`, `getConsumption`, `getUsage`, `deleteConnection`, `deactivateWorkspace`.
 - `src/lib/meta-hub/media-download.ts`: fora do cliente autenticado, sem `Authorization` (§3.2).
 - `src/lib/meta-hub/webhook-auth.ts`: §5.2.
-- `src/routes/webhooks/meta-hub/index.ts`; `src/routes/v1/whatsapp/hub/index.ts` (`GET /config`, `POST /connect-sessions`); rota de virada `POST /v1/whatsapp/maintenance/wabas/:wabaId/route`.
-- `src/modules/meta-hub/{webhook.repo,webhook.service,dispatch.service,connection.service,history-adapter,contacts-adapter}.ts`.
+- `src/routes/webhooks/meta-hub/index.ts`; `src/routes/v1/whatsapp/hub/index.ts` (`GET /config`, `POST /connect-sessions`).
+- `src/modules/meta-hub/{webhook.repo,webhook.service,dispatch.service,connection.service,history-adapter,contacts-adapter,identity-adapter}.ts`.
 - `src/modules/whatsapp-outbound/hub-payload.ts`, `src/modules/whatsapp-outbound/hub-status.service.ts` (`acceptByHub`, `failByHub`).
 - `src/modules/whatsapp-campaigns/settle.service.ts` (`applyHubSendStatus`).
 
 ### 5.2 Receptor do webhook do hub
-- Rota `POST /webhooks/meta-hub`, sem guards (receptor externo). Ligado sempre que `HUB_WEBHOOK_SECRET` existir, independente de `HUB_ENABLED`: desligado, o hub esgota as tentativas em cerca de 22 h (hub:1103-1115).
+- Rota `POST /webhooks/meta-hub`, sem guards. Ligado sempre que `HUB_WEBHOOK_SECRET` existir.
 - Corpo: parser `parseAs: "buffer"` encapsulado (`src/routes/webhooks/whatsapp-official/index.ts:10-11`), `bodyLimit` de 16 MB (parâmetro, por causa dos lotes de histórico), `logLevel: "silent"`, rate limit por IP copiado de :12-20.
-- Autenticação: valida antes do HMAC que `x-hub-timestamp` é inteiro e `x-hub-signature` é string única com prefixo `sha256=`; `|agora − ts| ≤ 300 s`; `HMAC_SHA256(secret, "${ts}.${raw}")` em hex; `timingSafeEqual` após conferir o comprimento, contra `HUB_WEBHOOK_SECRET` e `HUB_WEBHOOK_SECRET_PREVIOUS` (hub:1051-1091). Falha → `401`. Nunca logar corpo nem assinatura.
-- Captura: schema tolerante `{id, type, createdAt, workspace:{id, externalId}, connectionId|null, data, meta|null}` com `looseObject`; resolução de tenant como em §2.5; `createMany({skipDuplicates:true})` por `hubEventId`.
-- ACK: gravou → `200` (limite de 10 s, hub:1095); falha de gravação → `503`; nunca 3xx (hub:1096). Nenhum domínio inline antes do ACK. Com Redis, dispara o processamento sem esperar.
-- Fila: BullMQ `meta-hub-webhook`, `jobId = row.id`; varredura no padrão de `webhook.service.ts:48-59`; sem `REDIS_URL`, `enqueue` executa inline (`src/lib/queue.ts:54-64`).
-- Ordenação (não há fila sequencial, hub:1098):
+- Autenticação: `x-hub-timestamp` inteiro e `x-hub-signature` string única com `sha256=` antes do HMAC; `|agora − ts| ≤ 300 s`; HMAC sobre os bytes crus; `timingSafeEqual` depois de conferir o comprimento, contra `HUB_WEBHOOK_SECRET` e `HUB_WEBHOOK_SECRET_PREVIOUS` (hub:1062-1099). Falha → `401`. Nunca logar corpo nem assinatura.
+- Captura: schema tolerante `{id, type, createdAt, workspace:{id, externalId}, connectionId|null, data, meta|null}` (hub:1043-1055); tenant como em §2.5; `createMany({skipDuplicates:true})` por `hubEventId`.
+- ACK: gravou → `200` (o hub espera até 10 s, hub:1103); falha de gravação → `503`; nunca 3xx (hub:1104). Nenhum domínio antes do ACK: com Redis (`queueEnabled()`), dispara o processamento sem `await`; sem Redis, fica para a varredura, que não depende de `HUB_JOBS_ENABLED`.
+- Fila: BullMQ `meta-hub-webhook`, `jobId = row.id`; varredura no padrão de `src/modules/whatsapp-official/webhook.service.ts:48-59`. O hub limita a 5 entregas simultâneas por endpoint (código do hub): o ACK rápido define a vazão das rajadas de histórico.
+- Ordenação (a ordem de chegada não é garantida, hub:1106):
   - `connection.*`: aplica só se `envelopeAt > hubEventAt`.
-  - `template.*`: só se `version > hubVersion` (sem `version` = 0, hub:1349).
-  - Eventos `source:"hub"` emitem só `accepted`, `failed`, `uncertain`, `abandoned` (hub:1256): `accepted` vence `failed`/`uncertain`; `accepted` com `overridesAdminResolution` vence `abandoned` em qualquer ordem (hub:1098, hub:1270). A ordem `pending < sending < accepted` vale só para o estado lido por `202`/`GET` (hub:736-737).
+  - `template.*`: só se `version > hubVersion` (sem `version` = 0, hub:1373), salvo os avisos `FLAGGED`/`LOCKED`/`UNARCHIVED` (§3.5).
+  - `source:"hub"` (`accepted`, `failed`, `uncertain`, `abandoned`, hub:1267): `uncertain < abandoned < accepted` e `uncertain < accepted`; `accepted` com `overridesAdminResolution` vence `abandoned` em qualquer ordem (hub:1281); `failed` é terminal e não coexiste com `accepted` no mesmo envio.
   - Mensagem e recibo: regras atuais (`ingest.repo.ts:61-71`, `receipts.repo.ts:11`).
 - Despacho por `type`:
 
 | type | Handler |
 |---|---|
-| `whatsapp.message.received` | `ingestMessage(conn, meta.message, contacts(meta.contact), "cloud_api", receivedAt, {hubMediaId: data.message.media?.id, fallbackName: data.message.from?.name})` |
+| `whatsapp.message.received` | `ingestMessage(conn, meta.message, [meta.contact].filter(Boolean), "cloud_api", receivedAt, {hubMediaId: data.message.media?.id})` |
 | `whatsapp.message.echo` | `ingestMessage(..., "business_app", ...)` |
-| `whatsapp.message.status` `source:"meta"` | `ingestReceipt(conn, <item cru conforme H1>, receivedAt)`; `played` → no-op `processed` |
+| `whatsapp.message.status` `source:"meta"` | `ingestReceipt(conn, envelope.meta, receivedAt)`; `played` → no-op `processed` |
 | `whatsapp.message.status` `source:"hub"` | `acceptByHub`/`failByHub` + `applyHubSendStatus` |
-| `whatsapp.media.updated` | Reenfileira a mídia da mensagem com `hubMediaId = data.id` e zera `mediaAttempts`; sem mensagem → `processed` |
+| `whatsapp.media.updated` | Reenfileira a mídia com `hubMediaId = data.id` e zera tentativas; sem mensagem → `processed` (o `received` virá) |
 | `whatsapp.history.received` | `history-adapter` → `ingestMessage(..., "history", ...)` |
-| `whatsapp.contacts.synced`, `whatsapp.identity.updated` | `contacts-adapter` → `sync.repo.ts` |
+| `whatsapp.contacts.synced` | `contacts-adapter` |
+| `whatsapp.identity.updated` | `identity-adapter` → `sync.repo.ts` |
 | `whatsapp.template.*` | `applyHubTemplate` |
 | `connection.*` com `kind:"whatsapp"` | `applyHubConnection` (D5) |
 | `whatsapp.usage.free_tier` | `hubHealth.freeTier` (opcional) |
-| `leadgen.*`, `kind:"lead_ads"`, `type` desconhecido | `unsupported` com 2xx (hub:1189) |
+| `leadgen.*`, `kind:"lead_ads"`, `type` desconhecido | `unsupported` com 2xx (hub:1200) |
 
-- Conexão `disabled`: conteúdo novo vira `failed OFFICIAL_CONNECTION_DISABLED`; `connection.*` e status de comandos existentes são aplicados (§3.1).
-- `ingestMessage` ganha o parâmetro opcional `{hubMediaId, fallbackName}`; com `hubMediaId`, grava-o e força `officialMediaId: null`. Grava `WhatsappMessage.hubSeenAt` em toda passagem pelo caminho do hub, inclusive quando cai na dedup.
+- Conexão `disabled`: conteúdo novo vira `failed OFFICIAL_CONNECTION_DISABLED`; `connection.*` e status de comandos existentes são aplicados. A separação fica antes do gate atual, que hoje falha o evento inteiro.
 
 ### 5.3 Módulos existentes
 
 | Módulo | Arquivos | Mudança |
 |---|---|---|
-| `channel-connections` | `src/modules/channel-connections/channel-connections.service.ts:43-57`, `channel-connections.repo.ts:4-9` | `getOfficialChannel` por rota; `publicConnectionSelect` expõe `officialRoute`, `hubStatus`, `hubErrorCode`, `qualityRating` sem segredos |
-| Chamadores de `getOfficialCredentials` (9) | `src/modules/whatsapp-outbound/outbound.service.ts:17,90`; `src/modules/whatsapp-templates/templates.service.ts:22,35`; `src/modules/whatsapp-outbound/media.service.ts:28`; `src/modules/whatsapp-costs/analytics.service.ts:17`; `src/modules/whatsapp-campaigns/campaigns.service.ts:66`; `src/modules/whatsapp-official/media.service.ts:24,57` | Trocar por `getOfficialChannel` com ramificação por rota. Hoje funcionam porque `tokenEnc` existe; quebrariam no corte, quando ele vira `null` |
-| `whatsapp-outbound` | `outbound.repo.ts:19-35,50-51,85,92,98,107-139`, `outbound.service.ts:14-161`, `outbound.schema.ts:14`, `template.ts`, `media.service.ts` | `route` gravado em `createCommand`; filtros `route = "direct"` em `recover` e `knownResponses` (N0); ramo hub em `executeSend`; `templateSchema.id` aceita `hub:`; upload preguiçoso |
-| `whatsapp-official` | `ingest.repo.ts:27-75`, `receipts.repo.ts:8-48`, `message-parser.ts`, `media.service.ts`, `media.repo.ts:7-29`, `sync.repo.ts`, `webhook.service.ts:31` | Parâmetros opcionais no ingest, `played`, dedup semântica (D6), mídia por `hubMediaId`, adaptadores, aplicação de status com conexão `disabled` |
-| `whatsapp-campaigns` | `dispatch.service.ts:20-39`, `campaigns.repo.ts:73-112`, `failures.ts`, `campaigns.service.ts:54-73` | N0: reentry ignora comando `route = hub` em vez de liquidar `unknown`. Depois: não liquidar `sending` hub, `extendLease`, liquidação por evento, mapa de códigos |
-| `whatsapp-templates` | `template-status.service.ts:17-34`, `templates.service.ts:22-42`, `templates.repo.ts` | N0: handler direto não sincroniza quando todas as conexões da WABA estão em `hub`. Depois: `applyHubTemplate`, CRUD pelo hub |
-| `whatsapp-onboarding` | `sync-request.repo.ts:22-32`, `sync-request.service.ts:23-45` | N0: `dueConnections` exclui conexões com `officialRoute = "hub"`. Removido em F10 |
-| `whatsapp-maintenance` | `lifecycle.repo.ts:20-41`, `retention.repo.ts:6-16`, `src/routes/v1/whatsapp/events/index.ts` | Disable bloqueado na convivência; virada por WABA sob os locks `whatsapp-connection` e `campaign-dispatch` (:21,25); retenção e replay dos dois journals |
-| `whatsapp-inbox` | `inbox.repo.ts:124,129` | Exclusão limpa `hubRequest` e `hubMediaId` |
-| `whatsapp-costs` | `message-cost.repo.ts:11,13,30,33`, `costs.schema.ts:6,13`, `analytics.service.ts`, `costs.service.ts:75,111,115` | Correções de categoria e gratuidade; cálculo por `consumption`; `CostAnalyticsSnapshot.source` |
-| Purga de organização | `src/lib/auth.ts:132-133` | `DELETE` das conexões e `deactivate` do workspace no hub |
-| `env` e boot | `src/env.ts`, `src/server.ts:19-36`, `.env.example`, `test/setup.ts` | `HUB_API_URL` (default `https://api.metahub.matratecnologia.com/v1`, hub:24), `HUB_API_KEY`, `HUB_WEBHOOK_SECRET`, `HUB_WEBHOOK_SECRET_PREVIOUS`, `HUB_ENABLED`, `HUB_JOBS_ENABLED`, `HUB_ONBOARDING_DEFAULT` |
-| Web | `eloscrm-web/lib/types.ts:685-704`, `lib/queries/whatsapp-official.ts:12-17`, `components/whatsapp-official/{hub-connect.tsx (novo), official-signup.tsx, official-tab.tsx, lifecycle-controls.tsx:25, template-manager.tsx}`, `app/(app)/integracoes/whatsapp/page.tsx`, `lib/cost-types.ts:7,16`, `cost-dashboard.tsx:49,60` | Tipos espelhados, botão "Conectar/Migrar pelo hub", leitura do retorno, rótulos de `hubStatus`, sync "solicitado", textos de custo por número |
-| Docs | `docs/whatsapp-official-integration.md:9`, `docs/2026-10-05-whatsapp-omnichannel-base-plan.md:3,113`, invariantes 19 e 20 da doc atual da integração, `AGENTS.md` | Atualizar o que hoje nega o hub, a mudança dos invariantes e a versão mínima de rollback |
+| `channel-connections` | `channel-connections.service.ts:43-57`, `channel-connections.repo.ts:4-9` | `getOfficialChannel` (§3.3); `publicConnectionSelect` expõe `hubErrorCode`, `qualityRating`, `timezone`, sem segredos |
+| Chamadores de `getOfficialCredentials` (9) | `src/modules/whatsapp-outbound/outbound.service.ts:17,90`; `src/modules/whatsapp-templates/templates.service.ts:22,35`; `src/modules/whatsapp-outbound/media.service.ts:28`; `src/modules/whatsapp-costs/analytics.service.ts:17`; `src/modules/whatsapp-campaigns/campaigns.service.ts:66`; `src/modules/whatsapp-official/media.service.ts:24,57` | Trocar por `getOfficialChannel`. Mais os filtros `tokenEnc` de `outbound.repo.ts:51,92` e `preview.service.ts:22` |
+| `whatsapp-outbound` | `outbound.repo.ts:19-35,45-139`, `outbound.service.ts:14-161`, `template.ts`, `media.service.ts` | Envio pelo hub em `executeSend`, `acceptByHub`/`failByHub`, `recover` com a regra de §3.3, upload preguiçoso |
+| `whatsapp-official` | `ingest.repo.ts:31-76`, `receipts.repo.ts:8-48`, `message-parser.ts:8`, `media.service.ts`, `media.repo.ts:7-29`, `sync.repo.ts`, `webhook.service.ts:31` | `hubMediaId` no ingest, `played`, `timestamp` numérico, contato normalizado, status com conexão `disabled` |
+| `whatsapp-campaigns` | `dispatch.service.ts:15-42`, `campaigns.repo.ts:73-118`, `failures.ts`, `campaigns.service.ts:54-73` | Não liquidar `sending`, `extendLease`, liquidação por evento, classificação de §3.4 |
+| `whatsapp-templates` | `template-status.service.ts:17-34`, `templates.service.ts:22-42`, `templates.schema.ts`, `templates.repo.ts` | `applyHubTemplate`, CRUD pelo hub, variáveis coladas recusadas |
+| `whatsapp-maintenance` | `lifecycle.repo.ts:20-41`, `retention.repo.ts:6-16`, `src/routes/v1/whatsapp/events/index.ts` | Retenção e replay do journal novo |
+| `whatsapp-inbox` | `inbox.repo.ts:124,129`, `inbox.service.ts:26` | Exclusão limpa `hubRequest` e `hubMediaId`; `credentialExpired` por `hubErrorCode` |
+| `whatsapp-costs` | `message-cost.repo.ts:11,13,30,33,34,37`, `costs.schema.ts:6,13`, `analytics.service.ts`, `costs.service.ts:75,111,115` | Categoria, gratuidade por `type`, faixa por `tier`, `CostConsumptionSnapshot` |
+| Purga de organização | `src/modules/audit/organization-purge.service.ts:17-48` | `DELETE` das conexões e `deactivate` do workspace no hub (§3.1) |
+| `env` e boot | `src/env.ts`, `src/server.ts:19-36`, `.env.example`, `test/setup.ts` | `HUB_API_URL` (default `https://api.metahub.matratecnologia.com/v1`, hub:24), `HUB_API_KEY`, `HUB_WEBHOOK_SECRET`, `HUB_WEBHOOK_SECRET_PREVIOUS`, `HUB_ENABLED`, `HUB_JOBS_ENABLED` |
+| Web | `eloscrm-web/lib/types.ts:685-704`, `lib/queries/whatsapp-official.ts:12-17`, `components/whatsapp-official/{hub-connect.tsx (novo), official-tab.tsx, lifecycle-controls.tsx:25-26, template-manager.tsx}`, `app/(app)/integracoes/whatsapp/page.tsx`, `lib/cost-types.ts:7,16`, `cost-dashboard.tsx:49,60` | Botão "Conectar pelo hub", leitura do retorno, estados e avisos (`offboarded`, `disconnected`, restrição, `health`), sync "solicitado", custos por número |
+| Docs | `docs/whatsapp-official-integration.md:9`, `docs/2026-10-05-whatsapp-omnichannel-base-plan.md:3,113`, invariantes 19 e 20 da doc da integração, `AGENTS.md` | O que hoje nega o hub, a mudança dos invariantes e a versão mínima de rollback (D6) |
 
 ---
 
 ## 6. Modelo de dados (aditivo)
 
-Tudo aditivo: colunas nulas ou com default, nenhum valor novo de enum, tabela nova. Ordem por ambiente: `db push` em dev, depois em teste, depois em produção, **antes** de subir a imagem (`AGENTS.md:80-99`). Se pedir `--accept-data-loss`, parar.
+Colunas nulas ou com default, nenhum valor novo de enum, tabelas novas. `db push` em dev, teste e produção **antes** de subir a imagem (`AGENTS.md:80-99`, na raiz do repositório). Se pedir `--accept-data-loss`, parar.
 
 ```prisma
 model Organization {
-  hubWorkspaceId String? @unique
+  hubWorkspaceId   String?  @unique
+  hubWebhookEvents HubWebhookEvent[]
 }
 
 model ChannelConnection {
-  officialRoute     String    @default("direct") // "direct" | "hub"; uazapi ignora
-  hubConnectionId   String?   @unique
-  hubStatus         String?   // pending|active|error|disconnected, texto do hub
-  hubErrorCode      String?
-  hubTokenExpiresAt DateTime? // token do app do hub; não confundir com tokenExpiresAt
-  hubHealth         Json?
-  qualityRating     String?
-  hubEventAt        DateTime? // createdAt do último envelope connection.* aplicado
-  hubCheckedAt      DateTime?
+  hubConnectionId  String?   @unique
+  hubErrorCode     String?
+  hubHealth        Json?
+  qualityRating    String?   // foto da conclusão (hub:606)
+  timezone         String?   // IANA (hub:605); timezoneId fica para o id numérico legado
+  hubEventAt       DateTime? // createdAt do último envelope connection.* aplicado
+  hubCheckedAt     DateTime?
+  hubWebhookEvents HubWebhookEvent[]
 }
 
 model OfficialSendCommand {
-  route        String    @default("direct") // fixado em createCommand
   hubMessageId String?   @unique
   hubRequest   Json?     // corpo exato enviado; entra na retenção e na exclusão
   hubState     String?
   hubErrorCode String?
   submittedAt  DateTime?
-  @@index([route, status, submittedAt])
+  @@index([status, submittedAt])
 }
 
 model WhatsappMessage {
-  hubMediaId String?   // officialMediaId fica NULL no caminho do hub
-  hubSeenAt  DateTime? // a via do hub viu esta mensagem
+  hubMediaId String? // officialMediaId fica NULL no caminho do hub
   @@index([hubMediaId])
-}
-
-model OfficialDeliveryReceipt {
-  hubSeenAt DateTime?
 }
 
 model OfficialUpload {
@@ -408,8 +398,16 @@ model OfficialTemplate {
   @@unique([organizationId, hubTemplateId])
 }
 
-model CostAnalyticsSnapshot {
-  source String @default("meta_cost") // "meta_cost" | "computed"
+model CostConsumptionSnapshot {
+  id             String   @id @default(cuid())
+  organizationId String
+  connectionId   String
+  month          String   // YYYY-MM no fuso da conta
+  currency       String?
+  items          Json     // meta.items do /consumption
+  amount         Decimal?
+  fetchedAt      DateTime
+  @@unique([organizationId, connectionId, month])
 }
 
 model HubWebhookEvent {
@@ -430,7 +428,6 @@ model HubWebhookEvent {
   leaseExpiresAt  DateTime?
   nextAttemptAt   DateTime  @default(now())
   lastErrorCode   String?
-  itemResults     Json?
   receivedAt      DateTime  @default(now())
   processedAt     DateTime?
   payloadPurgedAt DateTime?
@@ -440,191 +437,93 @@ model HubWebhookEvent {
 }
 ```
 
-- `CostAnalyticsSnapshot.source` precisa entrar na chave única (`prisma/schema.prisma:1565`) para não colidir valor reportado com calculado. Trocar a chave não é aditivo: fica para uma fase própria, ou a linha calculada usa uma chave separada até lá (decisão em F7).
-- Índices em tabela grande (`WhatsappMessage.hubMediaId`): criar antes com `CREATE INDEX CONCURRENTLY` e o nome que o Prisma geraria, para o `db push` responder "in sync" sem lock de escrita na ingestão.
-- Checagem objetiva antes da imagem: `SELECT table_name, column_name FROM information_schema.columns WHERE table_name IN (…)`, só leitura, conferindo cada coluna nova. Sem o push, quebra também o caminho direto e a uazapi, porque a imagem lê essas tabelas sem `select` (ex.: `onboarding.repo.ts:42`, `receipts.repo.ts:15`). Depois do push, replay dos eventos `failed` dos dois journals.
-- Fica como legado nesta migração: `OfficialOnboarding` (sem linhas novas), `OfficialWebhookEvent` (drena e sofre retenção), `tokenEnc` (zerado só no ponto sem volta), `OfficialSyncRequest` (alimentado por `connection.sync[]` em conexões nascidas pelo hub).
-- Leituras retrocompatíveis desde o primeiro commit (memória `deploy-continuo-retrocompat.md`): `OfficialSendCommand.payload` lido pela `route` do comando; `OfficialTemplate.definition` no formato Meta, com `id` numérico ou `hub:`; `WhatsappMessage.recipientIdentity` nos dois formatos atuais.
-- Remoção de colunas e tabelas não é aditiva: fase F10, com `db push` próprio.
+- Únicos novos em tabela populada (`Organization.hubWorkspaceId`, `ChannelConnection.hubConnectionId`, `OfficialSendCommand.hubMessageId`, `OfficialTemplate(organizationId, hubTemplateId)`) fazem o `db push` parar pedindo `--accept-data-loss`, mesmo com a coluna toda nula. Saída no padrão do `account.issuer` (`AGENTS.md:101-127`): `ALTER TABLE … ADD COLUMN` e `CREATE UNIQUE INDEX CONCURRENTLY` com o nome que o Prisma geraria, antes do push, que então responde "in sync". O mesmo para `WhatsappMessage.hubMediaId`, por causa do lock de escrita.
+- Checagem antes da imagem: `SELECT table_name, column_name FROM information_schema.columns WHERE table_name IN (…)`, só leitura. Sem o push, quebra também a uazapi, porque a imagem lê essas tabelas sem `select`.
+- Legado: `OfficialOnboarding` (sem linhas novas), `OfficialWebhookEvent` (retenção), `tokenEnc` (nulo nas conexões do hub), `OfficialSyncRequest` (alimentado por `connection.sync[]`). A remoção é F5, com `db push` próprio.
 
 ---
 
-## 7. Migração das conexões existentes, corte e rollback
+## 7. Fases com critério de verificação
 
-### 7.1 Exige reconexão? (Q1)
+Testes rodam com `.env.test` por cima de tudo (`test/setup.ts`); nenhum teste ou script local usa o `.env` de produção.
 
-**Cenário B, app Meta diferente (o que a doc do hub descreve, hub:622-633).**
-- O token atual é do app próprio e não se transfere.
-- O cliente abre uma sessão do hub e, no fluxo da Meta, escolhe a WABA e o número que já existem; nada é criado do zero (hub:624). Se algo precisa ser feito no celular é pergunta ao hub (§4.3), a ensaiar no piloto.
-- Durante a sobreposição, a Meta pode entregar o webhook aos dois apps (hub:627); dedup pelo wamid e envio por um caminho só.
-- O histórico pode não ser reimportado (hub:633); para número migrado, o histórico já está no app.
-- Conta com mais de um número Coexistence → `META_PHONE_AMBIGUOUS` (hub:632): acionar a Matra.
+**F0. Pré-requisitos**
+1. Trocar os textos de `lifecycle-controls.tsx:25-26` (desconectar no celular derruba o número também no hub, hub:636; "Conectar com a Meta" aponta para um onboarding que responde 409). → `pnpm lint && pnpm typecheck` no web; deploy independente das outras fases.
+2. Equipe Matra: app de produção (chave, endpoint, segredo, allowlist) e app de dev (chave, túnel, `returnUrl`). → `GET /v1/me` com as duas chaves responde 200, rodado pelo usuário.
+3. Estado do legado, por SELECT só de leitura rodado pelo usuário: conexões `cloud_api` por status; comandos de conexões `cloud_api` fora de estado terminal (`pending`, `preparing`, `sending`, `uncertain`); WABAs com mais de uma org. → comandos não terminais encerrados por ação manual auditada antes de D5 reaproveitar a linha (o `knownResponses` só concilia `uncertain` com `externalMessageId`, `outbound.repo.ts:139`, e os `pending` voltam ao `executeSend`, que exige token, `outbound.service.ts:160`, e eles bloqueiam a exclusão do atendimento, `inbox.repo.ts:115-116`); WABA em duas orgs decidida antes da primeira sessão.
 
-**Cenário A, mesmo app Meta.**
-- O callback do webhook é um por app: a virada seria global, todas as orgs juntas.
-- Exige H4, importar todas as conexões, trocar o callback e virar as rotas em lote. Sem convivência por conexão, sem reconexão do cliente.
-- O passo de desassinar a WABA (§7.3) **não existe**: desassinaria o próprio hub.
+**F1. Release M1: schema, receptor e conexão**
+1. Schema da §6. → índices únicos criados antes; `pnpm db:push`, `pnpm db:push:test`, `pnpm typecheck`, `pnpm test` verdes; em produção, checagem por `information_schema` antes da imagem.
+2. Envs e cliente. `test/setup.ts` força chave fictícia, segredo aleatório e `HUB_API_URL=http://127.0.0.1:9/v1`. → `test/meta-hub-client.test.ts` com spy de `fetch`: host fixo, header, `429` com `Retry-After` e sem `code`, 5xx/rede = `uncertain`, paginação, `redirect: "error"`.
+3. Receptor. → `test/meta-hub-webhook.test.ts`: assinatura válida → 200; inválida → 401; `ts` fora de ±5 min → 401; headers malformados → 401 sem calcular HMAC; segredo anterior aceito; `id` repetido → 1 linha; `type` desconhecido → 2xx `unsupported`; falha de persistência → 503; workspace desconhecido → `unresolved`; workspace da org A com conexão da org B → `unresolved`.
+4. `applyHubConnection` e onboarding pelo hub (rota, `hub-connect.tsx`, `page.tsx`). → casos: `created → active → error(token_expired) → disconnected`; reconexão por `connection.updated` com id desconhecido casa; D5 reaproveita a linha `disabled` da org, recusa a de outra org e cria linha nova para número inédito; `businessPortfolioId` gravado antes da primeira mensagem; evento velho não regride; `sync[]` terminal não regride; `tokenExpiresAt` não é sobrescrito com `null` em `error`; corpo da sessão sem campo extra e `returnUrl` sem query. Web: `pnpm lint && pnpm typecheck && pnpm build` e `screenshot` da aba.
+5. M1 em produção com `HUB_ENABLED` desligado. → registrado no `AGENTS.md` como versão mínima de rollback a partir da primeira conexão (D6).
 
-O restante desta seção descreve o cenário B.
+**F2. Recebimento e envio**
+1. `received`, `echo`, `status meta`. → portar os casos de `test/whatsapp-official-webhook.test.ts` para envelopes assinados (`test/meta-hub-inbound.test.ts`); `meta.contact` objeto e `null`; eco com `timestamp` numérico; `played` sem erro.
+2. Mídia. → `test/meta-hub-incoming-media.test.ts`: `409` não consome tentativa; `media.updated` antes da mensagem; `410` e `404` terminais; sha256 do `GET` divergente → `failed`; redirect recusado; host fora de `*.r2.cloudflarestorage.com` recusado; nenhum `Authorization` no download.
+3. Histórico, contatos e identidade. → por tipo de mensagem no `history-adapter` (texto, cada mídia, contexto, contatos, localização, `media_placeholder`); thread com `waId: null`; bloco com `phase` nulo; contato só com `userId`; `user_changed_number` com e sem `previous.userId`; `kind` desconhecido.
+4. Envio (`getOfficialChannel` nos chamadores, `hub-payload.ts`, `executeSend`, `acceptByHub`/`failByHub`, `recover`). → portar `test/whatsapp-outbound.test.ts`; um formato por tipo de mídia, sem campo vazio; `accepted` antes e depois do status; evento antes de `hubMessageId` aplica na retentativa; `uncertain → accepted`; `abandoned → accepted` com `overridesAdminResolution`; `sentAt` = `timestamp` do evento; recibo antes do `accepted` reconciliado; POST repetido com a mesma chave dentro da janela; fora dela, `failed` local promovido por evento posterior.
+5. Templates. → portar `test/whatsapp-template-status.test.ts` e `test/whatsapp-template-management.test.ts`: `version`; `FLAGGED` sem `version` maior gera aviso; casamento por `metaTemplateId`; evento antigo sem `wabaId`; sync parcial não marca `MISSING`; `definition` regravada sem mudança não muda o hash.
 
-### 7.2 Runbook por número (cenário B)
-1. **Pré-requisitos.** N0 e a imagem com o caminho hub 100% no ar (§8); texto de `lifecycle-controls.tsx:25` já trocado; conexão local `connected` com token válido e `tokenExpiresAt` além do fim previsto da convivência.
-2. **Gestor abre a sessão.** "Migrar para o hub" chama `POST /v1/whatsapp/hub/connect-sessions {connectionId}`: garante o workspace, abre a sessão com `requireCoexistence: true` e grava `hubStatus: "pending"` na linha.
-3. **Qualquer `connection.*` com id ainda desconhecido.** Casa por org do workspace + `phoneNumberId` + `wabaId` e confere `businessId`. Grava `hubConnectionId` e só colunas `hub*` (D5). Outra org → `failed WHATSAPP_NUMBER_UNAVAILABLE` com alerta.
-4. **`connection.updated` `active`.** `hubStatus = active`. Começa a convivência: as duas vias ingerem. Mensagem deduplica por `@@unique([connectionId, providerMessageId])` (`prisma/schema.prisma:1109`); recibo pela regra semântica (D6); as duas ingestões rodam sob `withConnectionLock`. A mídia fica com quem ingeriu primeiro (`officialMediaId` ou `hubMediaId`); as duas funcionam.
-5. **Convivência.** Por no mínimo 7 dias (parâmetro). Medir com SELECTs só de leitura:
-   - mensagens `origin = 'cloud_api'` da conexão na janela com `hubSeenAt IS NULL` (alvo: 0);
-   - recibos com `hubSeenAt IS NULL`;
-   - recibos duplicados por `(externalMessageId, status)`;
-   - `HubWebhookEvent` `failed`.
+**F3. Disparos e custos**
+1. `dispatch.service.ts`, `extendLease`, `settle.service.ts`, `failures.ts`. → portar `test/whatsapp-campaigns.test.ts`, incluindo a pausa global (:473-545) a partir de `failed` assíncrono e de `409` síncrono; reentry com hub `pending` reestende a lease; `accepted` tardio promove `unknown → sent`; tabela de §3.4 em teste unitário, inclusive `409 IDEMPOTENCY_KEY_REUSED` e `400` sem `code`; campanha não inicia com `syncedAt` nulo.
+2. Header de mídia subido uma vez por campanha. → `test/whatsapp-campaign-components.test.ts` com `uploadMedia` chamado 1 vez para N destinatários.
+3. Custos. → `test/whatsapp-costs.test.ts`: categoria com `_`, `free_group_customer_service`, gratuidade e cobrança por `type`; `CostConsumptionSnapshot` com mock de `getConsumption`, faixa por `tier`; ausência de tarifa ou país nunca vira zero.
 
-### 7.3 Virada e corte (por WABA)
-1. **Virar a rota.** `POST /v1/whatsapp/maintenance/wabas/:wabaId/route {route:"hub"}`, só com `HUB_ENABLED`. Sob os advisory locks `whatsapp-connection:<org>:<conn>` e `campaign-dispatch:<org>:<conn>` de cada conexão da WABA (`lifecycle.repo.ts:21,25`), na mesma transação, exige:
-   - todas as conexões `cloud_api` da WABA na org com `hubStatus = active`;
-   - nenhum comando `direct` em `pending`/`preparing`/`sending`;
-   - nenhuma campanha `running`/`paused`/`needs_review`, ou conferência de hash dos templates pelas duas fontes sem divergência (§3.4);
-   - templates casados (`hubTemplateId` preenchido) por `(wabaId, name, language)`.
+**F4. Piloto e abertura**
+1. Piloto no app de dev, com número de teste próprio (hub:389). → ligação por D5, `active`, sync recusado ou aceito sem afetar a conexão, uma mensagem recebida, um envio manual e um de template `accepted → delivered` com `MessageCost`, mídia nos dois sentidos, uma campanha de 2 destinatários.
+2. `HUB_ENABLED` em produção; primeiro número real de uma org interna. → os mesmos critérios, mais zero `HubWebhookEvent` `failed` em 7 dias (parâmetro).
+3. Abertura para os clientes. → reconexão pelo gestor de cada org, com o texto de F0.1 já publicado.
 
-   A partir daí, `status`/`tokenExpiresAt`/`displayPhoneNumber`/`verifiedName`/`isOnBusinessApp` espelham o hub e o caminho direto vira no-op para essa WABA (D5). Auditoria `CONNECTED` com `operation: "hub_route"`.
-2. **Ponto sem volta (por WABA).** Depois da janela estável (parâmetro) e com o critério de `hubSeenAt` em zero:
-   - conferir que todas as conexões da WABA na org estão em `hub`;
-   - `GET {wabaId}/subscribed_apps` com o token antigo lista **dois** apps, e o do hub é diferente de `META_WHATSAPP_APP_ID`;
-   - `unsubscribeWaba(token, wabaId, expectedAppId)` (função temporária nova em `graph.ts`; hoje só existe `subscribeWaba`, `graph.ts:35`), que confere o app antes do `DELETE`;
-   - zerar `tokenEnc`.
+**F5. Remoção do código direto (não aditiva, `db push` próprio)**
+1. Mover `eventHash` para `src/lib/` e os demais símbolos usados fora de `whatsapp-official/` (`objectOf`, `withConnectionLock`, `reconcileReceipts`, `journalQuerySchema`). → `pnpm typecheck` verde antes de apagar qualquer arquivo.
+2. Remover os módulos, rotas, jobs e envs de §2.1, `OfficialOnboarding` e os testes `whatsapp-onboarding.test.ts`, `whatsapp-official-graph.test.ts`, `whatsapp-official-media-download.test.ts`, `whatsapp-official-crypto.test.ts`. → `pnpm lint`, `typecheck`, `test`, `build`.
+3. Remover a coluna `tokenEnc`, editando também a remoção da instância uazapi (`lifecycle.repo.ts:16`) e o `disableConnection` (`lifecycle.repo.ts:38`), depois que o `OfficialWebhookEvent` esvaziar pela retenção. → `SELECT count(*) FROM "ChannelConnection" WHERE provider = 'cloud_api' AND "tokenEnc" IS NOT NULL` = 0 antes do push.
+4. Atualizar os docs de §5.3.
 
-   Qualquer condição falhando → abortar. Nunca offboard, desconectar no celular ou deregister (hub:630).
-3. **Legado antes do F10.** Zero comandos `direct` fora de estado terminal; os `uncertain` diretos sem wamid (que `knownResponses` nunca concilia, `outbound.repo.ts:139`, e bloqueiam a exclusão do atendimento, `inbox.repo.ts:115-116`) são encerrados por ação manual auditada. Mídia `pending`/`failed` com `officialMediaId` e sem token passa a usar `hubMediaId` quando existir.
-
-### 7.4 Flags
-- `HUB_WEBHOOK_SECRET` presente: receptor ligado.
-- `HUB_ENABLED`: envio pelo hub, sessões e virada de rota.
-- `HUB_JOBS_ENABLED` (ou `NODE_ENV === "production"`): jobs do hub. A chave de produção fica só no cofre da plataforma de deploy; o `.env` local recebe só a chave do app de dev, porque o `.env` da API aponta para produção (memória `env-da-api-aponta-para-producao.md`) e a URL do hub é a mesma para dev e prod (hub:24, hub:362).
-- `HUB_ONBOARDING_DEFAULT` (`hub` \| `direct`): onde nasce uma conexão nova (Q2).
-- Por conexão: `officialRoute`. Por comando: `route`.
-
-### 7.5 Rollback
-- **Antes do ponto sem volta:** virar a rota da WABA de volta para `direct`; esperar os comandos `hub` em voo chegarem a estado terminal (a imagem com o caminho hub continua aplicando eventos); só então reverter a imagem, e nunca abaixo de N0 (D7).
-- **Imagem nova em crash loop:** reverter para N0. N0 não envia nem liquida comandos `hub` (filtros de §8 F1), e o receptor de N0 continua gravando no journal; os comandos ficam parados até a imagem voltar.
-- **Depois do retorno:** anotar o horário do rollback e rodar `GET /v1/events?status=failed` → `redeliver` (hub:1137-1159) para o intervalo.
-- **Depois do ponto sem volta:** voltar ao direto exige um Embedded Signup próprio, que está vencido (`docs/whatsapp-embedded-signup-implementation.md:7`). Por isso o token e a inscrição antiga ficam até o fim da convivência.
+**F6 (separada). Lead Ads pelo hub.** `adName`/`campaignName` saem `null` até um lead de anúncio real confirmar os campos no hub.
 
 ---
 
-## 8. Fases com critério de verificação
+## 8. Testes
 
-Testes rodam com `.env.test` carregado por cima de tudo (`test/setup.ts`); nenhum teste ou script local usa o `.env` de produção.
-
-**F0. Pré-requisitos e decisões**
-1. Responder Q1 a Q8. → decisões registradas.
-2. Equipe Matra: app de dev (chave, túnel, `returnUrl`) e de produção (endpoint, segredo, allowlist). → `GET /v1/me` com a chave de dev responde 200, rodado pelo usuário.
-3. Pedir H1 a H3 (e H4 se Q1 = mesmo app). Capturar no app de dev um `whatsapp.message.status` real. → formato do `meta` documentado e conferido contra `receiptSchema`.
-4. Trocar o texto de `lifecycle-controls.tsx:25`. → `pnpm lint && pnpm typecheck` no web.
-
-**F1. Release N0 (expand), sem mudar comportamento**
-1. Schema da §6. → `pnpm db:push`, `pnpm db:push:test`, `pnpm typecheck`, `pnpm test` verdes; em produção, checagem por `information_schema` antes da imagem.
-2. Filtros `route = "direct"` em `recover` e `knownResponses` (`outbound.repo.ts:133-139`); reentry de campanha ignora comando `hub` (`dispatch.service.ts:20-24`); `dueConnections` exclui `officialRoute = "hub"`; handler de template direto vira no-op para WABA toda em `hub`; `createCommand` grava `route` lido de `officialRoute`. → testes: comando `hub` `pending` não é devolvido por `recover`; `sending` `hub` vencido não vira `uncertain`; destinatário com comando `hub` não é liquidado `unknown`.
-3. Envs em `src/env.ts`; `.env.example` vazio; `test/setup.ts` força chave fora do formato `mh_live_`, segredo aleatório e `HUB_API_URL=http://127.0.0.1:9/v1`. → teste que falha se a chave de teste passar na validação do cliente.
-4. Receptor `src/routes/webhooks/meta-hub/index.ts` gravando só no journal (sem domínio). → `test/meta-hub-webhook.test.ts`: assinatura válida → 200; inválida → 401; `ts` fora de ±5 min → 401; headers malformados → 401 sem calcular HMAC; segredo anterior aceito; `id` repetido → 1 linha; `type` desconhecido → 2xx `unsupported`; falha de persistência → 503; workspace desconhecido → `unresolved`; workspace da org A com conexão da org B → `unresolved`.
-5. N0 em produção e estável. → registrado no `AGENTS.md` como versão mínima de rollback.
-
-**F2. Cliente, journal e conexões**
-1. `src/lib/meta-hub/client.ts`. → `test/meta-hub-client.test.ts` com spy de `fetch`: host fixo, header, `429` com `Retry-After`, 5xx/rede = `uncertain`, paginação, `redirect: "error"`.
-2. Processamento do journal e `applyHubConnection` (D5). → casos: `created → active → error(token_expired) → disconnected` numa conexão nascida pelo hub; `connection.created pending` sobre linha `direct connected` não muda `status`/`tokenExpiresAt` e `createCommand` continua aceitando; reconexão por `connection.updated` com id desconhecido casa; `businessId` divergente não liga; evento velho não regride; `sync[]` com estado terminal não regride.
-3. Listagem/replay dos dois journals e retenção. → `whatsapp-maintenance.test.ts` estendido, incluindo expurgo de `unsupported`, `failed` esgotado e `hubRequest`.
-
-**F3. Onboarding pelo hub**
-1. `src/routes/v1/whatsapp/hub/index.ts`. → teste com mock: corpo enviado, `returnUrl`, `requireCoexistence:true`, `url` fora do log, `409 WORKSPACE_DISABLED` mapeado.
-2. Web (`hub-connect.tsx`, `page.tsx`, `whatsapp-official.ts`, `official-tab.tsx`; `official-signup.tsx` só com `HUB_ONBOARDING_DEFAULT = direct`). → `pnpm lint && pnpm typecheck && pnpm build` no web e `screenshot` da aba.
-
-**F4. Inbound pelo hub**
-1. `received`, `echo`, `status meta` (D1, D6, `played`). → portar os casos de `test/whatsapp-official-webhook.test.ts:53-317` para envelopes assinados (`test/meta-hub-inbound.test.ts`); dual-ingest com **dois payloads diferentes** para o mesmo evento (um com `conversation: null`, outro sem `billable`) gera 1 `WhatsappMessage`, 1 `OfficialDeliveryReceipt` e 1 `MessageCost` sem revisão nova; `meta.contact: null` usa `data.message.from.name`.
-2. Mídia pelo hub. → `test/meta-hub-incoming-media.test.ts`: `409` não consome tentativa; `media.updated` antes da mensagem; `media.updated` zera tentativas; `410` → `failed`; sha256 divergente → `failed`; redirect recusado; host fora da allowlist recusado; nenhum `Authorization` no download.
-3. Histórico, contatos e identidade. → portar `test/whatsapp-official-webhook.test.ts:168,187,241,272`; casos novos: thread com `waId: null`, `timestamp` ISO, bloco de mídia com `phase` nulo enriquecendo placeholder sem mexer em `progress`, contato só com `userId`, `user_changed_number`.
-4. Templates (`applyHubTemplate`). → portar `test/whatsapp-template-status.test.ts:54-115` para `version`; desconhecido faz upsert; com WABA `direct` só grava `hubTemplateId`/`hubVersion`.
-5. Automação de lead. → `test/whatsapp-inbound-automation.test.ts` com mensagem do hub: `cloud_api` cria lead; eco e histórico não.
-
-**F5. Outbound pelo hub**
-1. `getOfficialChannel` nos 9 chamadores. → testes atuais verdes para `direct`; um teste por chamador numa conexão `hub` sem `tokenEnc`.
-2. `hub-payload.ts` e o ramo hub de `executeSend`. → portar os casos de `test/whatsapp-outbound.test.ts:63-259`, reescrevendo as asserções presas ao formato Graph (:131-132 destinatário, :138 reply, :144 timeout vira "reenvio idêntico dentro da janela; fora dela, consulta por chave"); upload `429` devolve a `pending`.
-3. `acceptByHub`/`failByHub`, `recover`/reconcile. → `accepted` antes do status; status antes do `accepted` (`messageId: null`); evento antes de `hubMessageId` gravado fica `pending` e aplica na retentativa; `uncertain → accepted` (reconciled); `abandoned → accepted` com `overridesAdminResolution`; eco antes do `accepted` (`test/whatsapp-outbound.test.ts:200`); `sentAt` = `timestamp` do evento; comando com mais de 24 h sem `hubMessageId` não reenvia.
-4. Templates CRUD e sync. → portar `test/whatsapp-template-management.test.ts:34-67`; sync parcial não marca `MISSING`; template `hub:<id>` passa em `templateSchema`; campanha `paused` criada com template da Graph retoma sem `CAMPAIGN_TEMPLATE_CHANGED` depois do sync pelo hub.
-5. Web (`template-manager.tsx`: sync "solicitado"). → lint, typecheck e build.
-
-**F6. Disparos pelo hub**
-1. `dispatch.service.ts`, `campaigns.repo.ts` (`extendLease`), `settle.service.ts`. → portar `test/whatsapp-campaigns.test.ts`, incluindo a pausa por falha global (:473-545) a partir de `failed` assíncrono e de `409` síncrono; `accepted` tardio promove `unknown → sent`; retomada com chave `:<attempts>`.
-2. `failures.ts`. → teste unitário da tabela de §3.4, inclusive `meta:<n>` e `meta:unknown`.
-3. Header de mídia subido uma vez por campanha. → `test/whatsapp-campaign-components.test.ts` com `uploadMedia` chamado 1 vez para N destinatários.
-4. Cancelamento (quando H-D3 existir). → comando `pending` no hub cancelado.
-
-**F7. Custos**
-1. Categoria com `_`, `free_group_customer_service`, gratuidade por `type`. → `test/whatsapp-costs.test.ts`.
-2. `/costs/sync` pela `consumption` × tarifa, `CostAnalyticsSnapshot.source`, textos por número. → mock de `getConsumption`; ausência de tarifa ou país nunca vira zero.
-3. Moeda de conexão nova. → conexão sem moeda → os 422 atuais com texto ajustado.
-
-**F8. Migração em produção**
-- Runbook de §7.2/§7.3, começando por uma conexão interna ou piloto. → por WABA: `hubConnectionId` preenchido e `hubStatus = active`; janela de convivência com `hubSeenAt IS NULL` = 0 em mensagens e recibos, zero recibos duplicados, zero `HubWebhookEvent` `failed`; depois da virada, um envio manual e um de template `accepted → delivered` com `MessageCost`.
-
-**F9. Corte**
-- Ponto sem volta por WABA (§7.3). Com todas as WABAs no hub: desligar o receptor direto e `scheduleOnboardingRecovery`. → `SELECT count(*) FROM "ChannelConnection" WHERE "tokenEnc" IS NOT NULL` = 0; zero comandos `direct` fora de estado terminal; journal direto sem `pending`/`failed` por 30 dias (parâmetro).
-
-**F10. Limpeza (não aditiva, `db push` próprio)**
-- Mover `eventHash` para `src/lib/` (uso da uazapi em `broadcasts.service.ts:16`). Remover os módulos e envs de §2.1, `OfficialOnboarding`, `tokenEnc` e os testes `whatsapp-onboarding.test.ts`, `whatsapp-official-graph.test.ts`, `whatsapp-official-media-download.test.ts`, `whatsapp-official-crypto.test.ts`. Atualizar os docs de §5.3. → `pnpm lint`, `typecheck`, `test`, `build`.
-
-**F11 (separada). Lead Ads pelo hub.** Bloqueio de paridade no hub: `adName`/`campaignName` saem sempre `null` (hub:1392).
-
----
-
-## 9. Testes
-
-- **Infra:** `test/helpers/hub.ts` com `vi.mock("../src/lib/meta-hub/client.js")`, `signHubEvent(envelope, secret, ts)` e `hubConnectionFixture` (`officialRoute: "hub"`, sem `tokenEnc`, com `hubConnectionId`); fixture de conexão em convivência (`direct` com `hubConnectionId`); `test/helpers/official-connection.ts` estendido. Postgres real, hub mockado, como a suíte atual (`AGENTS.md`, seção de testes).
-- **Portados, não descartados:** os casos de domínio presos ao formato Graph em `test/whatsapp-official-webhook.test.ts`, `test/whatsapp-outbound.test.ts`, `test/whatsapp-campaigns.test.ts`, `test/whatsapp-template-status.test.ts`, `test/whatsapp-template-management.test.ts` ganham versão por envelope do hub. Os originais ficam enquanto existir conexão `direct`.
-- **Compatibilidade N0:** a imagem N0 não toca comandos `hub` (recover, reentry de campanha, `knownResponses`) e não chama Graph para conexão `hub` (sync-request, template).
-- **Convivência:** evento `connection.*` não altera estado operacional de linha `direct`; dual-ingest com payloads diferentes; template do hub não cria duplicata nem `MISSING` em WABA `direct`; disable bloqueado na convivência.
-- **Segurança:** assinatura, janela de tempo, headers malformados, rotação de segredo, tenant cruzado, download de mídia sem Bearer e com allowlist, `url` de sessão e de mídia fora do log.
+- **Infra:** `test/helpers/hub.ts` com `vi.mock("../src/lib/meta-hub/client.js")`, `signHubEvent(envelope, secret, ts)` e `hubConnectionFixture` (com `hubConnectionId`, sem `tokenEnc`); `test/helpers/official-connection.ts` estendido. Postgres real, hub mockado, como a suíte atual.
+- **Portados:** os casos de domínio presos ao formato Graph em `test/whatsapp-official-webhook.test.ts`, `test/whatsapp-outbound.test.ts`, `test/whatsapp-campaigns.test.ts`, `test/whatsapp-template-status.test.ts`, `test/whatsapp-template-management.test.ts` ganham versão por envelope do hub. Os originais saem em F5.
+- **Segurança:** assinatura, janela de tempo, headers malformados, segredo anterior, tenant cruzado, download de mídia sem Bearer e com allowlist, `url` de sessão e de mídia fora do log.
 - **LGPD:** retenção e exclusão de atendimento limpam `hubRequest` e `hubMediaId`.
 - **Web:** `pnpm lint && pnpm typecheck && pnpm build` e `screenshot` da aba oficial e do dashboard de custos.
 
 ---
 
-## 10. Riscos
+## 9. Riscos
 
-**R1. Imagem antiga processando trabalho do hub.** Coberto pela release N0 (D7). Risco residual: alguém reverter abaixo de N0; mitigação é o registro no `AGENTS.md` e a ordem de rollback de §7.5.
+**R1. Rollback abaixo de M1.** Sem receptor nem envio para a conexão do hub, o canal oficial para; os eventos esperam nas reentregas por cerca de 22 h (hub:1123). Mitigação: registro no `AGENTS.md` (D6) e `redeliver` do intervalo depois da volta.
 
-**R2. Ponto sem volta.** Antes de desassinar e zerar o token, o rollback é virar a rota. Depois, voltar ao direto exige Embedded Signup próprio vencido. O passo é por WABA e confere os dois apps antes do `DELETE` (§7.3).
+**R2. Perda de mensagens.** `DELETE` no hub, desconexão no celular ou offboard perdem o intervalo (hub:624, hub:636), e a reconexão não o recupera. Indisponibilidade nossa acima de cerca de 22 h deixa entregas `failed`: recuperação por `redeliver` dentro de 30 dias (hub:1125). Desativar o endpoint no hub faz os eventos nascerem sem entrega (hub:1143): nunca pedir.
 
-**R3. Perda de mensagens.** `DELETE` no hub, desconexão no celular ou offboard (hub:614-618, hub:630) estão fora do fluxo. Indisponibilidade nossa acima de cerca de 22 h deixa entregas `failed` no hub (hub:1103-1115): recuperação por `redeliver`. Desligar o receptor causa o mesmo, por isso ele não depende de `HUB_ENABLED`.
+**R3. Mudança dos invariantes 19 e 20.** No hub, repetir com a mesma chave e o mesmo corpo é seguro enquanto a mensagem existe (hub:693), mas um POST que nunca chegou vira envio novo. Regra: repetição só na janela curta e depois do `finalCheck` (§3.3). `131000`/`131016`/`133004` com 4xx passam de `failed` a `uncertain` (hub:746). Atualizar a doc dos invariantes.
 
-**R4. Mudança dos invariantes 19 e 20.** Hoje, timeout depois de submeter vira `uncertain` sem reenvio, e todo envio é revalidado antes. No hub, o reenvio com a mesma chave e o mesmo corpo é seguro enquanto a mensagem existe no hub (hub:687), mas um POST que nunca chegou vira envio novo. Regra: reenvio só dentro da janela curta e depois do `finalCheck`; fora dela, consulta por chave e nunca reenvio. Também muda a classificação de `131000`/`131016`/`133004`, que passam de `failed` a `uncertain` (hub:740). Atualizar a doc dos invariantes.
+**R4. Teto de taxa compartilhado.** 600 req/min por chave para as rotas em geral, para todas as orgs; 30/min para upload e para escritas e sync de template (hub:398-402). `GET` de template, poll de envio, `recover` e refresh entram nos 600. Cache por `version` e poll só como fallback.
 
-**R5. Teto de taxa compartilhado.** 600 req/min por chave para as rotas em geral, para todas as orgs (hub:396); upload 30/min e 2 simultâneos por app (hub:398, hub:400). `GET` de template, poll de envio e refresh entram nos 600. Cache por `hubVersion` e poll só como fallback.
+**R5. Chave de produção em máquina local.** A URL do hub é uma só (hub:24) e a chave de dev também é `mh_live_` (hub:386): o formato não protege. Mitigação: a chave de produção fica só no cofre da plataforma de deploy, e os jobs que chamam o hub exigem `HUB_JOBS_ENABLED=true` explícito.
 
-**R6. Chave de produção em máquina local.** A URL do hub é a mesma em dev e prod (hub:24, hub:362); só a chave isola. Com a chave de produção no `.env`, um `pnpm dev` rodaria reconcile e recover contra o banco de produção. Mitigação em §7.4.
+**R6. `businessPortfolioId` mudando sem evento** (hub:604). Mudaria o escopo de identidade e duplicaria contatos (`identity.repo.ts:14,20`). O refresh diário detecta e marca `hubErrorCode = BUSINESS_CHANGED` com auditoria, sem sobrescrever, como faz hoje o `WHATSAPP_ASSET_CHANGED` (`src/modules/whatsapp-onboarding/onboarding.repo.ts:42-44`).
 
-**R7. Dedup entre vias.** O item cru pode diferir entre o app próprio e o hub (D1). Mitigação: dedup semântica (D6) e medição por `hubSeenAt`.
+**R7. `db push` esquecido ou parado por índice único.** Atinge todas as conexões, inclusive a uazapi (§6). Mitigação: índices criados antes e checagem por `information_schema` como passo obrigatório do deploy.
 
-**R8. Divergência de template na virada.** `components` do hub diferentes do snapshot Graph levam campanhas a revisão (§3.4). Mitigação: conferência de hash antes da virada.
+**R8. Envio que sai depois de "Encerrar" ou do disable.** Sem H-D3, o que estiver `pending` no hub sai, até cerca de 14 min depois.
 
-**R9. Histórico não reimportado** em número migrado (hub:633). Aceitável; monitorar `OfficialSyncRequest` `failed` nas conexões novas.
-
-**R10. `businessPortfolioId` mudando sem evento** (hub:600). Mudaria o escopo de identidade e duplicaria contatos (`identity.repo.ts:14,20`). O refresh detecta e marca `hubErrorCode = BUSINESS_CHANGED` com auditoria, sem sobrescrever, como faz hoje o `WHATSAPP_ASSET_CHANGED` (`onboarding.repo.ts:42-44`).
-
-**R11. `db push` esquecido.** Atinge todas as conexões, inclusive direto e uazapi (§6). Mitigação: checagem por `information_schema` como passo obrigatório do deploy.
-
-**R12. Rotação do segredo do webhook.** A doc não diz se o hub assina com os dois segredos na troca (hub:1133). Mitigação: o app aceita o segredo anterior; alerta quando a taxa de 401 subir.
-
-**R13. Envio que sai depois de "Encerrar" ou do disable.** Sem H-D3, o que estiver na fila `pending` do hub sai.
+**R9. Histórico não reimportado.** Número que já passou pelo Coexistence do elosCRM no mesmo app deve ter o pedido de histórico recusado (hub:613, hub:639). O que veio antes de 2026-10-23 já está no app; o intervalo desde então não volta.
 
 ---
 
-## 11. Questões em aberto para decisão do usuário
+## 10. Questões em aberto
 
-- **Q1.** O hub usa o mesmo app Meta (`META_WHATSAPP_APP_ID`) que o eloscrm? Define o cenário A ou B (§7.1) e se H4 é bloqueante. **Indício forte de cenário A:** o README do rascunho local do hub (`matra-messaging-hub/README.md`, de 2026-09-30) declara o App ID `881452474733033`, que é o `META_WHATSAPP_APP_ID` do eloscrm em `eloscrm-api/.env.prod:36`. Falta confirmar que o hub publicado usa esse app. Se usar, o callback do webhook da Meta é um só para os dois, a virada é global (§7.1, cenário A) e H4 vira bloqueante.
-- **Q2.** Conexões novas nascem pelo hub assim que F3 sai? Recomendo que sim, porque o ES v2 próprio está vencido.
-- **Q3.** Manter `requireCoexistence: true`? Números só Cloud API não funcionam com a exceção manual da uazapi, que exige `isOnBusinessApp` (`uazapi-policy.repo.ts:18`).
-- **Q4.** O dashboard de custos aceita passar a ser mensal e por número, ou H-D4 entra antes do corte?
+- **Q4.** O dashboard de custos aceita ser mensal e por número até H-D4?
 - **Q5.** Perder `rejectionRecommendation` é aceitável até H-D2?
-- **Q6.** Read receipts e "digitando" (hub:790-797) entram no escopo? Mudam o que o cliente final vê.
-- **Q7.** Um destinatário `unknown` que veio de `uncertain` do hub (inclusive `131000`/`131016`/`133004`, hub:740) entra na trava de 7 dias (`campaigns.repo.ts:14`), como hoje, ou fica liberado para reenvio?
-- **Q8.** Valores dos parâmetros de desenho: duração mínima da convivência, janela de reenvio automático, teto sem `hubMessageId`, extensão da lease do destinatário de campanha e janela estável antes do ponto sem volta.
+- **Q6.** Read receipts e "digitando" (hub:796) entram no escopo? Mudam o que o cliente final vê.
+- **Q7.** Um destinatário `unknown` que veio de `uncertain` do hub entra na trava de 7 dias (`campaigns.repo.ts:14`), como hoje, ou fica liberado para reenvio?
+- **Q8.** Parâmetros: janela de repetição do POST, prazo do "não confirmado", extensão da lease do destinatário (mínimo 15 min), margem de renovação do upload e janela de estabilidade do piloto.
 
-> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-10 17:35 (-03)
+> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 15:43 (-03)
