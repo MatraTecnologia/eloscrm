@@ -589,4 +589,4 @@ O módulo `whatsapp-official/` fica: `identity.repo.ts`, `ingest.repo.ts`, `mess
 - **Q7.** Um destinatário `unknown` que veio de `uncertain` do hub entra na trava de 7 dias (`campaigns.repo.ts:14`), como hoje, ou fica liberado para reenvio?
 - **Q8.** Parâmetros: janela de repetição do POST, prazo do "não confirmado", extensão da lease do destinatário (mínimo 15 min), margem de renovação do upload e janela de estabilidade do piloto.
 
-> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 15:53 (-03)
+> Criado em 2026-11-10 17:35 (-03) · Última modificação: 2026-11-12 17:56 (-03)
