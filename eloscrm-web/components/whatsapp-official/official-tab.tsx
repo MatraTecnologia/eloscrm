@@ -4,7 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOfficialConnections, useOfficialOnboardingConfig, useOfficialSyncStatus } from "@/lib/queries/whatsapp-official";
 import type { ChannelConnection, OfficialSyncRequest } from "@/lib/types";
-import { OfficialSignup } from "./official-signup";
 import { LifecycleControls } from "./lifecycle-controls";
 import { MaintenancePanel } from "./maintenance-panel";
 
@@ -42,10 +41,8 @@ export const OfficialTab = ({ canManage }: { canManage: boolean }) => {
     {canManage && config.isLoading && <Skeleton className="h-10 w-64" />}
     {canManage && config.error && <p role="alert" className="text-destructive text-sm">Não foi possível consultar a configuração da conexão oficial.</p>}
     {config.data?.available === false && <Alert><AlertTitle>Conexão oficial ainda não habilitada</AlertTitle><AlertDescription>O suporte precisa concluir a configuração da Meta neste ambiente.</AlertDescription></Alert>}
-    {config.data?.available && <>
-      <OfficialSignup config={config.data} />
-      <p className="text-muted-foreground text-sm">Mantenha o WhatsApp Business aberto durante a sincronização. O histórico depende da autorização no celular; grupos não são importados.</p>
-    </>}
+    {/* onboarding próprio desligado durante a migração para o Meta Hub: o POST responde 409 */}
+    {config.data?.available && <Alert><AlertTitle>Conexão oficial em mudança</AlertTitle><AlertDescription>A conexão de números está mudando para um novo fluxo. Para conectar ou reconectar um número, fale com o suporte.</AlertDescription></Alert>}
     {!canManage && <p className="text-muted-foreground text-sm">Peça ao dono ou a um gestor para conectar o WhatsApp oficial.</p>}
     <Alert><AlertTitle>Atendimento no elosCRM</AlertTitle><AlertDescription>Use Conversas para consultar o histórico e responder pelo número selecionado. Gestores consultam estimativas e consumo na aba Custos e consumo.</AlertDescription></Alert>
     {connections.isLoading && <Skeleton className="h-24" />}
