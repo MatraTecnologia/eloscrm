@@ -2,7 +2,7 @@
 
 Convenções de citação:
 - `hub:N` = linha N da documentação completa do hub (`llms-full.txt`), snapshot de 2026-11-12 (tarde) de https://metahub.matratecnologia.com/llms-full.txt, sha256 `d94217c392666883e58df366c61e71e10233eff06c7a119228c2b594098a8a95`, 1747 linhas. As linhas valem só para essa versão. `oa` = `openapi.json` do hub no mesmo snapshot (https://metahub.matratecnologia.com/docs/openapi.json, sha256 `7427b1448b02053a03101b8aeabd3c0a8682d2ebfc97e3b9f8a5c3cc923a8428`).
-- "Código do hub" marca o que a revisão de 2026-11-12 conferiu no repositório do hub e a doc não diz.
+- "Código do hub" marca o que a revisão de 2026-11-12 conferiu no repositório do hub e a doc não diz. Caminhos do hub com linha valem para o commit `3ad43b4`.
 - Caminhos da API são relativos a `eloscrm-api/`; os do web começam com `eloscrm-web/`.
 - Tudo foi lido sem acesso a banco ou `.env`. Afirmações marcadas **a confirmar** não se provam lendo arquivos.
 - Valores marcados **(parâmetro)** são escolhas de desenho a calibrar no piloto.
@@ -251,7 +251,7 @@ Legenda: **C** = coberto; **CA** = coberto com adaptação no app; **H** = depen
 | Retenção (`src/modules/whatsapp-maintenance/retention.repo.ts:6-16`) | O hub retém 30 dias (hub:1125) | `HubWebhookEvent` no expurgo, incluindo `unsupported`, `failed` esgotado e `unresolved` sem org. `hubRequest` entra no expurgo de comandos (:13) | CA |
 | Exclusão de atendimento (`src/modules/whatsapp-inbox/inbox.repo.ts:115-129`) | Mídia no hub por 30 dias, sem exclusão sob demanda (hub:863) | Limpa também `hubRequest` (:124) e `hubMediaId` (:129). A política de privacidade do elosCRM registra que a cópia no hub sai pela retenção de 30 dias | CA |
 | Recuperação após indisponibilidade nossa | 8 tentativas em cerca de 22 h (hub:1115-1123) | Runbook: `GET /v1/events?status=failed` → `redeliver` por `deliveryId`, com pausa entre os POSTs (balde de 600/min, hub:398). Para pausar o recebimento, o receptor responde `503`; nunca pedir a desativação do endpoint, que faria os eventos nascerem sem entrega (hub:1143) | CA / H (desejável) |
-| Jobs (`src/server.ts:19-36`) | n/a | Novos: `scheduleHubWebhookSweep` (lê só o banco local; roda sempre), `scheduleHubSendReconcile` e `scheduleHubConnectionRefresh` (diário, `GET /v1/connections`; única fonte das mudanças de `businessId`, `currency` e `timezone`, que o hub faz sem evento, hub:604-605). Os dois que chamam o hub rodam só com `HUB_JOBS_ENABLED=true`, nunca derivado de `NODE_ENV` | CA |
+| Jobs (`src/server.ts:19-36`) | n/a | Novos: `scheduleHubWebhookSweep` (lê só o banco local; roda sempre), `scheduleHubSendReconcile` e `scheduleHubConnectionRefresh` (diário, `GET /v1/connections`; garante a leitura de `currency` e `timezone`, que o hub relê sem emitir evento, hub:605, e só detecta a mudança de `businessId`, §9 R6). Os dois que chamam o hub rodam só com `HUB_JOBS_ENABLED=true`, nunca derivado de `NODE_ENV` | CA |
 
 ### 3.8 Identidade do contato
 
@@ -327,7 +327,7 @@ Nenhum item abaixo bloqueia o piloto nem a abertura: todos têm degradação ace
 | `whatsapp.contacts.synced` | `contacts-adapter` |
 | `whatsapp.identity.updated` | `identity-adapter` → `sync.repo.ts` |
 | `whatsapp.template.*` | `applyHubTemplate` |
-| `connection.*` com `kind:"whatsapp"` | `applyHubConnection` (D5) |
+| `connection.*` com `kind:"whatsapp"` | `applyHubConnection` (D5), aceitando `whatsapp: null` |
 | `whatsapp.usage.free_tier` | `hubHealth.freeTier` (opcional) |
 | `leadgen.*`, `kind:"lead_ads"`, `type` desconhecido | `unsupported` com 2xx (hub:1200) |
 
