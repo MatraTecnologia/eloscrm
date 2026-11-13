@@ -123,6 +123,13 @@ describe("receptor do webhook do Meta Hub", () => {
     expect(await stored(envelope.id)).toHaveLength(1);
   });
 
+  it("aceita entrega acima de 1 MiB: um 413 gastaria as tentativas do hub até failed", async () => {
+    const envelope = envelopeOf({ data: { blob: randomBytes(1024 * 1024).toString("hex") } });
+    const response = await deliver(envelope);
+    expect(response.statusCode).toBe(200);
+    expect(await stored(envelope.id)).toHaveLength(1);
+  });
+
   it("tipo desconhecido, Lead Ads e conexão que não é de WhatsApp ficam unsupported com 2xx", async () => {
     const envelopes = [
       envelopeOf({ type: "whatsapp.algo.novo" }),
