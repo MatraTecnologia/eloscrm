@@ -2,11 +2,12 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useOfficialConnections, useOfficialSyncStatus } from "@/lib/queries/whatsapp-official";
+import { useOfficialConnections, useOfficialOnboardingConfig, useOfficialSyncStatus } from "@/lib/queries/whatsapp-official";
 import { useHubConfig } from "@/lib/queries/whatsapp-hub";
 import type { ChannelConnection, OfficialSyncRequest } from "@/lib/types";
 import { HubConnect } from "./hub-connect";
 import { LifecycleControls } from "./lifecycle-controls";
+import { OfficialSignup } from "./official-signup";
 import { MaintenancePanel } from "./maintenance-panel";
 
 const syncLabels: Record<OfficialSyncRequest["status"], string> = {
@@ -49,12 +50,19 @@ const OfficialConnection = ({ connection, canManage }: { connection: ChannelConn
 export const OfficialTab = ({ canManage }: { canManage: boolean }) => {
   const connections = useOfficialConnections();
   const config = useHubConfig(canManage);
+  // onboarding próprio volta enquanto o hub estiver desligado: o disparo do cliente não espera a migração
+  const legacy = useOfficialOnboardingConfig(canManage && config.data?.available === false);
   return <div className="flex max-w-3xl flex-col gap-5 pt-4">
     <div><h2 className="text-lg font-semibold">WhatsApp oficial</h2><p className="text-muted-foreground mt-1 text-sm">Conecte o número do WhatsApp Business para continuar usando o celular e preparar o atendimento pelo elosCRM.</p></div>
     {canManage && config.isLoading && <Skeleton className="h-10 w-64" />}
     {canManage && config.error && <p role="alert" className="text-destructive text-sm">Não foi possível consultar a configuração da conexão oficial.</p>}
-    {/* sem HUB_ENABLED (M1 em produção) o onboarding próprio segue desligado: o suporte conecta */}
-    {config.data?.available === false && <Alert><AlertTitle>Conexão oficial em mudança</AlertTitle><AlertDescription>A conexão de números está mudando para um novo fluxo. Para conectar ou reconectar um número, fale com o suporte.</AlertDescription></Alert>}
+    {/* sem HUB_ENABLED o onboarding próprio responde, desde que a callback do app da Meta aponte para o elosCRM */}
+    {legacy.isLoading && <Skeleton className="h-10 w-64" />}
+    {legacy.data?.available && <>
+      <OfficialSignup config={legacy.data} />
+      <p className="text-muted-foreground text-sm">Mantenha o WhatsApp Business aberto durante a sincronização. O histórico depende da autorização no celular; grupos não são importados.</p>
+    </>}
+    {(legacy.data?.available === false || legacy.error) && <Alert><AlertTitle>Conexão oficial em mudança</AlertTitle><AlertDescription>A conexão de números está mudando para um novo fluxo. Para conectar ou reconectar um número, fale com o suporte.</AlertDescription></Alert>}
     {config.data?.available && <HubConnect />}
     {!canManage && <p className="text-muted-foreground text-sm">Peça ao dono ou a um gestor para conectar o WhatsApp oficial.</p>}
     <Alert><AlertTitle>Atendimento no elosCRM</AlertTitle><AlertDescription>Use Conversas para consultar o histórico e responder pelo número selecionado. Gestores consultam estimativas e consumo na aba Custos e consumo.</AlertDescription></Alert>
